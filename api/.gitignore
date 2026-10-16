@@ -25,3 +25,7 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 api-*.tar
 
+# Confidential source documents (borehole PDFs/scans/images) - never commit these.
+/priv/uploads/*
+!/priv/uploads/.gitkeep
+

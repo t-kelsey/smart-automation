@@ -11,7 +11,11 @@ Passwort: siehe email
 
 # Development Setup
 
-Postgres database is required. Either as docker container or installed locally.
+Postgres (with the PostGIS extension) is required. A `docker-compose.yml` is provided at the repo root so nobody needs PostGIS installed locally:
+
+```bash
+docker compose up -d   # Starts Postgres+PostGIS on localhost:5432 (user/password: postgres)
+```
 
 ```bash
 # Start api
