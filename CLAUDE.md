@@ -11,6 +11,15 @@ Hackathon project (Herrenknecht challenge): automated extraction and standardisa
 - `docs/` — Architecture Decision Records in `docs/adr/` (use `_template.md`).
 - `data/` — Confidential real-project sample data (borehole PDFs/images/docx, format standards). Restricted to hackathon use and must be deleted after the event; never copy, commit, or send it to external services.
 
+## Domain context
+
+From `challenge-presentation.pdf` (Herrenknecht kickoff slides). Boreholes are usually the only accurate description of the subsurface and drive tunnel boring machine (TBM) design; the goal is to turn legacy borehole logs into a structured, searchable base that feeds geology into TBM design.
+
+- **Input:** borehole logs (see `data/BoreholeData/`) that are unstructured, multilingual (English, French, Spanish, …), use local geology terms/abbreviations, vary in format by company and decade, range from scanned paper to native digital, and carry meaning in colour and hatch patterns (colour vs. B/W).
+- **Fields to extract per log:** elevation (absolute height of the borehole start), depth intervals (where each layer begins and ends), age/stratigraphy (formation abbreviations and colour codes), and rock type/lithology (with pattern and colour). Plus metadata: location, date, elevation.
+- **Challenge pipeline:** OCR (scans and PDFs) → extract (depth, lithology, stratigraphy) → metadata → map & profile visualisation of boreholes → search (find the right log quickly). The slides name the Baden-Württemberg borehole map (bohrungen.lgrb-bw.de) as an example of the target visualisation.
+- Data security is called out as a requirement across every step, which is consistent with the confidential nature of `data/`.
+
 ## ADRs
 
 Architecture Decision Records capture important architectural decisions (e.g. choice of extraction approach, data model, libraries) and the reasoning behind them. They live in `docs/adr/` as one markdown file per decision, copied from `docs/adr/_template.md`.
