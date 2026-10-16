@@ -1,28 +1,44 @@
-"""OCR for scanned and handwritten pages.
+"""OCR: turn each input file into markdown with Docling (ADR-0007, ADR-0008).
 
-Open problem (ADR-0001): this is a basic Tesseract baseline that will be replaced
-once we choose a proper OCR approach. Expect poor results on handwriting and tables.
+Every page is OCR'd, including digital PDFs, because the text layer loses the
+table structure that borehole logs depend on. Output is one markdown file per input.
 """
 
-from .triage import Document, Page
+from pathlib import Path
+
+# Docling is heavy, so it's imported on first use. That keeps importing this module
+# (for example from test.py) cheap until OCR actually runs.
+_converter = None
 
 
-def ocr(doc: Document) -> Document:
-    import pytesseract
+def _get_converter():
+    global _converter
+    if _converter is None:
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import EasyOcrOptions, PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
 
-    for page in doc.pages:
-        if page.needs_ocr:
-            page.text = pytesseract.image_to_string(_image(page))
-    return doc
+        # force_full_page_ocr ignores any embedded text layer and reads every page from
+        # its image. Table structure recognition stays on: it's what makes the markdown
+        # tables usable downstream.
+        options = PdfPipelineOptions(
+            do_ocr=True,
+            do_table_structure=True,
+            ocr_options=EasyOcrOptions(force_full_page_ocr=True),
+        )
+        pdf_format = PdfFormatOption(pipeline_options=options)
+        # Images go through the same pipeline as PDFs, so they get the same OCR settings.
+        _converter = DocumentConverter(
+            format_options={InputFormat.PDF: pdf_format, InputFormat.IMAGE: pdf_format}
+        )
+    return _converter
 
 
-def _image(page: Page):
-    if page.file.suffix.lower() == ".pdf":
-        from pdf2image import convert_from_path
-
-        # pdf2image pages are 1-based.
-        n = page.index + 1
-        return convert_from_path(page.file, dpi=300, first_page=n, last_page=n)[0]
-    from PIL import Image
-
-    return Image.open(page.file)
+def ocr_file(path: Path, out_dir: Path) -> Path:
+    """OCR one file to markdown and return the path of the markdown file."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Prefix with the folder name: different inputs can share a file name (e.g. Report01.pdf).
+    out = out_dir / f"{path.parent.name}__{path.stem}.md"
+    markdown = _get_converter().convert(path).document.export_to_markdown()
+    out.write_text(markdown, encoding="utf-8")
+    return out

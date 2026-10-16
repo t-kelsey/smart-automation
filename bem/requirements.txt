@@ -1,7 +1,3 @@
+docling
 pydantic
-pypdf
-python-docx
-pytesseract
-pdf2image
-pillow
 requests
