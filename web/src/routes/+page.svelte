@@ -1,2 +1,6 @@
-<h1>Welcome to SvelteKit</h1>
-<p>Visit <a href="https://svelte.dev/docs/kit">svelte.dev/docs/kit</a> to read the documentation</p>
+<script lang="ts">
+	import { Alert } from '#lib/components/alert/index.ts';
+</script>
+
+<h1 class="mb-4 h1">Welcome</h1>
+<Alert title="Not yet implemented" message="It's only a prototype." />
