@@ -43,6 +43,8 @@ htmlcov/
 .coverage.*
 .cache
 nosetests.xml
+# Triage output from bem/test.py: contains confidential text from data/
+bem/output/
 coverage.xml
 *.cover
 *.py.cover
