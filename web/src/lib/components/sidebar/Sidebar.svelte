@@ -50,7 +50,7 @@
 
 <Navigation
 	layout="sidebar"
-	class="m-3 flex h-[calc(100%-1.5rem)] shrink-0 flex-col gap-2! rounded-3xl border border-surface-200-800 bg-surface-50-950 p-2! shadow-lg transition-[width] duration-200 {collapsed
+	class="relative z-10 m-3 flex h-[calc(100%-1.5rem)] shrink-0 flex-col gap-2! rounded-3xl border border-surface-200-800 bg-surface-50-950 p-2! shadow-lg transition-[width] duration-200 {collapsed
 		? 'w-18'
 		: 'w-64'}"
 >
