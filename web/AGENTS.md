@@ -2,7 +2,7 @@
 
 - **Language**: TypeScript
 - **Package Manager**: pnpm
-- **Add-ons**: prettier, eslint, tailwindcss, ai-tools
+- **Add-ons**: prettier, eslint, tailwindcss, enhanced-img, sveltekit-adapter, mdsvex, ai-tools
 
 ---
 
