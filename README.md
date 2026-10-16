@@ -11,8 +11,23 @@ Passwort: TBA
 
 # Development Setup
 
-tbd
+Postgres database is required. Either as docker container or installed locally.
 
+```bash
+# Start api
+cd api
+mix ecto.create     # Create the database
+mix ecto.migrate    # Run database migrations
+mix phx.server      # Start development server
+```
 
+```
+# Start web
+cd web
+pnpm install        # Install web dependencies
+pnpm run            # Start web development server
+```
+
+# Miscellaneous
 
 Kai was here
