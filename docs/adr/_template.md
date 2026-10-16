@@ -1,10 +1,11 @@
 ---
+id: <id>
 date: <date>
 author: <author>
 title: <title>
 ---
 
-# <title>
+# <id> – <title>
 
 ## Context
 
