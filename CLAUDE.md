@@ -8,8 +8,9 @@ Hackathon project (Herrenknecht challenge): automated extraction and standardisa
 
 - `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, Postgres, Bandit). Currently scaffold only: the `/api` scope in `api/lib/api_web/router.ex` has no routes yet.
 - `web/` — SvelteKit 3 / Svelte 5 frontend (TypeScript, Tailwind 4, pnpm). Currently scaffold only (`src/routes/`).
+- `bem/` — Python extraction pipeline (triage → OCR → translation/extraction → POST to API); see ADR-0001.
 - `docs/` — Architecture Decision Records in `docs/adr/` (use `_template.md`).
-- `data/` — Confidential real-project sample data (borehole PDFs/images/docx, format standards). Restricted to hackathon use and must be deleted after the event; never copy, commit, or send it to external services.
+- `data/` — Confidential real-project sample data (borehole PDFs/images/docx, format standards). Restricted to hackathon use and must be deleted after the event; never copy, commit, or send it to external services. Agents may read it locally.
 
 ## Domain context
 
@@ -25,7 +26,7 @@ From `challenge-presentation.pdf` (Herrenknecht kickoff slides). Boreholes are u
 Architecture Decision Records capture important architectural decisions (e.g. choice of extraction approach, data model, libraries) and the reasoning behind them. They live in `docs/adr/` as one markdown file per decision, copied from `docs/adr/_template.md`.
 
 - Each file starts with front matter (`id`, `date`, `author`, `title`), followed by the sections: Context, Decision, Pros, Cons, Alternatives, Consequences, References.
-- No ADRs exist yet besides the template. Check `docs/adr/` before making a significant architectural choice, and when making a new one, write an ADR for it instead of leaving the rationale only in chat or commit messages.
+- Check `docs/adr/` before making a significant architectural choice, and when making a new one, write an ADR for it instead of leaving the rationale only in chat or commit messages.
 - An ADR documents a decision at the time it was made; to change a decision, add a new ADR that references the old one rather than rewriting history.
 
 ## Commands
