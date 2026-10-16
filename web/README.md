@@ -15,7 +15,7 @@ To recreate this project with the same configuration:
 
 ```sh
 # recreate this project
-pnpm dlx sv@1.1.1 create --template minimal --types ts --add prettier eslint tailwindcss="plugins:typography,forms" ai-tools="ide:claude-code,vscode+delivery:plugin+tools:mcp,svelte-code-writer,svelte-core-bestpractices,svelte-file-editor+mcpSetup:local" --install pnpm web
+pnpm dlx sv@1.1.1 create --template minimal --types ts --add prettier eslint tailwindcss="plugins:typography,forms" enhanced-img sveltekit-adapter="adapter:auto" mdsvex ai-tools="ide:claude-code,vscode+delivery:plugin+tools:mcp,svelte-code-writer,svelte-core-bestpractices,svelte-file-editor+mcpSetup:local" --install pnpm web
 ```
 
 ## Adding features
