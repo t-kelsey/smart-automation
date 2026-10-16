@@ -44,6 +44,6 @@ def translate(text: str) -> str:
 
 
 def extract(doc: Document) -> list[Borehole]:
-    text = translate("\n\n".join(doc.pages))
+    text = translate("\n\n".join(p.text or "" for p in doc.pages))
     # TODO: map text onto Borehole/LogEntry fields; convert ft to m.
-    return [Borehole(source_file=doc.path.name)] if text.strip() else []
+    return [Borehole(source_file=doc.source.name, borehole_name=doc.borehole_id)] if text.strip() else []

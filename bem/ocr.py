@@ -1,26 +1,28 @@
-"""OCR for scanned and handwritten documents.
+"""OCR for scanned and handwritten pages.
 
 Open problem (ADR-0001): this is a basic Tesseract baseline that will be replaced
 once we choose a proper OCR approach. Expect poor results on handwriting and tables.
 """
 
-from .triage import Document, Kind
+from .triage import Document, Page
 
 
 def ocr(doc: Document) -> Document:
-    if not doc.needs_ocr:
-        return doc
     import pytesseract
 
-    doc.pages = [pytesseract.image_to_string(img) for img in _images(doc)]
+    for page in doc.pages:
+        if page.needs_ocr:
+            page.text = pytesseract.image_to_string(_image(page))
     return doc
 
 
-def _images(doc: Document):
-    if doc.kind == Kind.SCANNED_PDF:
+def _image(page: Page):
+    if page.file.suffix.lower() == ".pdf":
         from pdf2image import convert_from_path
 
-        return convert_from_path(doc.path, dpi=300)
+        # pdf2image pages are 1-based.
+        n = page.index + 1
+        return convert_from_path(page.file, dpi=300, first_page=n, last_page=n)[0]
     from PIL import Image
 
-    return [Image.open(doc.path)]
+    return Image.open(page.file)

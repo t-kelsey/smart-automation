@@ -1,3 +1,4 @@
+pydantic
 pypdf
 python-docx
 pytesseract

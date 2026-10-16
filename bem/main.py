@@ -4,21 +4,14 @@ Usage: python -m bem.main <file-or-dir>... [--api http://localhost:4000/api/bore
 """
 
 import argparse
+import logging
 import json
 from dataclasses import asdict
 from pathlib import Path
 
 from .ocr import ocr
 from .translation_and_extraction import extract
-from .triage import Kind, triage
-
-
-def iter_files(paths: list[Path]):
-    for p in paths:
-        if p.is_dir():
-            yield from sorted(f for f in p.rglob("*") if f.is_file())
-        else:
-            yield p
+from .triage import triage
 
 
 def main() -> None:
@@ -28,11 +21,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="print records instead of POSTing")
     args = parser.parse_args()
 
-    for path in iter_files(args.paths):
-        doc = triage(path)
-        print(f"[{doc.kind.value}] {path}")
-        if doc.kind == Kind.UNSUPPORTED:
-            continue
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    for doc in triage(args.paths):
+        print(f"[{doc.kind}] {doc.source.name} borehole={doc.borehole_id} pages={len(doc.pages)}")
         for borehole in extract(ocr(doc)):
             record = asdict(borehole)
             if args.dry_run:
