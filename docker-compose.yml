@@ -50,6 +50,62 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
 
+  # --- BEM extraction pipeline (profile "bem", not started by a plain `docker compose up`) ---
+  # Run it with:
+  #   docker compose run --rm bem /data/BoreholeData/<folder> --to api
+  # Compose starts the model server and pulls the model first.
+  ollama:
+    profiles: ["bem"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      BEM_MODEL_NAME: ${BEM_MODEL_NAME:-qwen3.5:2b}
+    # Start the server, pull the model into the volume (a no-op once cached), then keep serving.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        ollama serve &
+        until ollama list >/dev/null 2>&1; do sleep 1; done
+        ollama pull "$$BEM_MODEL_NAME"
+        wait
+    volumes:
+      - ollama_models:/root/.ollama
+    # CPU by default. For an NVIDIA GPU, uncomment:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      # Healthy only once the model has been pulled
+      test: ["CMD-SHELL", "ollama show \"$$BEM_MODEL_NAME\" >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 360
+
+  bem:
+    profiles: ["bem"]
+    build: ./bem
+    depends_on:
+      api:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    environment:
+      BEM_API_URL: http://api:4000/api
+      BEM_MODEL_BASE_URL: ${BEM_MODEL_BASE_URL:-http://ollama:11434/v1}
+      BEM_MODEL_NAME: ${BEM_MODEL_NAME:-qwen3.5:2b}
+    command: ["--help"]
+    volumes:
+      # Confidential sample data, mounted read-only and never baked into the image
+      - ./data:/data:ro
+      - ./bem/out:/app/out
+      - ./bem/output:/app/output
+
 volumes:
   db_data:
   document_storage:
+  ollama_models:

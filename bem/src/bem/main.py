@@ -6,6 +6,7 @@ Usage:
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 from bem.ocr import ocr_file
@@ -114,7 +115,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("inputs", nargs="+", type=Path)
     parser.add_argument("--to", choices=["api", "json", "print"], default="print")
-    parser.add_argument("--api-url", default="http://localhost:4000/api")
+    parser.add_argument("--api-url", default=os.environ.get("BEM_API_URL", "http://localhost:4000/api"))
     parser.add_argument("--out-dir", type=Path, default=Path("out"))
     parser.add_argument("--debug", action="store_true", help="save intermediate stages to output/")
     args = parser.parse_args()
