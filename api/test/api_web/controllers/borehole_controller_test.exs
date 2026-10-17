@@ -26,11 +26,7 @@ defmodule ApiWeb.BoreholeControllerTest do
   end
 
   defp attach_document(borehole, document) do
-    borehole
-    |> Repo.preload(:documents)
-    |> Ecto.Changeset.change()
-    |> Ecto.Changeset.put_assoc(:documents, [document])
-    |> Repo.update!()
+    {:ok, _links} = Api.Boreholes.attach_documents(borehole, document)
   end
 
   describe "GET /api/boreholes" do
@@ -122,7 +118,10 @@ defmodule ApiWeb.BoreholeControllerTest do
       assert %{"data" => data} = json_response(conn, 200)
       assert data["id"] == borehole.id
       assert [%{"position" => 1}] = data["layers"]
-      assert [%{"id" => doc_id, "original_filename" => "scan.pdf"}] = data["documents"]
+
+      assert [%{"id" => doc_id, "original_filename" => "scan.pdf", "role" => "original"}] =
+               data["documents"]
+
       assert doc_id == document.id
 
       body = response(conn, 200)

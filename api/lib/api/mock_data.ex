@@ -513,11 +513,15 @@ defmodule Api.MockData do
       layers: layers,
       documents: documents,
       links:
-        Enum.map(documents, fn doc ->
+        documents
+        |> Enum.with_index()
+        |> Enum.map(fn {doc, index} ->
           %{
             id: Ecto.UUID.generate(),
             borehole_id: id,
             document_id: doc.id,
+            # The first document is the borehole's original, any others are additional (ADR-0027).
+            role: if(index == 0, do: "original", else: "additional"),
             inserted_at: now,
             updated_at: now
           }

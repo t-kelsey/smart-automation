@@ -56,7 +56,7 @@ One row per borehole (`Stammdaten` in the screenshot).
 | `verified` | `boolean` | yes (default `false`) | "LGRB geprüft" equivalent — reviewed by a human |
 | `metadata` | `map` (`jsonb`) | yes (default `{}`) | open key/value store for anything not covered by a fixed column (e.g. rig type, contractor, driller) |
 
-> **documents ↔ boreholes is many-to-many**, via the join table `borehole_documents` (`borehole_id`, `document_id`, unique on the pair). A single scanned report can cover several boreholes, and the same borehole can be documented across multiple files (e.g. a scan + a typed follow-up report). Use `many_to_many`/`put_assoc` on `Api.Boreholes.Borehole`/`Api.Boreholes.Document`, not a `document_id` column.
+> **documents ↔ boreholes is many-to-many**, via the join table `borehole_documents` (`borehole_id`, `document_id`, unique on the pair). A single scanned report can cover several boreholes, and the same borehole can be documented across multiple files (e.g. a scan + a typed follow-up report). Each link has a `role`: `original` (the one log the borehole was extracted from, at most one per borehole, enforced by a partial unique index) or `additional` (ADR-0027). Link documents with `Api.Boreholes.attach_documents/3` so the role is set, not with `put_assoc`, and not with a `document_id` column.
 
 ### `borehole_layers`
 Stratigraphy rows (the table in the screenshot: von/bis/Stratigraphie/Petrographie/Farbe).
