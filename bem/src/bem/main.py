@@ -8,16 +8,16 @@ import argparse
 import logging
 from pathlib import Path
 
-from .ocr import ocr_file
-from .translation_and_labeling.translation_and_labeling import translate
-from .triage import split
-from .extraction import extract
-from .output import make_sink
+from bem.ocr import ocr_file
+from bem.translation_and_labeling.translation_and_labeling import translate
+from bem.triage import split
+from bem.extraction import extract
+from bem.output import make_sink
 
 log = logging.getLogger("bem")
 
 SUPPORTED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".docx"}
-OUTPUT_DIR = Path(__file__).parent / "output"
+OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output"
 
 
 def collect_inputs(paths: list[Path]) -> list[Path]:

@@ -11,26 +11,42 @@ from pathlib import Path
 _converter = None
 
 
-def _get_converter():
+def _get_converter(ocr_engine: str = "easyocr"):
     global _converter
+
     if _converter is None:
         from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import EasyOcrOptions, PdfPipelineOptions
+        from docling.datamodel.pipeline_options import (
+            EasyOcrOptions,
+            PdfPipelineOptions,
+            #PaddleOcrOptions,
+        )
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
-        # force_full_page_ocr ignores any embedded text layer and reads every page from
-        # its image. Table structure recognition stays on: it's what makes the markdown
-        # tables usable downstream.
+        if ocr_engine.lower() == "easyocr":
+            ocr_options = EasyOcrOptions(force_full_page_ocr=True)
+
+        # elif ocr_engine.lower() == "paddleocr":
+        #     ocr_options = PaddleOcrOptions(force_full_page_ocr=True)
+
+        else:
+            raise ValueError(f"Unsupported OCR engine: {ocr_engine}")
+
         options = PdfPipelineOptions(
             do_ocr=True,
             do_table_structure=True,
-            ocr_options=EasyOcrOptions(force_full_page_ocr=True), # type: ignore
+            ocr_options=ocr_options,
         )
+
         pdf_format = PdfFormatOption(pipeline_options=options)
-        # Images go through the same pipeline as PDFs, so they get the same OCR settings.
+
         _converter = DocumentConverter(
-            format_options={InputFormat.PDF: pdf_format, InputFormat.IMAGE: pdf_format}
+            format_options={
+                InputFormat.PDF: pdf_format,
+                InputFormat.IMAGE: pdf_format,
+            }
         )
+
     return _converter
 
 
