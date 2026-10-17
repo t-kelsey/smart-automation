@@ -6,6 +6,8 @@
 		type JobStatus,
 		type Pipeline
 	} from '#lib/domain/pipelines.ts';
+	import { ChevronRightIcon } from '@lucide/svelte';
+	import { resolve } from '$app/paths';
 	import StatusIcon from './StatusIcon.svelte';
 
 	/** GitLab-style flow graph: one card per stage with its jobs inside, joined by connector lines. */
@@ -27,6 +29,19 @@
 		return `${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
 	}
 </script>
+
+{#snippet row(job: Pipeline['stages'][number]['jobs'][number])}
+	<StatusIcon status={job.status} class="size-7" />
+	<div class="min-w-0 flex-1">
+		<p class="truncate {job.boreholeId ? 'font-medium text-primary-600-400' : ''}">{job.name}</p>
+		{#if job.durationSeconds !== undefined}
+			<p class="text-xs opacity-60">{formatDuration(job.durationSeconds)}</p>
+		{/if}
+	</div>
+	{#if job.boreholeId}
+		<ChevronRightIcon class="size-4 shrink-0 text-primary-600-400" aria-hidden="true" />
+	{/if}
+{/snippet}
 
 <div class="overflow-x-auto rounded-2xl bg-surface-100-900 p-6">
 	<ol class="flex min-w-max items-start">
@@ -56,17 +71,19 @@
 
 				<ul class="space-y-1 rounded-xl bg-surface-50-950 p-1.5">
 					{#each stage.jobs as job (job.id)}
-						<li
-							class="flex items-center gap-3 rounded-lg px-2.5 py-2.5"
-							title={job.error ?? job.name}
-						>
-							<StatusIcon status={job.status} class="size-8" />
-							<div class="min-w-0 flex-1">
-								<p class="truncate">{job.name}</p>
-								{#if job.durationSeconds !== undefined}
-									<p class="text-xs opacity-60">{formatDuration(job.durationSeconds)}</p>
-								{/if}
-							</div>
+						<li title={job.error ?? job.name}>
+							{#if job.boreholeId}
+								<a
+									href={resolve('/borehole/[id]', { id: job.boreholeId })}
+									class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-primary-500/10"
+								>
+									{@render row(job)}
+								</a>
+							{:else}
+								<div class="flex items-center gap-2.5 rounded-lg px-2.5 py-2">
+									{@render row(job)}
+								</div>
+							{/if}
 						</li>
 					{:else}
 						<li class="px-2.5 py-2.5 text-sm opacity-60">No jobs</li>

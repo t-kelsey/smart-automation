@@ -67,8 +67,15 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 	const finished = (type: string, position: number | null) =>
 		rows.some((r) => r.type === type && (r.position ?? null) === position);
 
+	/** The borehole id the pipeline recorded in the stage's result, if it did. */
+	function boreholeIdOf(type: string, position: number): string | undefined {
+		const data = rows.find((r) => r.type === type && r.position === position)?.data;
+		const id = data?.borehole_id;
+		return typeof id === 'string' ? id : undefined;
+	}
+
 	/** The jobs of a stage with `done` telling which of them have a result. */
-	function jobsOf(type: string): { name: string; done: boolean }[] {
+	function jobsOf(type: string): { name: string; done: boolean; boreholeId?: string }[] {
 		if (type === 'filter') return [{ name: 'Filter pages', done: finished('filter', null) }];
 		if (type === 'split') return [{ name: 'Split boreholes', done: finished('split', null) }];
 		const verb = type === 'extract' ? 'Extract' : 'Transform';
@@ -76,7 +83,8 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 		if (!rows.some((r) => r.type === 'split')) return [{ name: verb, done: false }];
 		return boreholes.map((b, i) => ({
 			name: `${verb} ${b.label ?? `borehole ${i + 1}`}`,
-			done: finished(type, i + 1)
+			done: finished(type, i + 1),
+			boreholeId: type === 'transform' ? boreholeIdOf(type, i + 1) : undefined
 		}));
 	}
 
@@ -106,6 +114,7 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 					name: job.name,
 					status,
 					model: report?.model_requested ?? configured?.model,
+					boreholeId: job.done ? job.boreholeId : undefined,
 					durationSeconds: single ? report?.wall_seconds : undefined
 				};
 			})

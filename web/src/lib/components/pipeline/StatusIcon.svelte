@@ -22,26 +22,26 @@
 </script>
 
 <span
-	class="inline-flex shrink-0 items-center justify-center rounded-full p-[12%] {halos[
-		status
-	]} {className}"
+	class="inline-flex shrink-0 items-center justify-center rounded-full {halos[status]} {className}"
 	role="img"
 	aria-label={labels[status]}
 	title={labels[status]}
 >
 	{#if status === 'success'}
-		<span class="flex size-full items-center justify-center rounded-full bg-success-600 text-white">
+		<span
+			class="flex size-[76%] items-center justify-center rounded-full bg-success-600 text-white"
+		>
 			<CheckIcon class="size-[70%]" strokeWidth={3.5} />
 		</span>
 	{:else if status === 'failed'}
-		<span class="flex size-full items-center justify-center rounded-full bg-error-600 text-white">
+		<span class="flex size-[76%] items-center justify-center rounded-full bg-error-600 text-white">
 			<XIcon class="size-[70%]" strokeWidth={3.5} />
 		</span>
 	{:else if status === 'running'}
-		<LoaderCircleIcon class="size-full animate-spin" strokeWidth={3} />
+		<LoaderCircleIcon class="size-[76%] animate-spin" strokeWidth={3} />
 	{:else if status === 'skipped'}
-		<ChevronsRightIcon class="size-full" strokeWidth={3} />
+		<ChevronsRightIcon class="size-[76%]" strokeWidth={3} />
 	{:else}
-		<span class="size-full rounded-full border-2 border-dashed border-current"></span>
+		<span class="size-[76%] rounded-full border-2 border-dashed border-current"></span>
 	{/if}
 </span>

@@ -13,6 +13,8 @@ export interface PipelineJob {
 	durationSeconds?: number;
 	model?: string;
 	error?: string;
+	/** The borehole a transform job produced, once it has finished. */
+	boreholeId?: string;
 }
 
 export interface PipelineStage {

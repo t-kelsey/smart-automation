@@ -2,7 +2,13 @@
 	import { invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Tabs } from '@skeletonlabs/skeleton-svelte';
-	import { ArrowLeftIcon, ListIcon, RefreshCwIcon, WorkflowIcon } from '@lucide/svelte';
+	import {
+		ArrowLeftIcon,
+		ChevronRightIcon,
+		ListIcon,
+		RefreshCwIcon,
+		WorkflowIcon
+	} from '@lucide/svelte';
 	import { PipelineGraph, StatusBadge, StatusIcon } from '#lib/components/pipeline/index.ts';
 	import { retryPipeline } from '#lib/components/pipeline/retry.ts';
 	import {
@@ -92,7 +98,15 @@
 						<tr>
 							<td><StatusIcon status={job.status} class="size-7" /></td>
 							<td>
-								{job.name}
+								{#if job.boreholeId}
+									<a
+										class="inline-flex items-center gap-1 font-medium text-primary-600-400 hover:underline"
+										href={resolve('/borehole/[id]', { id: job.boreholeId })}
+										>{job.name}<ChevronRightIcon class="size-4" aria-hidden="true" /></a
+									>
+								{:else}
+									{job.name}
+								{/if}
 								{#if job.error}<p class="text-xs text-error-500">{job.error}</p>{/if}
 							</td>
 							<td>
