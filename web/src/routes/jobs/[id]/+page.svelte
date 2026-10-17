@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { ArrowLeftIcon } from '@lucide/svelte';
+	import { ArrowLeftIcon, MapPinIcon } from '@lucide/svelte';
 	import { PIPELINE_STAGES } from '#lib/domain/pipelines.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 	let job = $derived(data.job);
 	let pipeline = $derived(data.pipeline);
+	let borehole = $derived(data.borehole);
 
 	const formatter = new Intl.DateTimeFormat(undefined, {
 		dateStyle: 'medium',
@@ -47,9 +48,16 @@
 	{pipeline ? pipeline.filename : 'All pipelines'}
 </a>
 
-<header class="mb-6">
-	<h1 class="h2">{title}</h1>
-	<p class="text-sm opacity-70">#{job.id.slice(-6)} · {formatter.format(job.createdAt)}</p>
+<header class="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+	<div>
+		<h1 class="h2">{title}</h1>
+		<p class="text-sm opacity-70">#{job.id.slice(-6)} · {formatter.format(job.createdAt)}</p>
+	</div>
+	{#if borehole}
+		<a href={resolve('/borehole/[id]', { id: borehole.id })} class="ml-auto btn preset-filled">
+			<MapPinIcon class="size-4" /> Borehole {borehole.name}
+		</a>
+	{/if}
 </header>
 
 <section class="mb-8">

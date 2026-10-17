@@ -45,55 +45,72 @@
 	const infrastructure = [
 		{
 			name: 'Database',
-			text: 'PostgreSQL with PostGIS. Documents, boreholes and their layers are stored with a WGS84 point, so the map can query by bounding box. Coordinates are reprojected in the database, and the raw extraction is kept next to the standardised values.'
+			text: 'PostgreSQL with PostGIS. Boreholes, layers, documents and pipeline runs are stored with a WGS84 point, so the map can query by bounding box. Coordinates are reprojected in the database, and the raw extraction of every stage is kept next to the standardised values.'
 		},
 		{
 			name: 'API',
-			text: 'A Phoenix (Elixir) JSON API. It receives the extracted boreholes from BEM, validates and georeferences them, and serves the map, search and profile views. It owns the data model.'
+			text: 'A Phoenix (Elixir) JSON API. It stores the uploaded documents, starts pipeline runs, tracks every stage, and validates and georeferences the boreholes the pipeline sends back. It owns the data model, and it is the only thing that touches the database and the file storage.'
 		},
 		{
 			name: 'UI',
-			text: 'A SvelteKit app with a MapLibre map, a searchable table and borehole cross sections drawn after DIN 4023. It reads data through a service and repository layer.'
+			text: 'A SvelteKit app with an upload and pipeline view, a MapLibre map, a searchable table and borehole cross sections drawn after DIN 4023. It talks only to the API, through a service and repository layer.'
 		},
 		{
 			name: 'BEM',
-			text: 'The borehole extraction pipeline in Python. It turns raw files into structured borehole records and posts them to the API. This is the part of the project that does the hard work.'
+			text: 'The borehole extraction pipeline in Python. It gets a document from the API, runs four Claude stages over it and posts the finished boreholes back. Like the UI, it only uses the API.'
 		}
 	];
 
 	const bemSteps = [
 		{
-			name: 'OCR',
-			text: 'Every file is converted to markdown, including digital PDFs. Docling runs locally with table recognition, because depth columns and layer boundaries only make sense with their table structure. A vision-language model supports pages that classic OCR reads badly, such as handwriting.'
+			name: 'Filter',
+			text: 'A report holds far more than borehole logs. This stage classifies the pages in chunks and keeps only the real log pages. Default: Haiku, high effort.'
 		},
 		{
-			name: 'Translation',
-			text: 'Logs come in English, French, Spanish, Danish and more. Lithology terms are mapped through a DIN 4023 glossary. When a term is missing, a local MarianMT model translates it, and the result is only accepted if it hits a glossary entry. Colour words are kept, since colour carries meaning.'
+			name: 'Split',
+			text: 'One file can hold several boreholes, so the filtered pages are grouped and cut into one PDF per borehole. Default: Haiku, medium effort.'
 		},
 		{
-			name: 'Extraction',
-			text: 'The translated markdown is mapped onto the borehole data format: metadata, elevation, depth intervals, stratigraphy and lithology. Results are validated and normalised.'
+			name: 'Extract',
+			text: 'Claude reads each borehole PDF, including colours and hatch patterns, and captures all data in the original wording and language: metadata, elevation, depth intervals, stratigraphy and lithology. It also checks that the file holds exactly one borehole. Default: Sonnet, high effort.'
 		},
 		{
-			name: 'Split and output',
-			text: 'One log file can hold several boreholes, so the text is split into one JSON object per borehole and sent to the API, saved as files or printed.'
+			name: 'Transform',
+			text: 'The raw extraction is translated into English and shaped like the database tables. Petrography is mapped to the terms of DIN 4023, and a borehole with a layer that cannot be mapped is not uploaded. Default: Haiku, high effort.'
 		}
 	];
 
+	const runSteps = [
+		'Files are queued in the browser. The user picks a model and effort per stage, then starts the extraction.',
+		'The UI uploads each file to the API, which stores it and creates a pipeline run.',
+		'The API tells BEM to execute the run. BEM answers at once and queues the job.',
+		'A BEM worker downloads the document from the API and runs the four stages.',
+		'After every stage, BEM uploads its output to the API, so the UI can show live progress.',
+		'Each valid borehole is posted to the API and linked to its source document. The run ends as completed or failed.'
+	];
+
 	const diagram = `flowchart LR
-    files["Borehole logs<br/>PDF, scan, image, docx"]
-    subgraph bem["BEM (Python, runs locally)"]
-        direction LR
-        ocr["OCR<br/>Docling + VLM"] --> md[("Markdown")]
-        md --> translate["Translation<br/>DIN 4023 glossary<br/>+ local MarianMT"]
-        translate --> extract["Extraction<br/>validate + normalise"]
-        extract --> split["Split<br/>one JSON per borehole"]
+    user(["User"])
+    subgraph web["SvelteKit UI"]
+        ui["Upload, pipeline,<br/>map, search, profiles"]
     end
-    api["Phoenix API<br/>georeferencing"]
+    subgraph api["Phoenix API"]
+        ctx["Documents, runs,<br/>stages, boreholes"]
+    end
     db[("PostgreSQL<br/>+ PostGIS")]
-    ui["SvelteKit UI<br/>map, search, profiles"]
-    files --> ocr
-    split --> api --> db --> ui`;
+    fs[("Document storage")]
+    subgraph bem["BEM (Python)"]
+        direction LR
+        filter["1 Filter"] --> split["2 Split"] --> extract["3 Extract"] --> transform["4 Transform<br/>DIN 4023"]
+    end
+    claude{{"Claude models"}}
+    user <--> ui
+    ui <-->|"/api"| ctx
+    ctx <--> db
+    ctx <--> fs
+    ctx -->|"start run"| filter
+    bem -->|"download document,<br/>stage results, boreholes"| ctx
+    bem <--> claude`;
 </script>
 
 <svelte:head>
@@ -194,7 +211,7 @@
 
 		<div class="space-y-4">
 			<h3 class="h3">Infrastructure</h3>
-			<p>Four parts work together, from the raw file to the map.</p>
+			<p>Four parts work together, from the raw file to the map. They run as separate services.</p>
 			<dl class="grid gap-3 sm:grid-cols-2">
 				{#each infrastructure as part (part.name)}
 					<div class="card preset-tonal-surface p-4">
@@ -206,18 +223,29 @@
 		</div>
 
 		<div class="space-y-4">
-			<h3 class="h3">The pipeline</h3>
+			<h3 class="h3">How the parts connect</h3>
 			<div class="card preset-outlined-surface-200-800 p-4">
-				<Mermaid code={diagram} label="Pipeline from borehole files to the map" />
+				<Mermaid code={diagram} label="Architecture of UI, API, database and BEM pipeline" />
 			</div>
+		</div>
+
+		<div class="space-y-4">
+			<h3 class="h3">From upload to borehole</h3>
+			<ol class="list-inside list-decimal space-y-1">
+				{#each runSteps as step (step)}
+					<li>{step}</li>
+				{/each}
+			</ol>
 		</div>
 
 		<div class="space-y-4">
 			<h3 class="h3">BEM in detail</h3>
 			<p>
-				BEM runs fully on local machines, so no confidential data leaves them. Each stage can be
-				built, tested and swapped on its own, and its output is cached so a failure does not repeat
-				the slow OCR step.
+				BEM runs four stages on the Claude CLI, each with its own model and effort. Each stage is
+				small and can be tuned or swapped on its own. The UI shows every stage output, and the run
+				report lists time, tokens and cost per stage. Source documents stay linked to their
+				boreholes. Note that the pages are sent to Claude, so confidential files need an approved
+				setup.
 			</p>
 			<ol class="space-y-3">
 				{#each bemSteps as step, i (step.name)}
