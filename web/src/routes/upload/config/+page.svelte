@@ -15,10 +15,12 @@
 		createDefaultPipelineConfig,
 		PIPELINE_EFFORTS,
 		PIPELINE_MODELS,
+		PIPELINE_PROVIDERS,
 		PIPELINE_STEPS,
 		type PipelineConfig,
 		type PipelineEffort,
-		type PipelineModel
+		type PipelineModel,
+		type PipelineProvider
 	} from '#lib/domain/documents.ts';
 	import { getQueuedFiles, markUploaded, unqueueFile } from '#lib/upload-queue.svelte.ts';
 	import type { PageProps } from './$types';
@@ -28,6 +30,11 @@
 	const queued = $derived(getQueuedFiles());
 	let uploading = $state(false);
 	let config = $state<PipelineConfig>(createDefaultPipelineConfig());
+
+	/** Switching the provider swaps in that provider's default models (the model names differ). */
+	function setProvider(provider: PipelineProvider) {
+		if (provider !== config.provider) config = createDefaultPipelineConfig(provider);
+	}
 
 	// The layout's <main> scrolls, not the window, so SvelteKit does not reset it on navigation.
 	onMount(() => document.querySelector('main')?.scrollTo({ top: 0 }));
@@ -98,6 +105,32 @@
 			effort are more accurate but slower and more expensive.
 		</p>
 
+		<SegmentedControl
+			class="mb-6"
+			value={config.provider}
+			onValueChange={(d) => d.value && setProvider(d.value as PipelineProvider)}
+			aria-label="AI provider"
+		>
+			<SegmentedControl.Label>Provider</SegmentedControl.Label>
+			<SegmentedControl.Control>
+				<SegmentedControl.Indicator />
+				{#each PIPELINE_PROVIDERS as provider (provider)}
+					<SegmentedControl.Item value={provider}>
+						<SegmentedControl.ItemText>
+							{provider === 'claude' ? 'Claude' : 'Local (private)'}
+						</SegmentedControl.ItemText>
+						<SegmentedControl.ItemHiddenInput />
+					</SegmentedControl.Item>
+				{/each}
+			</SegmentedControl.Control>
+		</SegmentedControl>
+		{#if config.provider === 'local'}
+			<p class="mb-6 text-sm opacity-70">
+				A small vision model runs on this machine, so no data leaves it. Expect weaker results on
+				colours, hatch patterns and long logs; effort is ignored.
+			</p>
+		{/if}
+
 		<div class="mb-6 space-y-5">
 			{#each PIPELINE_STEPS as step, i (step.key)}
 				<div
@@ -116,7 +149,7 @@
 						<SegmentedControl.Label>Model</SegmentedControl.Label>
 						<SegmentedControl.Control>
 							<SegmentedControl.Indicator />
-							{#each PIPELINE_MODELS as model (model)}
+							{#each PIPELINE_MODELS[config.provider] as model (model)}
 								<SegmentedControl.Item value={model}>
 									<SegmentedControl.ItemText>{model}</SegmentedControl.ItemText>
 									<SegmentedControl.ItemHiddenInput />
@@ -127,6 +160,7 @@
 
 					<SegmentedControl
 						value={config[step.key].effort}
+						disabled={config.provider === 'local'}
 						onValueChange={(d) => d.value && (config[step.key].effort = d.value as PipelineEffort)}
 						aria-label="{step.label} effort"
 					>
@@ -149,7 +183,7 @@
 			<button
 				type="button"
 				class="btn preset-tonal"
-				onclick={() => (config = createDefaultPipelineConfig())}
+				onclick={() => (config = createDefaultPipelineConfig(config.provider))}
 			>
 				Reset to defaults
 			</button>

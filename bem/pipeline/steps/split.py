@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .. import pdfutil, schemas
 from ..naming import base, stamped
 from ..output import Recorder, dump_json
-from ..ai import PipelineError, StepReport, get_ai, log
+from ..ai import AI, PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
@@ -33,6 +33,11 @@ A previous pass noted this about each page (it may be wrong, check the pages):
 
 Give your final answer only through the structured output, not as prose."""
 
+SPLIT_PROMPT_LOCAL = SPLIT_PROMPT.replace(
+    "Read the PDF at {path} ({n} pages).", "The {n} attached images are the pages 1..{n} of one PDF, in order."
+).replace("{read_hint}\n", "")
+assert "Read" not in SPLIT_PROMPT_LOCAL
+
 
 def split_boreholes(
     pages_pdf: pathlib.Path,
@@ -40,7 +45,9 @@ def split_boreholes(
     report: StepReport,
     page_hints: list[str],
     recorder: Recorder = Recorder(),
+    ai: AI | None = None,
 ) -> list[pathlib.Path]:
+    ai = ai or get_ai()
     step_dir = out_dir / "02_split"
     n = pdfutil.page_count(pages_pdf)
     hint = (
@@ -49,7 +56,12 @@ def split_boreholes(
         if n > MAX_READ_PAGES
         else f'Read all pages with pages "1-{n}".'
     )
-    prompt = SPLIT_PROMPT.format(
+    if ai.max_input_pages is not None and n > ai.max_input_pages:
+        raise PipelineError(
+            f"step 2: {n} pages exceed the {ai.max_input_pages} pages the local backend takes per call "
+            "(raise BEM_LOCAL_MAX_PAGES or use a smaller document)"
+        )
+    prompt = (SPLIT_PROMPT if ai.reads_files else SPLIT_PROMPT_LOCAL).format(
         path=pages_pdf,
         n=n,
         read_hint=hint,
@@ -58,7 +70,7 @@ def split_boreholes(
     log(f"step 2: grouping {n} pages into boreholes")
 
     for attempt in (1, 2):
-        result = get_ai().run(
+        result = ai.run(
             prompt,
             model=report.model,
             effort=report.effort,
@@ -66,6 +78,7 @@ def split_boreholes(
             report=report,
             add_dirs=[out_dir],
             max_turns=6 + n // MAX_READ_PAGES * 2,
+            inputs=[(pages_pdf, f"1-{n}")],
         )
         _dump(step_dir / f"raw_response_attempt{attempt}.json", result)  # for debugging bad groupings
 

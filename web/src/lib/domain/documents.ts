@@ -29,18 +29,42 @@ export const PIPELINE_STEPS = [
 
 export type PipelineStep = (typeof PIPELINE_STEPS)[number]['key'];
 
-export const PIPELINE_MODELS = ['haiku', 'sonnet', 'opus'] as const;
-export type PipelineModel = (typeof PIPELINE_MODELS)[number];
+/** Where the models run: the Claude CLI, or a local vision model (Ollama, data stays on the machine). */
+export const PIPELINE_PROVIDERS = ['claude', 'local'] as const;
+export type PipelineProvider = (typeof PIPELINE_PROVIDERS)[number];
+
+/** Selectable models per provider (`bem/pipeline/config.py`). */
+export const PIPELINE_MODELS = {
+	claude: ['haiku', 'sonnet', 'opus'],
+	local: ['qwen3-vl:2b', 'qwen3-vl:4b']
+} as const satisfies Record<PipelineProvider, readonly string[]>;
+export type PipelineModel = string;
 
 export const PIPELINE_EFFORTS = ['low', 'medium', 'high'] as const;
 export type PipelineEffort = (typeof PIPELINE_EFFORTS)[number];
 
-/** Per step model and effort, in the shape of the `config` of the pipeline's `POST /execute`. */
-export type PipelineConfig = Record<PipelineStep, { model: PipelineModel; effort: PipelineEffort }>;
+/**
+ * The `config` of the pipeline's `POST /execute`: the provider plus per step model and effort.
+ * The local provider ignores the effort.
+ */
+export type PipelineConfig = { provider: PipelineProvider } & Record<
+	PipelineStep,
+	{ model: PipelineModel; effort: PipelineEffort }
+>;
 
 /** The pipeline's own defaults (`bem/pipeline/config.py`). */
-export function createDefaultPipelineConfig(): PipelineConfig {
+export function createDefaultPipelineConfig(provider: PipelineProvider = 'claude'): PipelineConfig {
+	if (provider === 'local') {
+		return {
+			provider,
+			filter: { model: 'qwen3-vl:2b', effort: 'high' },
+			split: { model: 'qwen3-vl:2b', effort: 'medium' },
+			extract: { model: 'qwen3-vl:4b', effort: 'high' },
+			transform: { model: 'qwen3-vl:4b', effort: 'high' }
+		};
+	}
 	return {
+		provider,
 		filter: { model: 'haiku', effort: 'high' },
 		split: { model: 'haiku', effort: 'medium' },
 		extract: { model: 'sonnet', effort: 'high' },

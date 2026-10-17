@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .. import pdfutil, schemas
 from ..naming import base, stamped
 from ..output import Recorder, dump_json
-from ..ai import PipelineError, StepReport, get_ai, log
+from ..ai import AI, PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
@@ -35,6 +35,12 @@ blank pages. When unsure whether a page is part of a log, keep it.
 Return one entry per page, numbered 1..{n} within this file. Give your final answer
 only through the structured output, not as prose."""
 
+# Backend-neutral variant for models that get the pages as attached images instead of reading the file.
+FILTER_PROMPT_LOCAL = (
+    "The {n} attached images are the pages 1..{n} of one PDF, in order. Classify each page.\n\n"
+    + FILTER_PROMPT.split("\n\n", 1)[1]
+)
+
 
 def filter_pages(
     pdf: pathlib.Path,
@@ -43,8 +49,10 @@ def filter_pages(
     chunk_size: int,
     workers: int,
     recorder: Recorder = Recorder(),
+    ai: AI | None = None,
 ) -> tuple[pathlib.Path, list[str]] | None:
     """Returns (PDF with only borehole log pages, one hint per kept page), or None if there are none."""
+    ai = ai or get_ai()
     step_dir = out_dir / "01_filter"
     total = pdfutil.page_count(pdf)
     log(f"step 1: {total} pages, classifying in chunks of {chunk_size}")
@@ -59,13 +67,15 @@ def filter_pages(
     def classify(chunk):
         chunk_pdf, start, end = chunk
         n = end - start + 1
-        result = get_ai().run(
-            FILTER_PROMPT.format(path=chunk_pdf, n=n),
+        prompt = FILTER_PROMPT if ai.reads_files else FILTER_PROMPT_LOCAL
+        result = ai.run(
+            prompt.format(path=chunk_pdf, n=n),
             model=report.model,
             effort=report.effort,
             schema=schemas.CLASSIFY_PAGES,
             report=report,
             add_dirs=[out_dir],
+            inputs=[(chunk_pdf, f"1-{n}")],
         )
         by_page = {p["page"]: p for p in result["pages"]}
         rows = []

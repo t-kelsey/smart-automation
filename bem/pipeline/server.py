@@ -20,19 +20,19 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .__main__ import run_pipeline
-from .config import PipelineConfig
-from .ai import PipelineError, get_ai, log
+from .config import PipelineConfig, default_chunk_size
+from .ai import PROVIDER_BACKENDS, PipelineError, log, new_ai
+from .local_vlm import is_configured as local_configured
 from .api_service import ApiError, ApiService
 from .din4023 import Din4023Error
 from .output import persist_enabled
 from .naming import new_run, run_id
 
 WORKDIR = pathlib.Path(os.environ.get("BEM_WORKDIR", pathlib.Path(__file__).resolve().parent.parent / "out" / "server"))
-CHUNK_SIZE = int(os.environ.get("BEM_CHUNK_SIZE", "10"))
 WORKERS = int(os.environ.get("BEM_WORKERS", "4"))
 
 _jobs: queue.Queue[tuple[str, str | None, PipelineConfig]] = queue.Queue()
@@ -48,7 +48,8 @@ def process(document_id: str, pipeline_id: str | None, config: PipelineConfig, a
     # exec_stages and the report are grouped by the API's pipeline run id, which GET /pipeline_runs/:id filters on
     run = pipeline_id or run_id()
     out_dir = WORKDIR / document_id / "out"
-    get_ai().debug_dir = out_dir / "debug" if persist_enabled() else None
+    ai = new_ai(PROVIDER_BACKENDS[config.provider])  # per run, so runs never share state
+    ai.debug_dir = out_dir / "debug" if persist_enabled() else None
 
     split_documents: dict[int, str] = {}  # borehole position -> id of its split-out PDF document
 
@@ -76,7 +77,7 @@ def process(document_id: str, pipeline_id: str | None, config: PipelineConfig, a
             log(f"{document_id}: download failed: {e}")
             return False
         try:
-            results, reports, _ = run_pipeline(pdf, out_dir, CHUNK_SIZE, WORKERS, config, on_stage)
+            results, reports, _ = run_pipeline(pdf, out_dir, default_chunk_size(config.provider), WORKERS, config, on_stage, ai)
         except PipelineError as e:
             log(f"{document_id}: pipeline failed: {e}")
             return False
@@ -147,16 +148,18 @@ class ExecuteRequest(BaseModel):
     # on completion. Optional only so /execute can be called directly without a pipeline_runs row
     # (e.g. manual testing) — then completion status cannot be reported anywhere.
     pipeline_id: str | None = None
-    config: PipelineConfig = PipelineConfig()  # per step `filter|split|extract|transform`: model + effort
+    config: PipelineConfig = PipelineConfig()  # `provider` + per step `filter|split|extract|transform`: model + effort
 
 
 @app.post("/execute", status_code=202)
 def execute(request: ExecuteRequest) -> dict:
     """Queue a run for an existing document. Stage 1 (filter) starts by downloading it from the API.
 
-    JSON body: `{"document_id": "<uuid>", "config": {"filter": {"model": "haiku", "effort": "high"}, ...}}`;
-    omitted steps use their defaults.
+    JSON body: `{"document_id": "<uuid>", "config": {"provider": "claude", "filter": {"model": "haiku", "effort": "high"}, ...}}`;
+    omitted steps use their defaults, `provider` is `claude` (default) or `local`.
     """
+    if request.config.provider == "local" and not local_configured():
+        raise HTTPException(422, "provider 'local' needs BEM_LOCAL_URL to be set on the pipeline server")
     document_id = str(request.document_id)
     _jobs.put((document_id, request.pipeline_id, request.config))
     return {

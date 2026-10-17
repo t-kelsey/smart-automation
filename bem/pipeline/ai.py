@@ -69,6 +69,7 @@ class StepReport:
     name: str
     model: str
     effort: str
+    provider: str = "claude"
     wall_seconds: float = 0.0
     usage: Usage = field(default_factory=Usage)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -82,6 +83,7 @@ class StepReport:
             "step": self.name,
             "model_requested": self.model,
             "effort": self.effort,
+            "provider": self.provider,
             "wall_seconds": round(self.wall_seconds, 2),
             **self.usage.to_dict(),
         }
@@ -105,6 +107,11 @@ class AI(ABC):
 
     # Failed raw responses are saved here for debugging (set by the entry point).
     debug_dir: pathlib.Path | None = None
+    # True: the model opens the files named in the prompt itself (Claude CLI Read tool).
+    # False: the backend needs `inputs` and renders the pages to images for the model.
+    reads_files: bool = True
+    # Backends with a small context limit the pages of one call; None means no limit.
+    max_input_pages: int | None = None
 
     @abstractmethod
     def run(
@@ -118,18 +125,23 @@ class AI(ABC):
         tools: str = "Read",
         add_dirs: list[pathlib.Path] | None = None,
         max_turns: int = 8,
+        inputs: list[tuple[pathlib.Path, str]] | None = None,
     ) -> dict:
         """Return the model's answer as a dict matching the JSON `schema`.
 
         `model` and `effort` are hints interpreted by the backend (for claude_cli: haiku/sonnet/opus
         and low..max). `tools`/`add_dirs`/`max_turns` describe file access for agentic backends;
-        `tools=""` means a pure text-in/text-out call. Raise `PipelineError` on failure.
+        `tools=""` means a pure text-in/text-out call. `inputs` lists (pdf, page range like "1-3") the
+        model must look at; backends that cannot open files themselves render them to images, the
+        Claude CLI ignores it (its prompt tells it which file to Read). Raise `PipelineError` on failure.
         """
 
 
 _BACKENDS = {
     "claude_cli": lambda: _load("claude_cli", "ClaudeCLI"),
+    "local": lambda: _load("local_vlm", "LocalVLM"),
 }
+PROVIDER_BACKENDS = {"claude": "claude_cli", "local": "local"}  # PipelineConfig.provider -> backend
 _current: AI | None = None
 
 
@@ -156,6 +168,13 @@ def set_ai(ai: AI) -> None:
     """Install a ready-made AI object (tests, custom backends)."""
     global _current
     _current = ai
+
+
+def new_ai(name: str) -> AI:
+    """A fresh, independent backend instance (per run, so runs never share state like `debug_dir`)."""
+    if name not in _BACKENDS:
+        raise PipelineError(f"unknown AI backend {name!r}, available: {', '.join(sorted(_BACKENDS))}")
+    return _BACKENDS[name]()
 
 
 def backend_names() -> list[str]:

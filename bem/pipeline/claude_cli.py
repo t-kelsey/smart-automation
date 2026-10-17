@@ -5,9 +5,7 @@ import pathlib
 import subprocess
 
 from .ai import AI, PipelineError, StepReport, Usage, log
-from .naming import run_id
-
-ATTEMPTS = 2
+from .jsonutil import ATTEMPTS, json_from_text as _json_from_text, save_debug as _save_debug
 
 
 def _usage_from(out: dict) -> Usage:
@@ -36,6 +34,7 @@ class ClaudeCLI(AI):
         tools: str = "Read",
         add_dirs: list[pathlib.Path] | None = None,
         max_turns: int = 8,
+        inputs: list[tuple[pathlib.Path, str]] | None = None,  # ignored: the CLI reads files itself
     ) -> dict:
         """Run one `claude -p` call, add its usage to `report`, return the structured output.
 
@@ -94,25 +93,3 @@ def _run_claude(ai, prompt, model, effort, schema, report, tools, add_dirs, max_
         _save_debug(ai.debug_dir, r.stdout)
         log(f"{last_error}, attempt {attempt}/{ATTEMPTS}" + (", retrying" if attempt < ATTEMPTS else ""))
     raise PipelineError(f"{last_error}; raw response saved in {ai.debug_dir or '(no debug dir set)'}")
-
-
-def _json_from_text(text: object) -> dict | None:
-    """Pull a JSON object out of a plain-text answer (optionally in a ```json fence)."""
-    if not isinstance(text, str):
-        return None
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end <= start:
-        return None
-    try:
-        data = json.loads(text[start : end + 1])
-    except ValueError:
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def _save_debug(debug_dir: pathlib.Path | None, raw: str) -> None:
-    if debug_dir is None:
-        return
-    debug_dir.mkdir(parents=True, exist_ok=True)
-    n = len(list(debug_dir.glob("*failed_response_*.json"))) + 1
-    (debug_dir / f"{run_id()}_failed_response_{n:02d}.json").write_text(raw)

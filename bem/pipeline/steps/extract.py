@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .. import pdfutil, schemas
 from ..naming import base, stamped
 from ..output import Recorder, dump_json
-from ..ai import PipelineError, StepReport, get_ai, log
+from ..ai import AI, PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
@@ -34,6 +34,12 @@ language and wording; do not translate here. Use null for anything not in the do
 never guess. Put anything that fits no field into other_information, and list
 illegible or doubtful parts in warnings."""
 
+EXTRACT_PROMPT_LOCAL = EXTRACT_PROMPT.replace(
+    "Read the borehole log PDF at {path} ({n} pages; the Read tool shows at\nmost {max_pages} pages per call).",
+    "The {n} attached images are the pages of one borehole log PDF, in order.",
+)
+assert "Read" not in EXTRACT_PROMPT_LOCAL
+
 
 def extract_boreholes(
     files: list[pathlib.Path],
@@ -41,22 +47,30 @@ def extract_boreholes(
     report: StepReport,
     workers: int,
     recorder: Recorder = Recorder(),
+    ai: AI | None = None,
 ) -> list[tuple[pathlib.Path, dict]]:
+    ai = ai or get_ai()
     step_dir = out_dir / "03_extract"
     log(f"step 3: extracting {len(files)} borehole(s)")
 
     def extract(item: tuple[int, pathlib.Path]):
         position, f = item
-        n = pdfutil.page_count(f)
-        data = get_ai().run(
-            EXTRACT_PROMPT.format(path=f, n=n, max_pages=MAX_READ_PAGES),
+        total = pdfutil.page_count(f)
+        # a backend with a small context sees only the first pages (flagged in the warnings below)
+        n = min(total, ai.max_input_pages or total)
+        prompt = EXTRACT_PROMPT if ai.reads_files else EXTRACT_PROMPT_LOCAL
+        data = ai.run(
+            prompt.format(path=f, n=n, max_pages=MAX_READ_PAGES),
             model=report.model,
             effort=report.effort,
             schema=schemas.EXTRACT_BOREHOLE,
             report=report,
             add_dirs=[out_dir],
             max_turns=8 + n // MAX_READ_PAGES * 2,
+            inputs=[(f, f"1-{n}")],
         )
+        if n < total:
+            data.setdefault("warnings", []).append(f"only the first {n} of {total} pages were read (local backend page limit)")
         recorder.record("extract", data, position=position, path=stamped(step_dir / f"{base(f.stem)}.json"))
         if not data["is_single_borehole"]:
             log(f"step 3: WARNING {f.name} holds {data['borehole_count_in_file']} boreholes")

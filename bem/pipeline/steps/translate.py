@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .. import din4023, pdfutil, schemas
 from ..naming import base, stamped
 from ..output import Recorder, dump_json
-from ..ai import PipelineError, StepReport, get_ai, log
+from ..ai import AI, PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
@@ -59,13 +59,15 @@ def transform_boreholes(
     report: StepReport,
     workers: int,
     recorder: Recorder = Recorder(),
+    ai: AI | None = None,
 ) -> list[dict]:
+    ai = ai or get_ai()
     step_dir = out_dir / "04_transform"
     log(f"step 4: transforming {len(extracted)} borehole(s) to the database schema")
 
     def transform(item: tuple[int, tuple[pathlib.Path, dict]]):
         position, (f, data) = item
-        payload = get_ai().run(
+        payload = ai.run(
             TRANSFORM_PROMPT.format(
                 data=json.dumps(data, ensure_ascii=False, indent=1), din4023=din4023.vocabulary_hint()
             ),

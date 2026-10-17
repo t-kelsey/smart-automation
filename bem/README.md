@@ -17,7 +17,7 @@ Step 4 targets the `boreholes` / `borehole_layers` columns from `api/priv/repo/m
 and the request shape in `docs/api-reference.md`; data without a column goes to `metadata`.
 It then runs the API's validation rules locally (`validation_issues`). Nothing is posted to the API.
 
-Code: `pipeline/steps.py` (steps and prompts), `pipeline/schemas.py` (JSON schemas),
+Code: `pipeline/steps/` (steps and prompts), `pipeline/local_vlm.py` (local backend), `pipeline/schemas.py` (JSON schemas),
 `pipeline/claude_cli.py` (CLI wrapper, token/cost accounting), `pipeline/pdfutil.py`.
 
 ## Requirements
@@ -36,6 +36,21 @@ uv run python -m pipeline path/to/report.pdf
 ```
 
 Progress and the final report (time, tokens, cost per step) go to stderr.
+
+## Local model (provider `local`)
+
+Instead of the Claude CLI, a run can use a local vision model through [Ollama](https://ollama.com) (ADR-0040);
+no data leaves the machine. Set `BEM_LOCAL_URL` (see `.env.example`), pull a model and select it:
+
+```sh
+ollama pull qwen3-vl:2b        # 4 GB VRAM: use the 2b/4b sizes
+uv run python -m pipeline --ai local path/to/report.pdf    # or "config": {"provider": "local"} in /execute
+```
+
+Pages are rendered to images with `pdftoppm`, the JSON schema is sent as Ollama's `format`. Context is small, so
+step 1 classifies 2 pages per call and steps 2/3 take at most `BEM_LOCAL_MAX_PAGES` pages (step 2 fails above that,
+step 3 reads only the first pages and adds a warning). Expect weaker colour/hatch reading than with Claude.
+`/execute` answers `422` for `provider: "local"` when `BEM_LOCAL_URL` is unset.
 
 ## HTTP server (`POST /execute`)
 
