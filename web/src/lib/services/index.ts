@@ -10,7 +10,7 @@ export { BoreholeService, BoreholeNotFoundError, DocumentNotFoundError } from '.
 export type { BoreholeListQuery, PagedResult } from './borehole-service';
 export { RepositoryError } from '#lib/repositories/borehole-repository.ts';
 export { SearchService } from './search-service';
-export { PipelineService, PipelineNotFoundError } from './pipeline-service';
+export { PipelineService, PipelineNotFoundError, JobNotFoundError } from './pipeline-service';
 export { UploadService, UnsupportedFileError } from './upload-service';
 
 export interface Services {

@@ -22,6 +22,14 @@ defmodule ApiWeb.ExecStageController do
     end
   end
 
+  @doc "One exec_stage by id; 404 if unknown."
+  def show(conn, %{"id" => id}) do
+    case Boreholes.get_exec_stage(id) do
+      nil -> {:error, :not_found}
+      exec_stage -> render(conn, :show, exec_stage: exec_stage)
+    end
+  end
+
   @doc """
   Every exec_stage linked to a document, newest first. Optional `type`/`run_id` query filters.
   """

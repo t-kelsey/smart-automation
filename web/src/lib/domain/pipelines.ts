@@ -7,6 +7,8 @@ export type PipelineStatus = JobStatus;
 
 export interface PipelineJob {
 	id: string;
+	/** The `exec_stages` row with the job's result; unset while the job has none. */
+	execStageId?: string;
 	name: string;
 	status: JobStatus;
 	/** Seconds; only known for jobs that are a whole stage on their own. */
@@ -117,4 +119,19 @@ export function formatRelative(date: Date, now = new Date()): string {
 		if (Math.abs(seconds) >= size) return formatter.format(Math.trunc(seconds / size), unit);
 	}
 	return formatter.format(seconds, 'second');
+}
+
+/** One executed job (`exec_stages` row of the API): the step's result with its metadata. */
+export interface JobDetail {
+	id: string;
+	/** Stage key: `filter`, `split`, `extract` or `transform`. */
+	type: string;
+	/** Borehole index within the run for `extract`/`transform`; unset for whole-document steps. */
+	position?: number;
+	/** The pipeline run this job belongs to (`pipeline_runs.id`). */
+	runId: string;
+	documentIds: string[];
+	createdAt: Date;
+	/** The step's JSON output as stored. */
+	data: unknown;
 }

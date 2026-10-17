@@ -51,7 +51,9 @@
 		<MapLegend {showFill} />
 		<button
 			type="button"
-			class="btn btn-sm shadow-md {showFill ? 'preset-filled-primary-500' : 'preset-filled-surface-50-950'}"
+			class="btn shadow-md btn-sm {showFill
+				? 'preset-filled-primary-500'
+				: 'preset-filled-surface-50-950'}"
 			aria-pressed={showFill}
 			onclick={() => (showFill = !showFill)}
 		>

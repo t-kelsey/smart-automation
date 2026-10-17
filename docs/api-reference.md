@@ -443,6 +443,10 @@ Records one step execution. Append-only — rerunning a step adds a new row rath
 
 `201` with `{ "data": <exec_stage, plus "document_ids"> }`. `422` if `type`, `run_id` or `data` is missing/invalid (changeset validation). `400` if `document_ids` is missing/empty, or any entry doesn't reference an existing document.
 
+### `GET /api/exec_stages/:id`
+
+One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "data", "document_ids", "inserted_at" } }`. `404` if it does not exist or the id is not a UUID.
+
 ### `GET /api/documents/:document_id/exec_stages`
 
 Every stage execution linked to a document, newest first (a document can have several — append-only history). Optional `?type=` / `?run_id=` filters.

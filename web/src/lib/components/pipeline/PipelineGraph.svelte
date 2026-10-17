@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import {
 		countByStatus,
 		formatDuration,
@@ -56,17 +57,23 @@
 
 				<ul class="space-y-1 rounded-xl bg-surface-50-950 p-1.5">
 					{#each stage.jobs as job (job.id)}
-						<li
-							class="flex items-center gap-3 rounded-lg px-2.5 py-2.5"
-							title={job.error ?? job.name}
-						>
-							<StatusIcon status={job.status} class="size-8" />
-							<div class="min-w-0 flex-1">
-								<p class="truncate">{job.name}</p>
-								{#if job.durationSeconds !== undefined}
-									<p class="text-xs opacity-60">{formatDuration(job.durationSeconds)}</p>
-								{/if}
-							</div>
+						<li>
+							<svelte:element
+								this={job.execStageId ? 'a' : 'div'}
+								href={job.execStageId ? resolve('/jobs/[id]', { id: job.execStageId }) : undefined}
+								class="flex items-center gap-3 rounded-lg px-2.5 py-2.5 {job.execStageId
+									? 'hover:bg-surface-100-900'
+									: ''}"
+								title={job.error ?? job.name}
+							>
+								<StatusIcon status={job.status} class="size-8" />
+								<div class="min-w-0 flex-1">
+									<p class="truncate">{job.name}</p>
+									{#if job.durationSeconds !== undefined}
+										<p class="text-xs opacity-60">{formatDuration(job.durationSeconds)}</p>
+									{/if}
+								</div>
+							</svelte:element>
 						</li>
 					{:else}
 						<li class="px-2.5 py-2.5 text-sm opacity-60">No jobs</li>

@@ -25,7 +25,8 @@ export function dominantLayer(borehole: Borehole): DominantLayer | undefined {
 	);
 	for (const layer of thickest) {
 		const composition = layer.petrography.composition;
-		if (composition) return { material: columnFill(composition).main, color: layer.color.hex || '#ffffff' };
+		if (composition)
+			return { material: columnFill(composition).main, color: layer.color.hex || '#ffffff' };
 	}
 	return undefined;
 }

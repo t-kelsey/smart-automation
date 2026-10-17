@@ -1,5 +1,5 @@
 import type { PipelineConfig } from '#lib/domain/documents.ts';
-import type { Pipeline, PipelineStatus } from '#lib/domain/pipelines.ts';
+import type { JobDetail, Pipeline, PipelineStatus } from '#lib/domain/pipelines.ts';
 
 /** What the API answers when a run is submitted. */
 export interface StartedPipeline {
@@ -15,6 +15,8 @@ export interface PipelineRepository {
 	list(): Promise<Pipeline[]>;
 	/** Returns the pipeline run, or `null` if there is none. */
 	get(id: string): Promise<Pipeline | null>;
+	/** Returns the executed job (`exec_stages` row), or `null` if there is none. */
+	getJob(id: string): Promise<JobDetail | null>;
 	/** Submits an uploaded document to the pipeline with the given per step config. */
 	start(documentId: string, config: PipelineConfig): Promise<StartedPipeline>;
 }

@@ -12,6 +12,7 @@ import {
 export type ApiRunStatus = 'new' | 'running' | 'completed' | 'failed';
 
 export interface ApiExecStage {
+	id: string;
 	type: string;
 	position: number | null;
 	data: Record<string, unknown> | null;
@@ -64,19 +65,24 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 	const boreholes = (rows.find((r) => r.type === 'split')?.data?.boreholes ?? []) as {
 		label?: string;
 	}[];
+	const rowOf = (type: string, position: number | null) =>
+		rows.find((r) => r.type === type && (r.position ?? null) === position);
 	const finished = (type: string, position: number | null) =>
 		rows.some((r) => r.type === type && (r.position ?? null) === position);
 
 	/** The jobs of a stage with `done` telling which of them have a result. */
-	function jobsOf(type: string): { name: string; done: boolean }[] {
-		if (type === 'filter') return [{ name: 'Filter pages', done: finished('filter', null) }];
-		if (type === 'split') return [{ name: 'Split boreholes', done: finished('split', null) }];
+	function jobsOf(type: string): { name: string; done: boolean; position: number | null }[] {
+		if (type === 'filter')
+			return [{ name: 'Filter pages', done: finished('filter', null), position: null }];
+		if (type === 'split')
+			return [{ name: 'Split boreholes', done: finished('split', null), position: null }];
 		const verb = type === 'extract' ? 'Extract' : 'Transform';
 		// Until the split result is there, the number of boreholes is unknown.
-		if (!rows.some((r) => r.type === 'split')) return [{ name: verb, done: false }];
+		if (!rows.some((r) => r.type === 'split')) return [{ name: verb, done: false, position: null }];
 		return boreholes.map((b, i) => ({
 			name: `${verb} ${b.label ?? `borehole ${i + 1}`}`,
-			done: finished(type, i + 1)
+			done: finished(type, i + 1),
+			position: i + 1
 		}));
 	}
 
@@ -103,6 +109,7 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 				else status = run.status === 'failed' ? 'failed' : 'running';
 				return {
 					id: `${stage.key}-${i + 1}`,
+					execStageId: job.done ? rowOf(stage.key, job.position)?.id : undefined,
 					name: job.name,
 					status,
 					model: report?.model_requested ?? configured?.model,

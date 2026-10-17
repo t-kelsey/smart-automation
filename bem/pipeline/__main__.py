@@ -83,19 +83,25 @@ def _run(
     r1, r2, r3, r4 = reports
     results: list[dict] = []
     t0 = time.monotonic()
+    stage = "filter"
     try:
         with Timer(r1):
             filtered = filter_pages(pdf, out_dir, r1, chunk_size, workers, recorder)
         if filtered is not None:
             pages_pdf, page_hints = filtered
+            stage = "split"
             with Timer(r2):
                 files = split_boreholes(pages_pdf, out_dir, r2, page_hints, recorder)
+            stage = "extract"
             with Timer(r3):
                 extracted = extract_boreholes(files, out_dir, r3, workers, recorder)
             with Timer(r4):
                 results = transform_boreholes(extracted, out_dir, r4, workers, recorder)
         else:
             log("no borehole log pages found, nothing to do")
+    except Exception as e:  # extract/transform record their own failures per borehole
+        recorder.record_failure(stage, e)
+        raise
     finally:
         wall = time.monotonic() - t0
         dump_json(stamped(out_dir / "report.json"), [r.to_dict() for r in reports])

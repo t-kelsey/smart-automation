@@ -65,18 +65,22 @@ def transform_boreholes(
 
     def transform(item: tuple[int, tuple[pathlib.Path, dict]]):
         position, (f, data) = item
-        payload = get_ai().run(
-            TRANSFORM_PROMPT.format(
-                data=json.dumps(data, ensure_ascii=False, indent=1), din4023=din4023.vocabulary_hint()
-            ),
-            model=report.model,
-            effort=report.effort,
-            schema=schemas.DB_PAYLOAD,
-            report=report,
-            tools="",
-            max_turns=2,
-        )
-        payload, din_issues = din4023.conform(payload)
+        try:
+            payload = get_ai().run(
+                TRANSFORM_PROMPT.format(
+                    data=json.dumps(data, ensure_ascii=False, indent=1), din4023=din4023.vocabulary_hint()
+                ),
+                model=report.model,
+                effort=report.effort,
+                schema=schemas.DB_PAYLOAD,
+                report=report,
+                tools="",
+                max_turns=2,
+            )
+            payload, din_issues = din4023.conform(payload)
+        except Exception as e:
+            recorder.record_failure("transform", e, position=position)
+            raise
         issues = validate_payload(payload) + din_issues
         for i in issues:
             log(f"step 4: WARNING {f.stem}: {i}")

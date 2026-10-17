@@ -92,7 +92,13 @@
 						<tr>
 							<td><StatusIcon status={job.status} class="size-7" /></td>
 							<td>
-								{job.name}
+								{#if job.execStageId}
+									<a href={resolve('/jobs/[id]', { id: job.execStageId })} class="anchor"
+										>{job.name}</a
+									>
+								{:else}
+									{job.name}
+								{/if}
 								{#if job.error}<p class="text-xs text-error-500">{job.error}</p>{/if}
 							</td>
 							<td>
