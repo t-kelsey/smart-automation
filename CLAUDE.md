@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Hackathon project (Herrenknecht challenge): automated extraction and standardisation of drilling/borehole data into a global geodatabase. Monorepo with two independent apps:
 
-- `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, PostGIS, Bandit). Borehole list/search/detail endpoints are documented in `docs/api-reference.md`; `mix boreholes.mock --count N` (max 10000) generates mock data.
+- `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, PostGIS, Bandit). Borehole list/search/detail endpoints are documented in `docs/api-reference.md`; `mix boreholes.mock --count N` (max 1000000) generates mock data.
 - `web/` — SvelteKit 3 / Svelte 5 frontend (TypeScript, Tailwind 4, pnpm). Currently scaffold only (`src/routes/`).
 - `bem/` — Python extraction pipeline (triage → OCR → translation/extraction → POST to API); see ADR-0001.
 - `docs/` — Architecture Decision Records in `docs/adr/` (use `_template.md`).
