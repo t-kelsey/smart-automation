@@ -2,43 +2,43 @@ defmodule ApiWeb.BoreholeController do
   use ApiWeb, :controller
 
   alias Api.Boreholes
+  alias ApiWeb.BoreholeParams
 
+  action_fallback ApiWeb.FallbackController
+
+  @doc """
+  GeoJSON list of boreholes with filters, sorting and paging (see docs/api-reference.md).
+  `view=points` returns only id, name and verified per feature, for the map.
+  """
   def index(conn, params) do
-    case parse_bbox(params["bbox"]) do
-      {:ok, bbox} ->
-        boreholes = Boreholes.list_boreholes(bbox)
-        render(conn, :index, boreholes: boreholes)
-
-      :error ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{errors: %{detail: "invalid bbox, expected minLon,minLat,maxLon,maxLat"}})
+    with {:ok, filters} <- BoreholeParams.parse(params) do
+      render_list(conn, filters, params)
     end
   end
 
   def show(conn, %{"id" => id}) do
-    borehole = Boreholes.get_borehole!(id)
-    render(conn, :show, borehole: borehole)
-  end
-
-  def search(conn, params) do
-    boreholes = Boreholes.search_boreholes(params["q"] || "")
-    render(conn, :index, boreholes: boreholes)
-  end
-
-  defp parse_bbox(nil), do: {:ok, nil}
-
-  defp parse_bbox(bbox) when is_binary(bbox) do
-    with [min_lon, min_lat, max_lon, max_lat] <- String.split(bbox, ","),
-         {min_lon, ""} <- Float.parse(min_lon),
-         {min_lat, ""} <- Float.parse(min_lat),
-         {max_lon, ""} <- Float.parse(max_lon),
-         {max_lat, ""} <- Float.parse(max_lat) do
-      {:ok, %{min_lon: min_lon, min_lat: min_lat, max_lon: max_lon, max_lat: max_lat}}
-    else
-      _ -> :error
+    case Boreholes.get_borehole(id) do
+      nil -> {:error, :not_found}
+      borehole -> render(conn, :show, borehole: borehole)
     end
   end
 
-  defp parse_bbox(_), do: :error
+  @doc "Same as `index`, but `q` is the point: results carry a `score` and a `snippet`."
+  def search(conn, params) do
+    with {:ok, filters} <- BoreholeParams.parse(params) do
+      render_list(conn, Map.put_new(filters, :q, ""), params)
+    end
+  end
+
+  defp render_list(conn, filters, params) do
+    %{entries: entries, total: total} = Boreholes.list_boreholes(filters)
+
+    render(conn, :index,
+      entries: entries,
+      total: total,
+      limit: filters[:limit],
+      offset: filters[:offset] || 0,
+      view: if(params["view"] == "points", do: :points, else: :full)
+    )
+  end
 end

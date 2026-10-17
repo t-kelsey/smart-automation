@@ -27,7 +27,14 @@ storage_files =
 
 storage_file = fn index -> Enum.at(storage_files, index, "placeholder-#{index}.pdf") end
 
+# Re-running the seeds replaces the previously seeded and generated rows instead of duplicating
+# them; real data (e.g. from `mix documents.backfill`) is not touched.
+Api.MockData.delete_source("seed")
+Api.MockData.delete_source("mock")
+
+# Seeded boreholes are marked so the step above can find them again.
 insert_borehole = fn attrs ->
+  attrs = Map.update(attrs, :metadata, %{"source" => "seed"}, &Map.put(&1, "source", "seed"))
   %Borehole{} |> Borehole.changeset(attrs) |> Repo.insert!()
 end
 
@@ -549,6 +556,10 @@ tough_one_scan_2 =
   })
 
 attach_documents.(tough_one, [tough_one_scan, tough_one_scan_2])
+
+# Plus generated boreholes for lists, search and the map: MOCK_BOREHOLES=10000 for the maximum.
+mock_count = String.to_integer(System.get_env("MOCK_BOREHOLES", "1000"))
+Api.MockData.generate(min(mock_count, Api.MockData.max_count()))
 
 IO.puts(
   "Seeded #{Repo.aggregate(Borehole, :count)} boreholes, " <>

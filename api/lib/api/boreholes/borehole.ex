@@ -8,6 +8,8 @@ defmodule Api.Boreholes.Borehole do
     field :name, :string
     field :external_id, :string
     field :purpose, :string
+    field :place, :string
+    field :client, :string
     field :drilling_method, :string
     field :drilled_at, :date
     field :end_date, :date
@@ -35,6 +37,8 @@ defmodule Api.Boreholes.Borehole do
       :name,
       :external_id,
       :purpose,
+      :place,
+      :client,
       :drilling_method,
       :drilled_at,
       :end_date,

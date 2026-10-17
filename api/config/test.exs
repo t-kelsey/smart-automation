@@ -20,6 +20,9 @@ config :api, ApiWeb.Endpoint,
   secret_key_base: "1oUbHQoaTUpmucV7XP6d5bgAg8zteD0uO0fkzSo6RQqL6UYoHfsx2I5OdFz5Y7wL",
   server: false
 
+# Document files are read from a temporary directory in tests, not from priv/storage/.
+config :api, :document_storage_dir, Path.join(System.tmp_dir!(), "api_test_storage")
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

@@ -11,5 +11,7 @@ defmodule ApiWeb.Router do
     get "/boreholes/search", BoreholeController, :search
     get "/boreholes/:id", BoreholeController, :show
     get "/boreholes", BoreholeController, :index
+
+    get "/documents/:id/file", DocumentController, :file
   end
 end
