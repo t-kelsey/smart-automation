@@ -56,6 +56,7 @@ def process_file(path: Path, sink, debug: bool) -> int:
     for i, section in enumerate(split(path.name, document)):  # one Borehole per borehole ID
         if debug:
             save_stage("triage", path, section.model_dump_json(indent=2), f"__{i}.json")
+
         record = extract(section)     # Borehole -> Borehole (JSON-serialisable)
         if debug:
             save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")
