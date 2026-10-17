@@ -14,7 +14,7 @@ The first API endpoints returned every borehole unpaged, so the web app had brie
 ## Decision
 
 - **Paging, filtering, sorting in the API.** `GET /api/boreholes` and `/search` accept `q`, `bbox`, `verified`, `drilled_from`/`drilled_to`, `min_depth`/`max_depth`, `sort` (`-` for descending), `limit` (≤ 10 000) and `offset`. The response stays a GeoJSON `FeatureCollection` with `total`, `limit`, `offset` as foreign members, so the map keeps working. `view=points` returns only id, name and verified.
-- **Ranked search with `ILIKE`.** Matches borehole name, external id, place, purpose, client and layer stratigraphy, petrography, colour and raw text. The score is a fixed weighting per field plus matching layers; the snippet is the first matching layer's text. No full-text index: enough for 10 000 boreholes.
+- **Ranked search with `ILIKE`.** Replaced by the search query language of ADR-0042 (name, place and date, trigram indexes, autocorrection); layer text is no longer searched and there is no snippet.
 - **New columns.** `boreholes.place` and `boreholes.client` (both appear on logs as location/site and "Auftraggeber"), `documents.page_count` and `documents.size_bytes`. The layer foreign key now cascades on borehole delete.
 - **JSON errors.** Unknown and malformed ids return `404` with `{ errors: { detail } }` through a fallback controller; invalid parameters return `400`.
 - **Mock data.** `Api.MockData` generates up to 10 000 deterministic boreholes with layers and documents in the local languages of 11 countries (`mix boreholes.mock`, and from the seeds via `MOCK_BOREHOLES`). Seeded and generated rows are marked in `metadata.source` so seeds can be re-run without duplicates.
@@ -30,7 +30,6 @@ The web's API repository passes all parameters through instead of filtering loca
 
 ## Cons
 
-- `ILIKE` with leading wildcards scans the tables; fine at 10 000 boreholes, not beyond.
 - Fixed score weights are arbitrary.
 - `place` and `client` are not yet filled by the extraction pipeline (`bem/`); only seeds and mock data set them.
 

@@ -88,9 +88,8 @@ export interface ApiFeature {
 	/** `null` if the borehole has not been georeferenced. */
 	geometry: ApiGeoPoint | null;
 	properties: ApiBorehole;
-	/** Only on search results (`q` given): relevance and the matching layer text. */
+	/** Only on search results (`q` given): relevance, higher is better. */
 	score?: number;
-	snippet?: string | null;
 }
 
 /** With `view=points` the properties hold only id, name and verified. */
@@ -110,4 +109,6 @@ export interface ApiFeatureCollection<F = ApiFeature> {
 	limit: number | null;
 	offset: number;
 	features: F[];
+	/** Only when a search (`q`) found nothing: an autocorrected query string, if there is one. */
+	suggestion?: string;
 }

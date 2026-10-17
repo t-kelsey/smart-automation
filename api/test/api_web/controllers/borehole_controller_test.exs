@@ -206,37 +206,33 @@ defmodule ApiWeb.BoreholeControllerTest do
   end
 
   describe "GET /api/boreholes/search" do
-    test "matches by name and by stratigraphy", %{conn: conn} do
-      by_name = insert_borehole(%{name: "Schönberg Hole"})
-
-      by_strat = insert_borehole(%{name: "Other"})
-      insert_layer(by_strat, %{position: 1, depth_from_m: 0, depth_to_m: 2, stratigraphy: "qh"})
-
+    test "searches with the query language and returns a score", %{conn: conn} do
+      hit = insert_borehole(%{name: "Schönberg Hole", place: "Bern", drilled_at: ~D[1959-06-12]})
+      insert_borehole(%{name: "Schönberg 2", place: "Basel", drilled_at: ~D[1959-01-01]})
       insert_borehole(%{name: "Unrelated"})
 
-      conn1 = get(conn, ~p"/api/boreholes/search?q=sch%C3%B6nberg")
-      assert %{"features" => [feature1]} = json_response(conn1, 200)
-      assert feature1["properties"]["id"] == by_name.id
+      conn = get(conn, ~p"/api/boreholes/search?#{[q: "schönberg place:bern 1950..1960"]}")
 
-      conn2 = get(conn, ~p"/api/boreholes/search?q=qh")
-      assert %{"features" => [feature2]} = json_response(conn2, 200)
-      assert feature2["properties"]["id"] == by_strat.id
+      assert %{"total" => 1, "features" => [%{"score" => score} = feature]} =
+               json = json_response(conn, 200)
+
+      assert feature["properties"]["id"] == hit.id
+      assert score > 0
+      refute Map.has_key?(json, "suggestion")
     end
 
-    test "returns score and snippet per feature", %{conn: conn} do
-      borehole = insert_borehole(%{name: "Other"})
+    test "suggests a corrected query when nothing is found", %{conn: conn} do
+      insert_borehole(%{name: "B 1", place: "Stuttgart"})
 
-      insert_layer(borehole, %{
-        position: 1,
-        depth_from_m: 0,
-        depth_to_m: 2,
-        petrography: "Ton, steif"
-      })
+      conn = get(conn, ~p"/api/boreholes/search?#{[q: "place:Stutgart"]}")
 
-      conn = get(conn, ~p"/api/boreholes/search?q=ton")
-
-      assert %{"total" => 1, "features" => [%{"score" => 1, "snippet" => "Ton, steif"}]} =
+      assert %{"total" => 0, "features" => [], "suggestion" => "place:Stuttgart"} =
                json_response(conn, 200)
+    end
+
+    test "rejects an invalid query with 400", %{conn: conn} do
+      conn = get(conn, ~p"/api/boreholes/search?#{[q: "date:19x9"]}")
+      assert %{"errors" => %{"detail" => "invalid date" <> _}} = json_response(conn, 400)
     end
   end
 end

@@ -5,6 +5,7 @@ defmodule Api.BoreholesTest do
   alias Api.Boreholes.Borehole
   alias Api.Boreholes.BoreholeLayer
   alias Api.Boreholes.Document
+  alias Api.Boreholes.SearchQuery
 
   defp insert_borehole(attrs) do
     %Borehole{}
@@ -128,45 +129,125 @@ defmodule Api.BoreholesTest do
     end
   end
 
-  describe "list_boreholes/1 with q (search)" do
-    test "matches by name and ranks name hits above layer hits" do
-      by_layer = insert_borehole(%{name: "Other"})
-
-      insert_layer(by_layer, %{
-        position: 1,
-        depth_from_m: 0,
-        depth_to_m: 2,
-        petrography: "Kies, sandig"
-      })
-
+  describe "list_boreholes/1 with q (search query language)" do
+    test "bare words match name, external id and place; name hits rank first" do
+      by_place = insert_borehole(%{name: "P1", place: "Kiesgrube"})
       by_name = insert_borehole(%{name: "Kiesgrube Nord"})
-      insert_borehole(%{name: "Unrelated"})
+      by_external_id = insert_borehole(%{name: "X", external_id: "KIES-7"})
+      insert_borehole(%{name: "Unrelated", client: "Kies AG", purpose: "Kies"})
 
-      assert [first, second] = Boreholes.list_boreholes(%{q: "kies"}).entries
-      assert first.borehole.id == by_name.id
-      assert second.borehole.id == by_layer.id
-      assert first.score > second.score
-      assert second.snippet == "Kies, sandig"
+      assert ids(Boreholes.list_boreholes(%{q: "kies"})) == [
+               by_name.id,
+               by_external_id.id,
+               by_place.id
+             ]
     end
 
-    test "matches place, client and layer stratigraphy without duplicating the borehole" do
-      borehole = insert_borehole(%{name: "Multi-layer"})
-      insert_layer(borehole, %{position: 1, depth_from_m: 0, depth_to_m: 2, stratigraphy: "qh"})
-      insert_layer(borehole, %{position: 2, depth_from_m: 2, depth_to_m: 4, stratigraphy: "qh"})
-      by_place = insert_borehole(%{name: "P", place: "Stuttgart"})
-      by_client = insert_borehole(%{name: "C", client: "Stadtwerke"})
+    test "all terms must match" do
+      both = insert_borehole(%{name: "B 1/59", place: "Stuttgart"})
+      insert_borehole(%{name: "B 2/60", place: "Basel"})
 
-      assert %{total: 1, entries: [%{borehole: %Borehole{id: id}, score: 2}]} =
-               Boreholes.list_boreholes(%{q: "qh"})
+      assert ids(Boreholes.list_boreholes(%{q: "B stuttgart"})) == [both.id]
+    end
 
-      assert id == borehole.id
-      assert ids(Boreholes.list_boreholes(%{q: "stuttgart"})) == [by_place.id]
-      assert ids(Boreholes.list_boreholes(%{q: "stadtwerke"})) == [by_client.id]
+    test "name: and place: restrict the columns" do
+      named = insert_borehole(%{name: "Bern 1", place: "Thun"})
+      placed = insert_borehole(%{name: "T 1", place: "Bern"})
+
+      assert ids(Boreholes.list_boreholes(%{q: "name:bern"})) == [named.id]
+      assert ids(Boreholes.list_boreholes(%{q: "location:bern"})) == [placed.id]
+    end
+
+    test "quoted phrases and comma alternatives" do
+      a = insert_borehole(%{name: "B 1/59", place: "Bern"})
+      b = insert_borehole(%{name: "B 159", place: "Basel"})
+      insert_borehole(%{name: "C", place: "Zürich"})
+
+      assert ids(Boreholes.list_boreholes(%{q: ~s("B 1/59")})) == [a.id]
+
+      assert ids(Boreholes.list_boreholes(%{q: "place:bern,basel", sort: {:name, :asc}})) ==
+               [a.id, b.id]
+    end
+
+    test "negated terms exclude matches and keep rows without the value" do
+      bern = insert_borehole(%{name: "A", place: "Bern"})
+      no_place = insert_borehole(%{name: "B"})
+      old = insert_borehole(%{name: "C", place: "Basel", drilled_at: ~D[1959-06-12]})
+
+      assert ids(Boreholes.list_boreholes(%{q: "-place:basel"})) == [bern.id, no_place.id]
+      assert ids(Boreholes.list_boreholes(%{q: "-1959"})) == [bern.id, no_place.id]
+      assert ids(Boreholes.list_boreholes(%{q: "-place:bern"})) == [no_place.id, old.id]
+    end
+
+    test "dates: years, months, days, ranges and comparisons" do
+      d1959 = insert_borehole(%{name: "A", drilled_at: ~D[1959-06-12]})
+      d1975 = insert_borehole(%{name: "B", drilled_at: ~D[1975-01-31]})
+      d2001 = insert_borehole(%{name: "C", drilled_at: ~D[2001-12-01]})
+      insert_borehole(%{name: "D"})
+
+      search = &ids(Boreholes.list_boreholes(%{q: &1, sort: {:name, :asc}}))
+
+      assert search.("1959") == [d1959.id]
+      assert search.("date:1959-06") == [d1959.id]
+      assert search.("date:12.06.1959") == [d1959.id]
+      assert search.("date:1959-06-13") == []
+      assert search.("1950..1980") == [d1959.id, d1975.id]
+      assert search.("date:1975..") == [d1975.id, d2001.id]
+      assert search.("date:..1975-01") == [d1959.id, d1975.id]
+      assert search.("date:>1975") == [d2001.id]
+      assert search.("date:>=1975") == [d1975.id, d2001.id]
+      assert search.("before:1975") == [d1959.id]
+      assert search.("after:1959 before:2000") == [d1975.id]
+      assert search.("date:1959,2001") == [d1959.id, d2001.id]
+    end
+
+    test "a quoted year is text, not a date" do
+      named = insert_borehole(%{name: "Station 1959"})
+      insert_borehole(%{name: "Other", drilled_at: ~D[1959-01-01]})
+
+      assert ids(Boreholes.list_boreholes(%{q: ~s("1959")})) == [named.id]
     end
 
     test "treats LIKE wildcards in the query literally" do
       insert_borehole(%{name: "Anything"})
       assert %{total: 0} = Boreholes.list_boreholes(%{q: "%"})
+    end
+
+    test "returns a score per entry" do
+      insert_borehole(%{name: "Kiesgrube"})
+      assert [%{score: score}] = Boreholes.list_boreholes(%{q: "kies"}).entries
+      assert score > 0
+    end
+  end
+
+  describe "suggest_query/1" do
+    setup do
+      insert_borehole(%{name: "B 1/59 Schönberg", place: "Stuttgart"})
+      insert_borehole(%{name: "KB 3", place: "Freiburg im Breisgau"})
+      :ok
+    end
+
+    defp suggest(q), do: Boreholes.suggest_query(SearchQuery.parse!(q))
+
+    test "replaces misspelt words with the most similar word of the searched columns" do
+      assert suggest("Stutgart") == "Stuttgart"
+      assert suggest("place:Freiburgg 1959") == "place:Freiburg 1959"
+      assert suggest("name:Schonberg") == "name:Schönberg"
+    end
+
+    test "corrects unknown field keys" do
+      assert suggest("plase:Stuttgart") == "place:Stuttgart"
+    end
+
+    test "keeps values that occur, quoted, negated and short values" do
+      assert suggest("stuttgart") == nil
+      assert suggest(~s("Stutgart")) == nil
+      assert suggest("-Stutgart") == nil
+      assert suggest("xy") == nil
+    end
+
+    test "returns nil when no similar word exists" do
+      assert suggest("qwertzuiop") == nil
     end
   end
 

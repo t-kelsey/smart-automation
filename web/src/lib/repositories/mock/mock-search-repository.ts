@@ -1,4 +1,4 @@
-import type { Borehole, Page, SearchHit, SearchQuery } from '#lib/domain/borehole.ts';
+import type { Borehole, SearchHit, SearchPage, SearchQuery } from '#lib/domain/borehole.ts';
 import type { SearchRepository } from '../search-repository';
 import { toSummary } from './mock-borehole-repository';
 import { mockBoreholes } from './mock-data';
@@ -7,7 +7,7 @@ import { mockBoreholes } from './mock-data';
 export class MockSearchRepository implements SearchRepository {
 	constructor(private readonly boreholes: Borehole[] = mockBoreholes) {}
 
-	async search({ q, limit, offset = 0 }: SearchQuery): Promise<Page<SearchHit>> {
+	async search({ q, limit, offset = 0 }: SearchQuery): Promise<SearchPage> {
 		const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
 		if (!terms.length) return { items: [], total: 0 };
 

@@ -9,13 +9,17 @@ import type {
 
 /** Thrown by repositories on transport or server errors (not for "not found"). */
 export class RepositoryError extends Error {
+	/** The API's `errors.detail`, if the response had one (e.g. why a parameter is invalid). */
+	readonly detail?: string;
+
 	constructor(
 		message: string,
 		readonly status?: number,
-		options?: ErrorOptions
+		options?: ErrorOptions & { detail?: string }
 	) {
 		super(message, options);
 		this.name = 'RepositoryError';
+		this.detail = options?.detail;
 	}
 }
 

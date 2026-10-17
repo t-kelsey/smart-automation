@@ -3,9 +3,10 @@ defmodule ApiWeb.BoreholeJSON do
 
   @doc """
   Renders a GeoJSON FeatureCollection. `total`, `limit` and `offset` are GeoJSON foreign members
-  for paging; search results also carry `score` and `snippet` on each feature.
+  for paging; search results also carry a `score` on each feature, and a search that found
+  nothing an autocorrected `suggestion` (a query string) if there is one.
   """
-  def index(%{entries: entries, total: total, limit: limit, offset: offset, view: view}) do
+  def index(%{entries: entries, total: total, limit: limit, offset: offset, view: view} = assigns) do
     %{
       type: "FeatureCollection",
       total: total,
@@ -13,6 +14,7 @@ defmodule ApiWeb.BoreholeJSON do
       offset: offset,
       features: Enum.map(entries, &feature(&1, view))
     }
+    |> then(fn c -> if s = assigns[:suggestion], do: Map.put(c, :suggestion, s), else: c end)
   end
 
   @doc """
@@ -28,13 +30,13 @@ defmodule ApiWeb.BoreholeJSON do
     }
   end
 
-  defp feature(%{borehole: borehole, score: score, snippet: snippet}, view) do
+  defp feature(%{borehole: borehole, score: score}, view) do
     %{
       type: "Feature",
       geometry: borehole.location,
       properties: if(view == :points, do: point_properties(borehole), else: properties(borehole))
     }
-    |> then(fn f -> if score, do: Map.merge(f, %{score: score, snippet: snippet}), else: f end)
+    |> then(fn f -> if score, do: Map.put(f, :score, score), else: f end)
   end
 
   defp point_properties(%Borehole{} = borehole) do

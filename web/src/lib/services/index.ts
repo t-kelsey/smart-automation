@@ -9,7 +9,8 @@ import { UploadService } from './upload-service';
 export { BoreholeService, BoreholeNotFoundError, DocumentNotFoundError } from './borehole-service';
 export type { BoreholeListQuery, PagedResult } from './borehole-service';
 export { RepositoryError } from '#lib/repositories/borehole-repository.ts';
-export { SearchService } from './search-service';
+export { SearchService, InvalidSearchQueryError } from './search-service';
+export type { SearchResult } from './search-service';
 export { PipelineService, PipelineNotFoundError, JobNotFoundError } from './pipeline-service';
 export { UploadService, UnsupportedFileError } from './upload-service';
 

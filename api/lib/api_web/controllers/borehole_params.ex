@@ -4,6 +4,8 @@ defmodule ApiWeb.BoreholeParams do
   filters understood by `Api.Boreholes.list_boreholes/1`.
   """
 
+  alias Api.Boreholes.SearchQuery
+
   # A prototype limit: the dataset is capped at 10 000 boreholes, so one page may hold them all.
   @max_limit 10_000
 
@@ -15,9 +17,13 @@ defmodule ApiWeb.BoreholeParams do
     "score" => :score
   }
 
-  @doc "Returns `{:ok, filters}` or `{:error, message}` for the first invalid parameter."
+  @doc """
+  Returns `{:ok, filters}` or `{:error, message}` for the first invalid parameter. `q` is parsed
+  with `Api.Boreholes.SearchQuery`; its error message is returned as is.
+  """
   def parse(params) do
-    with {:ok, bbox} <- optional(params, "bbox", &parse_bbox/1),
+    with {:ok, q} <- optional(params, "q", &SearchQuery.parse/1),
+         {:ok, bbox} <- optional(params, "bbox", &parse_bbox/1),
          {:ok, verified} <- optional(params, "verified", &parse_boolean/1),
          {:ok, drilled_from} <- optional(params, "drilled_from", &parse_date/1),
          {:ok, drilled_to} <- optional(params, "drilled_to", &parse_date/1),
@@ -28,7 +34,7 @@ defmodule ApiWeb.BoreholeParams do
          {:ok, offset} <- optional(params, "offset", &parse_integer(&1, 0, nil)) do
       filters =
         %{
-          q: params["q"],
+          q: q,
           bbox: bbox,
           verified: verified,
           drilled_from: drilled_from,

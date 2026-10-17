@@ -19,7 +19,7 @@ List boreholes as a GeoJSON `FeatureCollection`, with optional filters, sorting 
 | Param | Format | Description |
 |---|---|---|
 | `bbox` | `minLon,minLat,maxLon,maxLat` | Only boreholes whose `location` intersects this envelope. |
-| `q` | text | Text search, same as [`/search`](#get-apiboreholessearch); adds `score`/`snippet` and sorts by score. |
+| `q` | text | Search in the [query language](#search-query-language), same as [`/search`](#get-apiboreholessearch); adds `score` and sorts by score. |
 | `verified` | `true` / `false` | Only verified / unverified boreholes. |
 | `drilled_from`, `drilled_to` | `YYYY-MM-DD` | Inclusive range on `drilled_at`. |
 | `min_depth`, `max_depth` | number (m) | Inclusive range on `total_depth_m`. |
@@ -69,7 +69,7 @@ List boreholes as a GeoJSON `FeatureCollection`, with optional filters, sorting 
 - `total` is the number of matches across all pages; `limit` is `null` when not given. `total`, `limit` and `offset` are GeoJSON foreign members, so the response is still valid GeoJSON.
 - `geometry` is `null` if the borehole has no `location` yet (e.g. not yet georeferenced).
 - `properties` holds every `boreholes` column except `location` (promoted to `geometry`); layers and documents are only in the detail endpoint.
-- With `q`, each feature also has `score` and `snippet` (see below).
+- With `q`, each feature also has a `score`, and an empty result may carry a `suggestion` (see below).
 
 ### Response `400 Bad Request`
 
@@ -202,17 +202,43 @@ curl -X POST "http://localhost:4000/api/boreholes" \
 
 ## `GET /api/boreholes/search`
 
-Ranked free-text search. Takes the same parameters as `GET /api/boreholes` (with `q` defaulting to the empty string, matching everything) and returns the same shape, plus on each feature:
+Search by name, place and date (ADR-0042). Takes the same parameters as `GET /api/boreholes` (with `q` defaulting to the empty string, matching everything) and returns the same shape, plus:
 
-| Field | Description |
+| Field | Where | Description |
+|---|---|---|
+| `score` | each feature | Relevance, higher is better: per matched text value name 10, external id 8, place 5, plus 5 if the name starts with it. Date terms add nothing. |
+| `suggestion` | collection | Only if nothing was found and the query could be autocorrected: the corrected query string, ready to send as `q`. Absent otherwise. |
+
+The query runs in the database: text terms are case-insensitive substring matches (`%` and `_` are taken literally) served by `pg_trgm` GIN indexes on `name`, `external_id` and `place`; date terms compare `drilled_at` (B-tree index). Layer text, `purpose` and `client` are not searched.
+
+### Search query language
+
+Terms are separated by spaces; a borehole must match every term.
+
+| Syntax | Matches |
 |---|---|
-| `score` | Relevance, higher is better: name 10, external id 8, place 5, purpose 3, client 3, plus 1 per matching layer. |
-| `snippet` | Description of the first matching layer (petrography, else raw text, else stratigraphy), or `null` if only borehole fields matched. |
+| `word`, `"a phrase"` | `name`, `external_id` or `place` contains it |
+| `name:word` (`n:`) | `name` or `external_id` contains it |
+| `place:word` (`location:`, `loc:`) | `place` contains it |
+| `date:1959`, `date:1959-06`, `date:1959-06-12`, `date:12.06.1959`, `date:06.1959` (`drilled:`, `year:`) | `drilled_at` in that year, month or on that day |
+| `date:1950..1960`, `date:1990..`, `date:..1960` | `drilled_at` in the inclusive range, open on one side |
+| `date:>1990`, `date:>=1990`, `date:<2000`, `date:<=2000` | comparisons; `>1990` means from 1991, `<2000` up to 1999 |
+| `after:1990`, `before:2000` | `date:>1990`, `date:<2000` |
+| `1959`, `1950..1960` (bare) | a bare year, date or range is a date term; quote it (`"1959"`) to search it as text |
+| `a,b` | either value, e.g. `place:Bern,Basel` |
+| `-term` | must not match, e.g. `-place:Bern`. Boreholes without a place or date count as not matching the negated value. |
 
-`q` is a case-insensitive substring match (`%` and `_` are taken literally) against `name`, `external_id`, `place`, `purpose`, `client`, and each layer's `stratigraphy`, `petrography`, `color` and `raw_text`. A borehole matching through several layers is returned once.
+An unknown key (`plase:Bern`) is searched as plain text. An invalid date or a key without a value returns `400`:
+
+```json
+{ "errors": { "detail": "invalid date \"19x9\" after date:, expected e.g. 1959, 1959-06-12 or 1950..1960" } }
+```
+
+**Autocorrection.** When a search finds nothing, the API corrects unknown keys to the closest key (Jaro distance ≥ 0.75) and replaces every unquoted, non-negated text value of at least 3 characters that occurs nowhere in its columns with the most similar word in those columns (trigram similarity ≥ 0.3, candidates found through the trigram indexes). If that changes the query, it is returned as `suggestion`; the API does not run it. The web app runs it and shows "Showing results for …".
 
 ```bash
-curl "http://localhost:4000/api/boreholes/search?q=gipskeuper&limit=10"
+curl -G "http://localhost:4000/api/boreholes/search" --data-urlencode 'q=place:Stuttgart 1950..1960' --data-urlencode limit=10
+curl -G "http://localhost:4000/api/boreholes/search" --data-urlencode 'q=Stutgart'   # → "suggestion": "Stuttgart"
 ```
 
 ---

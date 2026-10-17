@@ -13,13 +13,16 @@ defmodule Api.Boreholes do
   alias Api.Boreholes.ExecStage
   alias Api.Boreholes.PipelineRun
   alias Api.Boreholes.Report
+  alias Api.Boreholes.SearchQuery
   alias Api.Boreholes.StageDocumentLink
 
   @typedoc """
   Filters for `list_boreholes/1`; every key is optional.
 
     * `:bbox` - `%{min_lon:, min_lat:, max_lon:, max_lat:}`
-    * `:q` - case-insensitive text search; adds a relevance `score` and a `snippet`
+    * `:q` - a search in the query language of `Api.Boreholes.SearchQuery` (parsed, or a string
+      that is parsed and raises if invalid) over name, external id, place and date; adds a
+      relevance `score`
     * `:verified` - boolean
     * `:drilled_from`, `:drilled_to` - `Date`, inclusive
     * `:min_depth`, `:max_depth` - number, compared with `total_depth_m`
@@ -29,8 +32,8 @@ defmodule Api.Boreholes do
   """
   @type filters :: map()
 
-  @typedoc "One result row; `score`/`snippet` are `nil` unless the query had a `:q`."
-  @type entry :: %{borehole: Borehole.t(), score: integer() | nil, snippet: String.t() | nil}
+  @typedoc "One result row; `score` is `nil` unless the query had a `:q`."
+  @type entry :: %{borehole: Borehole.t(), score: integer() | nil}
 
   @doc """
   Lists boreholes matching `filters` (see `t:filters/0`).
@@ -39,7 +42,8 @@ defmodule Api.Boreholes do
   """
   @spec list_boreholes(filters()) :: %{entries: [entry()], total: non_neg_integer()}
   def list_boreholes(filters \\ %{}) do
-    query = filtered_query(filters)
+    search = search_query(filters[:q])
+    query = filtered_query(filters, search)
 
     total =
       query
@@ -50,7 +54,7 @@ defmodule Api.Boreholes do
 
     entries =
       query
-      |> order(filters)
+      |> order(filters, search)
       |> page(filters)
       |> Repo.all()
 
@@ -633,14 +637,19 @@ defmodule Api.Boreholes do
 
   # -- Query building --------------------------------------------------------------------------
 
-  defp filtered_query(filters) do
+  defp filtered_query(filters, search) do
     base =
-      case blank_to_nil(filters[:q]) do
+      case search do
         nil ->
-          from(b in Borehole, as: :borehole, select: %{borehole: b, score: nil, snippet: nil})
+          from(b in Borehole, as: :borehole, select: %{borehole: b, score: nil})
 
-        q ->
-          search_query(q)
+        search ->
+          from(b in Borehole,
+            as: :borehole,
+            where: ^search_condition(search),
+            select: %{borehole: b}
+          )
+          |> select_merge(^%{score: search_score(search)})
       end
 
     Enum.reduce(filters, base, &filter/2)
@@ -681,70 +690,159 @@ defmodule Api.Boreholes do
 
   defp filter(_other, q), do: q
 
-  # Matches borehole fields and any layer's text. The score weights where the term was found;
-  # the snippet is the description of the first matching layer, if any.
-  defp search_query(q) do
-    term = "%" <> escape_like(q) <> "%"
+  # -- Search query language (ADR-0042) ----------------------------------------------------------
 
-    layer_hits =
-      from(l in BoreholeLayer,
-        where:
-          ilike(l.stratigraphy, ^term) or ilike(l.petrography, ^term) or ilike(l.color, ^term) or
-            ilike(l.raw_text, ^term),
-        group_by: l.borehole_id,
-        select: %{
-          borehole_id: l.borehole_id,
-          hits: count(l.id),
-          snippet:
-            fragment(
-              "(array_agg(coalesce(?, ?, ?) ORDER BY ?))[1]",
-              l.petrography,
-              l.raw_text,
-              l.stratigraphy,
-              l.position
-            )
-        }
-      )
+  # Columns searched by each text field of `Api.Boreholes.SearchQuery`, with their score weight.
+  @search_columns %{
+    text: [name: 10, external_id: 8, place: 5],
+    name: [name: 10, external_id: 8],
+    place: [place: 5]
+  }
 
-    from(b in Borehole,
-      as: :borehole,
-      left_join: lh in subquery(layer_hits),
-      on: lh.borehole_id == b.id,
-      as: :hits,
-      where:
-        ilike(b.name, ^term) or ilike(b.external_id, ^term) or ilike(b.place, ^term) or
-          ilike(b.purpose, ^term) or ilike(b.client, ^term) or not is_nil(lh.borehole_id),
-      select: %{
-        borehole: b,
-        score:
-          selected_as(
-            fragment(
-              "(CASE WHEN ? ILIKE ? THEN 10 ELSE 0 END) + (CASE WHEN ? ILIKE ? THEN 8 ELSE 0 END) + (CASE WHEN ? ILIKE ? THEN 5 ELSE 0 END) + (CASE WHEN ? ILIKE ? THEN 3 ELSE 0 END) + (CASE WHEN ? ILIKE ? THEN 3 ELSE 0 END) + coalesce(?, 0)::int",
-              b.name,
-              ^term,
-              b.external_id,
-              ^term,
-              b.place,
-              ^term,
-              b.purpose,
-              ^term,
-              b.client,
-              ^term,
-              lh.hits
-            ),
-            :score
-          ),
-        snippet: lh.snippet
-      }
-    )
+  defp search_query(nil), do: nil
+  defp search_query(%SearchQuery{terms: []}), do: nil
+  defp search_query(%SearchQuery{} = search), do: search
+  defp search_query(q) when is_binary(q), do: q |> SearchQuery.parse!() |> search_query()
+
+  # Every term must match; the values of one term are alternatives.
+  defp search_condition(%SearchQuery{terms: terms}) do
+    Enum.reduce(terms, dynamic(true), fn term, acc -> dynamic(^acc and ^term_condition(term)) end)
   end
 
-  defp order(query, filters) do
-    searching? = blank_to_nil(filters[:q]) != nil
+  defp term_condition(%{field: :date, values: ranges, negate: negate}) do
+    any = any_of(ranges, &date_condition/1)
+    if negate, do: dynamic([borehole: b], is_nil(b.drilled_at) or not (^any)), else: any
+  end
 
-    case Map.get(filters, :sort) || if(searching?, do: {:score, :desc}, else: {:name, :asc}) do
-      {:score, dir} when searching? ->
-        order_by(query, [borehole: b], [{^nulls_last(dir), selected_as(:score)}, asc: b.name])
+  defp term_condition(%{field: field, values: values, negate: negate}) do
+    columns = Keyword.keys(@search_columns[field])
+    any = any_of(values, &text_condition(columns, like_pattern(&1), negate))
+    if negate, do: dynamic(not (^any)), else: any
+  end
+
+  defp any_of(values, condition) do
+    Enum.reduce(values, dynamic(false), fn value, acc -> dynamic(^acc or ^condition.(value)) end)
+  end
+
+  defp date_condition({nil, to}), do: dynamic([borehole: b], b.drilled_at <= ^to)
+  defp date_condition({from, nil}), do: dynamic([borehole: b], b.drilled_at >= ^from)
+
+  defp date_condition({from, to}),
+    do: dynamic([borehole: b], b.drilled_at >= ^from and b.drilled_at <= ^to)
+
+  # Negated terms compare with '' instead of NULL, so a missing place still counts as "not Bern".
+  defp text_condition(columns, pattern, negate) do
+    any_of(columns, fn
+      column when negate ->
+        dynamic([borehole: b], fragment("coalesce(?, '') ILIKE ?", field(b, ^column), ^pattern))
+
+      column ->
+        dynamic([borehole: b], ilike(field(b, ^column), ^pattern))
+    end)
+  end
+
+  # Sum of the weights of the columns each value was found in, plus 5 if the name starts with it.
+  defp search_score(%SearchQuery{terms: terms}) do
+    for %{field: field, negate: false, values: values} <- terms,
+        field != :date,
+        value <- values,
+        reduce: dynamic(fragment("0::int")) do
+      acc ->
+        pattern = like_pattern(value)
+        prefix = escape_like(value) <> "%"
+
+        column_score =
+          Enum.reduce(@search_columns[field], dynamic(fragment("0::int")), fn {column, weight},
+                                                                              acc ->
+            dynamic(
+              [borehole: b],
+              ^acc +
+                fragment(
+                  "CASE WHEN ? ILIKE ? THEN ?::int ELSE 0 END",
+                  field(b, ^column),
+                  ^pattern,
+                  ^weight
+                )
+            )
+          end)
+
+        prefix_score =
+          if field == :place,
+            do: dynamic(fragment("0::int")),
+            else:
+              dynamic(
+                [borehole: b],
+                fragment("CASE WHEN ? ILIKE ? THEN 5 ELSE 0 END", b.name, ^prefix)
+              )
+
+        dynamic(^acc + ^column_score + ^prefix_score)
+    end
+  end
+
+  defp like_pattern(value), do: "%" <> escape_like(value) <> "%"
+
+  @doc """
+  Autocorrects a search that found nothing (ADR-0042): returns the query string with misspelt
+  field keys and text values replaced by the closest key or the most similar word in the
+  searched columns, or `nil` if nothing could be corrected.
+  """
+  @spec suggest_query(SearchQuery.t()) :: String.t() | nil
+  def suggest_query(%SearchQuery{} = search) do
+    original = SearchQuery.to_string(search)
+    suggestion = search |> SearchQuery.correct(&correct_word/2) |> SearchQuery.to_string()
+    if suggestion != original, do: suggestion
+  end
+
+  # A value that occurs somewhere is kept; otherwise the most similar word in the field's columns.
+  defp correct_word(field, value) do
+    columns = Keyword.keys(@search_columns[field])
+
+    found? =
+      from(b in Borehole,
+        as: :borehole,
+        where: ^text_condition(columns, like_pattern(value), false),
+        select: 1,
+        limit: 1
+      )
+      |> Repo.exists?()
+
+    unless found?, do: most_similar_word(columns, value)
+  end
+
+  # Candidate rows come from the trigram indexes (`<%`, word similarity), their words are then
+  # ranked by trigram similarity to the value. Column names come from @search_columns only.
+  defp most_similar_word(columns, value) do
+    candidates =
+      Enum.map_join(columns, " UNION ALL ", fn column ->
+        "(SELECT #{column} AS text FROM boreholes WHERE $1 <% #{column} LIMIT 200)"
+      end)
+
+    sql = """
+    SELECT word FROM (#{candidates}) AS candidates,
+      regexp_split_to_table(candidates.text, '[^[:alnum:]]+') AS word
+    WHERE length(word) >= 3 AND similarity(word, $1) >= 0.3
+    ORDER BY similarity(word, $1) DESC, word
+    LIMIT 1
+    """
+
+    {:ok, word} =
+      Repo.transaction(fn ->
+        Repo.query!("SET LOCAL pg_trgm.word_similarity_threshold = 0.4")
+
+        case Repo.query!(sql, [value]) do
+          %{rows: [[word]]} -> word
+          _ -> nil
+        end
+      end)
+
+    word
+  end
+
+  defp order(query, filters, search) do
+    case Map.get(filters, :sort) || if(search, do: {:score, :desc}, else: {:name, :asc}) do
+      {:score, dir} when search != nil ->
+        name = dynamic([borehole: b], b.name)
+        order_by(query, ^[{nulls_last(dir), search_score(search)}, {:asc, name}])
 
       {:score, _dir} ->
         order_by(query, [borehole: b], asc: b.name)
@@ -761,15 +859,6 @@ defmodule Api.Boreholes do
     query
     |> then(fn q -> if l = filters[:limit], do: limit(q, ^l), else: q end)
     |> then(fn q -> if o = filters[:offset], do: offset(q, ^o), else: q end)
-  end
-
-  defp blank_to_nil(nil), do: nil
-
-  defp blank_to_nil(s) when is_binary(s) do
-    case String.trim(s) do
-      "" -> nil
-      trimmed -> trimmed
-    end
   end
 
   defp escape_like(s), do: String.replace(s, ~r/([\\%_])/, "\\\\\\1")

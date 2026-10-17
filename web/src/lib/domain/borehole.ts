@@ -121,6 +121,7 @@ export interface Page<T> {
 	total: number;
 }
 
+/** A search in the query language of the API (see `docs/api-reference.md`). */
 export interface SearchQuery {
 	q: string;
 	limit?: number;
@@ -133,4 +134,9 @@ export interface SearchHit {
 	score?: number;
 	/** Matching text excerpt, if the backend provides one. */
 	snippet?: string;
+}
+
+export interface SearchPage extends Page<SearchHit> {
+	/** Only when nothing was found: an autocorrected query, if the backend has one. */
+	suggestion?: string;
 }

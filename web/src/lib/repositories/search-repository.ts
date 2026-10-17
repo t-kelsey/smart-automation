@@ -1,6 +1,6 @@
-import type { Page, SearchHit, SearchQuery } from '#lib/domain/borehole.ts';
+import type { SearchPage, SearchQuery } from '#lib/domain/borehole.ts';
 
-/** Full-text search over boreholes and their extracted content. */
+/** Search over boreholes. An invalid query rejects with a `RepositoryError` with status 400. */
 export interface SearchRepository {
-	search(query: SearchQuery): Promise<Page<SearchHit>>;
+	search(query: SearchQuery): Promise<SearchPage>;
 }

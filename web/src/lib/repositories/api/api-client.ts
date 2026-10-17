@@ -24,8 +24,21 @@ export class ApiClient {
 		}
 		if (nullOn.includes(response.status)) return null;
 		if (!response.ok) {
-			throw new RepositoryError(`API ${path} returned ${response.status}`, response.status);
+			const detail = await errorDetail(response);
+			throw new RepositoryError(`API ${path} returned ${response.status}`, response.status, {
+				detail
+			});
 		}
 		return (await response.json()) as T;
+	}
+}
+
+/** `errors.detail` of an API error body, if there is one. */
+async function errorDetail(response: Response): Promise<string | undefined> {
+	try {
+		const body = (await response.json()) as { errors?: { detail?: unknown } };
+		return typeof body.errors?.detail === 'string' ? body.errors.detail : undefined;
+	} catch {
+		return undefined;
 	}
 }

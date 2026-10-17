@@ -2,6 +2,7 @@ defmodule ApiWeb.BoreholeController do
   use ApiWeb, :controller
 
   alias Api.Boreholes
+  alias Api.Boreholes.SearchQuery
   alias ApiWeb.BoreholeParams
 
   action_fallback ApiWeb.FallbackController
@@ -45,7 +46,10 @@ defmodule ApiWeb.BoreholeController do
     end
   end
 
-  @doc "Same as `index`, but `q` is the point: results carry a `score` and a `snippet`."
+  @doc """
+  Same as `index`, but `q` is the point: results carry a `score`, and a search that finds nothing
+  carries an autocorrected `suggestion` if there is one (ADR-0042).
+  """
   def search(conn, params) do
     with {:ok, filters} <- BoreholeParams.parse(params) do
       render_list(conn, Map.put_new(filters, :q, ""), params)
@@ -55,9 +59,16 @@ defmodule ApiWeb.BoreholeController do
   defp render_list(conn, filters, params) do
     %{entries: entries, total: total} = Boreholes.list_boreholes(filters)
 
+    suggestion =
+      case filters[:q] do
+        %SearchQuery{terms: [_ | _]} = search when total == 0 -> Boreholes.suggest_query(search)
+        _ -> nil
+      end
+
     render(conn, :index,
       entries: entries,
       total: total,
+      suggestion: suggestion,
       limit: filters[:limit],
       offset: filters[:offset] || 0,
       view: if(params["view"] == "points", do: :points, else: :full)
