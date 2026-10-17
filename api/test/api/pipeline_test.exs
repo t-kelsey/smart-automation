@@ -47,31 +47,13 @@ defmodule Api.PipelineTest do
       assert File.read!(Path.join(Boreholes.storage_dir(), "#{data["id"]}.pdf")) =~ "%PDF"
     end
 
-    test "sends the file to the pipeline and marks the document processing", %{conn: conn} do
+    test "stays pending even with a pipeline configured (ADR-0035: no auto-trigger)", %{
+      conn: conn
+    } do
       Application.put_env(:api, :pipeline_url, "http://pipeline.test/process")
-      test_pid = self()
 
-      Req.Test.stub(Api.Pipeline, fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        send(test_pid, {:pipeline_request, body})
-        Plug.Conn.send_resp(conn, 202, "")
-      end)
-
-      Req.Test.allow(Api.Pipeline, self(), Process.whereis(Api.TaskSupervisor))
       conn = post(conn, ~p"/api/documents", %{"file" => upload("a.pdf")})
-      %{"data" => %{"id" => id, "status" => "processing"}} = json_response(conn, 202)
-
-      assert_receive {:pipeline_request, body}, 2000
-      assert body =~ id
-      assert body =~ "%PDF-1.4 test"
-    end
-
-    test "marks the document failed if the pipeline refuses it" do
-      Application.put_env(:api, :pipeline_url, "http://pipeline.test/process")
-      Req.Test.stub(Api.Pipeline, &Plug.Conn.send_resp(&1, 500, "boom"))
-
-      {:ok, document} = Boreholes.create_uploaded_document(upload("a.pdf"))
-      assert {:error, {:status, 500}} = Api.Pipeline.submit(document)
+      %{"data" => %{"status" => "pending"}} = json_response(conn, 202)
     end
 
     test "rejects unsupported file types and a missing file", %{conn: conn} do
@@ -82,6 +64,39 @@ defmodule Api.PipelineTest do
 
       conn2 = post(conn, ~p"/api/documents", %{})
       assert json_response(conn2, 400)
+    end
+  end
+
+  describe "Api.Pipeline.submit_pipeline_run/1" do
+    test "posts a file-free JSON body and marks the run running on success" do
+      Application.put_env(:api, :pipeline_url, "http://pipeline.test/process")
+      {:ok, document} = Boreholes.create_uploaded_document(upload("a.pdf"))
+      {:ok, pipeline_run} = Boreholes.create_pipeline_run(%{"document_id" => document.id})
+
+      Req.Test.stub(Api.Pipeline, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+        assert Jason.decode!(body) == %{
+                 "document_id" => document.id,
+                 "pipeline_id" => pipeline_run.id,
+                 "config" => %{}
+               }
+
+        refute conn.req_headers |> List.keyfind("content-type", 0) |> elem(1) =~ "multipart"
+        Plug.Conn.send_resp(conn, 200, "")
+      end)
+
+      assert {:ok, %{status: "running"}} = Api.Pipeline.submit_pipeline_run(pipeline_run)
+    end
+
+    test "marks the run failed if the pipeline refuses it" do
+      Application.put_env(:api, :pipeline_url, "http://pipeline.test/process")
+      {:ok, document} = Boreholes.create_uploaded_document(upload("a.pdf"))
+      {:ok, pipeline_run} = Boreholes.create_pipeline_run(%{"document_id" => document.id})
+
+      Req.Test.stub(Api.Pipeline, &Plug.Conn.send_resp(&1, 500, "boom"))
+
+      assert {:ok, %{status: "failed"}} = Api.Pipeline.submit_pipeline_run(pipeline_run)
     end
   end
 end

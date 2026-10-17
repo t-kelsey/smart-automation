@@ -45,16 +45,17 @@ The API sends uploaded documents here (`PIPELINE_URL=http://localhost:8000/execu
 uv run python -m pipeline.server   # settings from bem/.env (copy .env.example), port BEM_PORT, default 8000
 ```
 
-- `POST /execute`: JSON body with the document id and the run config. It answers `202` at once and queues the run; invalid
-  input returns `422`. The document must already exist in the API.
+- `POST /execute`: JSON body with the document id, the API's `pipeline_runs.id` (as `pipeline_id`) and the run config.
+  It answers `202` at once and queues the run; invalid input returns `422`. The document must already exist in the API.
   ```json
-  {"document_id": "<uuid>", "pipeline_id": "optional, echoed back",
+  {"document_id": "<uuid>", "pipeline_id": "<pipeline_runs.id>, echoed back",
    "config": {"filter": {"model": "haiku", "effort": "high"}, "split": {...}, "extract": {...}, "transform": {...}}}
   ```
   `config` is optional and so is every step in it; omitted steps use their defaults ([config.py](pipeline/config.py)).
   One worker starts stage 1 (filter) by downloading the PDF with `GET /api/documents/:id/file` (a document that is
   missing or not a PDF ends `failed`), runs the pipeline and posts each borehole to `POST /api/boreholes` (linked to the
-  document). It finishes with `PUT /api/documents/:id/status` set to `extracted` or `failed`.
+  document). It finishes with `PUT /api/pipeline_runs/:id/status` set to `completed` or `failed` (ADR-0035) — not a
+  document status, `pipeline_runs` is the source of truth for a run's outcome.
 
 ```sh
 curl -X POST http://localhost:8000/execute \

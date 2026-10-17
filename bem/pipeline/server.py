@@ -1,11 +1,12 @@
-"""HTTP server for the pipeline: the API starts a run with `POST /execute` (ADR-0033).
+"""HTTP server for the pipeline: the API starts a run with `POST /execute` (ADR-0033, ADR-0035).
 
 Run with: uv run python -m pipeline.server   (env: BEM_API_URL, BEM_PORT, BEM_WORKDIR)
 
-`/execute` receives only a document id and a config, queues the run and answers 202 at once. One
-worker thread downloads the document from the API (`GET /documents/:id/file`) when it starts stage 1,
-runs the pipeline and reports back to the API: `POST /boreholes` per borehole (linked to the document), then
-`PUT /documents/:id/status` with `extracted` or `failed`.
+`/execute` receives a document id, the API's `pipeline_runs.id` (as `pipeline_id`) and a config, queues
+the run and answers 202 at once. One worker thread downloads the document from the API
+(`GET /documents/:id/file`) when it starts stage 1, runs the pipeline and reports back to the API:
+`POST /boreholes` per borehole (linked to the document), then `PUT /pipeline_runs/:id/status` with
+`completed` or `failed`.
 """
 
 import os
@@ -91,10 +92,14 @@ def _worker() -> None:
             log(f"{document_id}: unexpected error")
             traceback.print_exc()
             success = False
+        status = "completed" if success else "failed"
+        if pipeline_id is None:
+            log(f"{document_id}: no pipeline_id given, cannot report status {status!r}")
+            continue
         try:
-            api.set_document_status(document_id, "extracted" if success else "failed")
+            api.set_pipeline_run_status(pipeline_id, status)
         except ApiError as e:
-            log(f"{document_id}: could not set status: {e}")
+            log(f"{document_id}: could not set pipeline run status: {e}")
 
 
 @asynccontextmanager
@@ -115,7 +120,10 @@ def health() -> dict:
 
 class ExecuteRequest(BaseModel):
     document_id: uuid.UUID
-    pipeline_id: str | None = None  # opaque id of the pipeline definition, echoed back and logged
+    # The API's `pipeline_runs.id` (ADR-0035): echoed back, used for `PUT /pipeline_runs/:id/status`
+    # on completion. Optional only so /execute can be called directly without a pipeline_runs row
+    # (e.g. manual testing) — then completion status cannot be reported anywhere.
+    pipeline_id: str | None = None
     config: PipelineConfig = PipelineConfig()  # per step `filter|split|extract|transform`: model + effort
 
 

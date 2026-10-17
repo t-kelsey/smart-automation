@@ -11,6 +11,7 @@ defmodule Api.Boreholes do
   alias Api.Boreholes.BoreholeLayer
   alias Api.Boreholes.Document
   alias Api.Boreholes.ExecStage
+  alias Api.Boreholes.PipelineRun
   alias Api.Boreholes.Report
   alias Api.Boreholes.StageDocumentLink
 
@@ -384,6 +385,48 @@ defmodule Api.Boreholes do
       nil -> {:error, "document_id does not reference an existing document"}
       _document -> %Report{} |> Report.changeset(attrs) |> Repo.insert()
     end
+  end
+
+  # -- Pipeline runs (ADR-0035) --------------------------------------------------------------
+
+  @doc """
+  Creates a pipeline run (`attrs` with `"document_id"`, optional `"config"`), status `"new"`.
+  `"document_id"` must reference an existing document.
+  """
+  def create_pipeline_run(attrs) do
+    document_id = attrs["document_id"] || attrs[:document_id]
+
+    case get_document(document_id) do
+      nil -> {:error, "document_id does not reference an existing document"}
+      _document -> %PipelineRun{} |> PipelineRun.changeset(attrs) |> Repo.insert()
+    end
+  end
+
+  @doc """
+  Fetches a pipeline run by id; `nil` if the id is not a valid UUID or no such run exists.
+  """
+  def get_pipeline_run(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> Repo.get(PipelineRun, uuid)
+      :error -> nil
+    end
+  end
+
+  @doc "Sets the status of a pipeline run."
+  def update_pipeline_run_status(%PipelineRun{} = pipeline_run, status) do
+    pipeline_run |> PipelineRun.changeset(%{status: status}) |> Repo.update()
+  end
+
+  @doc """
+  The most recently recorded `Api.Boreholes.Report` for a pipeline run (matched by `run_id`), or
+  `nil` if the pipeline hasn't reported one yet.
+  """
+  def get_report(run_id) do
+    Report
+    |> where(run_id: ^run_id)
+    |> order_by(desc: :inserted_at)
+    |> limit(1)
+    |> Repo.one()
   end
 
   @doc "The directory holding the stored document files (`DOCUMENT_STORAGE_DIR` or `priv/storage`)."

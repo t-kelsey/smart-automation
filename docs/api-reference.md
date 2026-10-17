@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Type: application/json`). No authentication is currently implemented. Errors always have the shape `{ "errors": { "detail": "..." } }`.
 
-This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031) and the document upload endpoints (ADR-0033). The [Pipeline stage tracking](#pipeline-stage-tracking-exec_stages--reports-draft) section below is a draft for the `claude_test/` pipeline (ADR-0034), not yet implemented.
+This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031), the document upload endpoints (ADR-0033), and the `claude_test/` pipeline submission/tracking endpoints (ADR-0034, ADR-0035, see the "Pipeline runs" section below). Uploading a document (`POST /api/documents`) no longer starts processing by itself (ADR-0035) — the frontend uploads a file, lets the user pick a per-stage model/effort `config`, then calls `POST /api/pipeline_runs` to actually submit the run and polls `GET /api/pipeline_runs/:id` for progress.
 
 > **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0026). Never publish or commit these files.
 
@@ -217,9 +217,9 @@ curl "http://localhost:4000/api/boreholes/search?q=gipskeuper&limit=10"
 
 ## `POST /api/documents`
 
-Uploads a raw document (ADR-0033). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and, if the API has `PIPELINE_URL` set, sent to the extraction pipeline in the background.
+Uploads a raw document (ADR-0033). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and the document inserted with `status: "pending"` — uploading no longer starts processing by itself (ADR-0035); call [`POST /api/pipeline_runs`](#post-apipipeline_runs) separately once you have a `config` to submit.
 
-`202` with `{ "data": <document> }` (same fields as in a borehole's `documents`); `status` is `processing` if a pipeline is configured, else `pending`. It becomes `extracted` or `failed` when the pipeline reports back (`PUT /api/documents/:document_id/status`, body `{ "status": "extracted" }`). `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
+`202` with `{ "data": <document> }` (same fields as in a borehole's `documents`), `status` always `pending`. `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
 
 ## `GET /api/documents/:id`
 
@@ -247,7 +247,11 @@ Metadata of a single document, for the document viewer page. Same fields as the 
 
 ## `GET /api/documents/:id/file`
 
-The stored source file of a document, for viewing in the application (ADR-0026).
+The stored source file of a document, for viewing in the application (ADR-0026). Works for any
+document id, not just the one from the end user's initial upload — including the split-out
+per-borehole PDFs the pipeline itself uploads mid-run via `POST /api/documents` (ADR-0034). This
+is how the pipeline fetches every file it needs, keyed by `document_id`; the `pipeline_runs`
+webhook below never pushes file bytes.
 
 | Param | Description |
 |---|---|
@@ -262,9 +266,101 @@ curl -OJ "http://localhost:4000/api/documents/c7a2.../file?download=1"
 
 ---
 
-## Pipeline stage tracking (`exec_stages` / `reports`, draft)
+## Pipeline runs (`pipeline_runs` / `exec_stages` / `reports`)
 
-**Not implemented yet** — draft for review, matching the tables from ADR-0034. Debug/internal only (never consumed by `web/`'s public pages), written by the `claude_test/` pipeline as it runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
+Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `claude_test/` pipeline runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
+
+### `POST /api/pipeline_runs`
+
+Creates a pipeline run for a document and submits it to the pipeline (ADR-0035). The frontend calls this once it has a `config` to submit — uploading (`POST /api/documents`) no longer does this by itself.
+
+Submission POSTs a small JSON body (`document_id`, `pipeline_id`, `config`) to `PIPELINE_URL` — no
+file bytes. The pipeline fetches the document's file itself via
+[`GET /api/documents/:id/file`](#get-apidocumentsidfile), the same way it fetches any split-out
+per-borehole PDF it uploads mid-run.
+
+```json
+{
+  "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "config": { "extract": "sonnet", "transform": "opus" }
+}
+```
+
+| Field | Description |
+|---|---|
+| `document_id` | UUID of an existing document (from `POST /api/documents`). |
+| `config` | Free-form map of per-stage model/effort choices, stored as-is and sent to the pipeline unchanged. |
+
+Submission happens synchronously in this request: the response's `status` reflects whether the pipeline could be reached (`running`) or not (`new` if no `PIPELINE_URL` is configured, `failed` if the pipeline refused the request or couldn't be reached).
+
+`201`:
+
+```json
+{
+  "data": {
+    "id": "6b1e...",
+    "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "status": "running",
+    "config": { "extract": "sonnet", "transform": "opus" },
+    "inserted_at": "2026-10-17T18:00:00Z",
+    "updated_at": "2026-10-17T18:00:00Z"
+  }
+}
+```
+
+`422` (`{ "errors": { "detail": "..." } }`) if `document_id` is missing or invalid. `400` if `document_id` doesn't reference an existing document.
+
+```bash
+curl -X POST "http://localhost:4000/api/pipeline_runs" \
+  -H "Content-Type: application/json" \
+  -d '{"document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "config": {"extract": "sonnet"}}'
+```
+
+### `GET /api/pipeline_runs/:id`
+
+The run plus its `exec_stages` (newest first) and `report` (`null` until the pipeline has posted one). Poll this to show live progress.
+
+```json
+{
+  "data": {
+    "id": "6b1e...",
+    "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "status": "running",
+    "config": { "extract": "sonnet" },
+    "inserted_at": "2026-10-17T18:00:00Z",
+    "updated_at": "2026-10-17T18:00:05Z",
+    "exec_stages": [
+      {
+        "id": "...",
+        "type": "extract",
+        "position": 1,
+        "data": { "...": "the step's JSON file as-is" },
+        "document_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
+        "inserted_at": "..."
+      }
+    ],
+    "report": { "id": "...", "run_id": "6b1e...", "data": { "...": "report.json as-is" }, "inserted_at": "..." }
+  }
+}
+```
+
+`404` (`{ "errors": { "detail": "Not Found" } }`) if the run does not exist or the id is not a UUID.
+
+```bash
+curl "http://localhost:4000/api/pipeline_runs/6b1e..."
+```
+
+### `PUT /api/pipeline_runs/:id/status`
+
+Called by the pipeline itself when the whole run finishes. Body `{ "status": "completed" }` or `{ "status": "failed" }`. Returns the same shape as `GET /api/pipeline_runs/:id` (run + `exec_stages` + `report`).
+
+`200` with `{ "data": <pipeline_run, with exec_stages and report> }`. `422` if `status` is not one of `new`/`running`/`completed`/`failed`. `404` if the run does not exist.
+
+```bash
+curl -X PUT "http://localhost:4000/api/pipeline_runs/6b1e.../status" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "completed"}'
+```
 
 ### `POST /api/exec_stages`
 
@@ -283,7 +379,7 @@ Records one step execution. Append-only — rerunning a step adds a new row rath
 | Field | Description |
 |---|---|
 | `type` | `filter`, `split`, `extract` or `transform`. |
-| `run_id` | Shared id string grouping every stage (and the `report`) of one pipeline run. |
+| `run_id` | Shared id string grouping every stage (and the `report`) of one pipeline run — this is the `pipeline_runs` row's `id` when the run was started via `POST /api/pipeline_runs`. |
 | `position` | Borehole index within the run (1, 2, …) for `extract`/`transform`; omit/`null` for the whole-document `filter`/`split` steps. |
 | `data` | Free-form JSON, the step's output file as-is. |
 | `document_ids` | At least one document UUID this stage's output belongs to — the original source document, and/or (for `extract`/`transform`) the split-out per-borehole PDF once that is itself a tracked document. Creates the `stage_document_links` rows. |

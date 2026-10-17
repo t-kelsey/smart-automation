@@ -1,68 +1,69 @@
 defmodule Api.Pipeline do
   @moduledoc """
-  Hands uploaded documents to the extraction pipeline (`bem/`, ADR-0033).
+  Hands pipeline runs to the extraction pipeline (`claude_test/`, ADR-0033/ADR-0035).
 
-  The pipeline is an HTTP service configured by `PIPELINE_URL`. The raw file is sent as
-  `multipart/form-data` (`document_id` and `file`, named `<document_id><ext>`), so the two
-  services need no shared volume. The pipeline answers right away and then reports its stage
-  results and the extracted boreholes back through the regular API endpoints.
+  The pipeline is an HTTP service configured by `PIPELINE_URL`. The webhook call carries no file
+  bytes: it POSTs a small JSON body (`document_id`, `pipeline_id`, `config`) to `PIPELINE_URL`.
+  The pipeline fetches the actual file itself via `GET /api/documents/:id/file`, keyed by
+  `document_id` — the same mechanism it already uses for the split-out per-borehole PDFs it
+  uploads mid-run through `POST /api/documents` (ADR-0034). That makes "pull the file by
+  document_id" the one consistent way to get any document's bytes, original or split-out, instead
+  of special-casing the initial trigger with a push.
+
+  Note: this module is the generic webhook-submit client. `Api.Boreholes.PipelineRun` is the
+  unrelated `pipeline_runs` schema (ADR-0035) — don't confuse the two.
   """
 
   require Logger
 
   alias Api.Boreholes
-  alias Api.Boreholes.Document
+  alias Api.Boreholes.PipelineRun
 
   @doc "The configured pipeline endpoint, or `nil` if uploads are not processed."
   def url, do: Application.get_env(:api, :pipeline_url)
 
   @doc """
-  Sends the document to the pipeline in the background and marks it `processing`, or `failed`
-  if the pipeline refuses it or cannot be reached. Does nothing if no pipeline is configured.
+  Submits a pipeline run to the pipeline synchronously (ADR-0035): posts the run's `document_id`,
+  `pipeline_id` (the pipeline run's id) and `config`, then sets the run's status to `"running"` on
+  success or `"failed"` if the pipeline refuses it or cannot be reached. Leaves the status
+  unchanged (`"new"`) if no pipeline is configured — uploads no longer auto-trigger processing
+  (ADR-0035).
   """
-  @spec submit_async(Document.t()) :: :ok
-  def submit_async(%Document{} = document) do
+  @spec submit_pipeline_run(PipelineRun.t()) :: {:ok, PipelineRun.t()}
+  def submit_pipeline_run(%PipelineRun{} = pipeline_run) do
     if url() do
-      {:ok, document} = Boreholes.update_document_status(document, "processing")
-      Task.Supervisor.start_child(Api.TaskSupervisor, fn -> submit_and_track(document) end)
-    end
+      case submit_run(pipeline_run) do
+        :ok ->
+          Boreholes.update_pipeline_run_status(pipeline_run, "running")
 
-    :ok
-  end
+        {:error, reason} ->
+          Logger.error(
+            "pipeline run submit failed for run #{pipeline_run.id}: #{inspect(reason)}"
+          )
 
-  defp submit_and_track(document) do
-    case submit(document) do
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        Logger.error("pipeline submit failed for document #{document.id}: #{inspect(reason)}")
-        Boreholes.update_document_status(document, "failed")
-    end
-  end
-
-  @doc false
-  def submit(%Document{} = document) do
-    with path when is_binary(path) <- Boreholes.document_file_path(document),
-         {:ok, binary} <- File.read(path) do
-      options =
-        [
-          url: url(),
-          form_multipart: [
-            document_id: document.id,
-            file: {binary, filename: document.storage_path, content_type: document.mime_type}
-          ],
-          retry: false,
-          receive_timeout: 30_000
-        ] ++ Application.get_env(:api, :pipeline_req_options, [])
-
-      case Req.post(options) do
-        {:ok, %Req.Response{status: status}} when status in 200..299 -> :ok
-        {:ok, %Req.Response{status: status}} -> {:error, {:status, status}}
-        {:error, reason} -> {:error, reason}
+          Boreholes.update_pipeline_run_status(pipeline_run, "failed")
       end
     else
-      nil -> {:error, :file_missing}
+      {:ok, pipeline_run}
+    end
+  end
+
+  defp submit_run(%PipelineRun{} = pipeline_run) do
+    options =
+      [
+        url: url(),
+        json: %{
+          document_id: pipeline_run.document_id,
+          pipeline_id: pipeline_run.id,
+          config: pipeline_run.config || %{}
+        },
+        retry: false,
+        receive_timeout: 30_000
+      ] ++ Application.get_env(:api, :pipeline_req_options, [])
+
+    case Req.post(options) do
+      {:ok, %Req.Response{status: status}} when status in 200..299 -> :ok
+      {:ok, %Req.Response{status: status}} -> {:error, {:status, status}}
       {:error, reason} -> {:error, reason}
     end
   end

@@ -95,7 +95,9 @@ Keep `raw_text` / `raw_extraction` fields everywhere plausible — given handwri
 
 ---
 
-## Pipeline Stage Tracking (implemented, ADR-0030)
+## Pipeline Stage Tracking (superseded by ADR-0034/ADR-0035 — historical record)
+
+> **Superseded**: the tables and endpoints below were built for `bem/`'s five-stage pipeline and have since been dropped. `claude_test/` (ADR-0034) and the `pipeline_runs` submission flow (ADR-0035) replaced them — see "Pipeline Runs & Stage Tracking (current, ADR-0034/ADR-0035)" further down this document for what's actually implemented today. Kept here as a record of what was built, per this project's convention of adding new decisions instead of rewriting old ones.
 
 ### Motivation
 
@@ -178,6 +180,21 @@ One row per `extraction_result` (1:1), cascading the same way.
 - `GET /api/documents/:document_id/pipeline_trace` — the full trace for a document (stage runs + triage sections, each with its extraction/sink result) in one nested response, for troubleshooting
 
 See `bem/API_INTEGRATION.md` for the full contract (bodies, call order) from `bem/`'s side; BEM-side changes to actually call these are out of scope for `api/`.
+
+---
+
+## Pipeline Runs & Stage Tracking (current, ADR-0034/ADR-0035)
+
+The current pipeline is `claude_test/` (`claude_test/README.md`), not `bem/`: a sequence of `claude -p` calls — `01_filter` (keep only borehole-log pages) → `02_split` (one PDF per borehole) → `03_extract` (raw-language JSON per borehole) → `04_transform` (English, DB-shaped `{payload, validation_issues}` per borehole) — followed by `POST /api/boreholes` per extracted borehole. The flow a frontend developer needs, end to end:
+
+1. **Upload**: `POST /api/documents` (ADR-0033) stores the file and creates a `documents` row (`status: "pending"`). This no longer starts processing by itself (ADR-0035).
+2. **Pick a config, then submit**: once the user has chosen per-stage model/effort settings (a free-form map), the frontend calls `POST /api/pipeline_runs` with `{document_id, config}`. The backend creates a `pipeline_runs` row (`status: "new"`) and itself submits the run to `claude_test/` over `PIPELINE_URL`: a file-free JSON webhook (`document_id`, `pipeline_id`, `config`, no file bytes), moving `status` to `"running"` on success or `"failed"` if the pipeline can't be reached. The pipeline fetches the document's file itself via `GET /api/documents/:id/file` (ADR-0035) — the same mechanism it uses for the split-out per-borehole PDFs it uploads mid-run via `POST /api/documents` (ADR-0034).
+3. **Poll progress**: `GET /api/pipeline_runs/:id` returns the run's `status`/`config`, its `exec_stages` (one row per step execution, `type` `filter`/`split`/`extract`/`transform`, append-only so reruns are comparable — ADR-0034) and its `report` (per-step model/time/token/cost stats, `null` until posted).
+4. **Finish**: when the whole run completes, `claude_test/` calls `PUT /api/pipeline_runs/:id/status` with `"completed"` or `"failed"`; by then it has already posted the extracted boreholes via the unchanged `POST /api/boreholes` (ADR-0031).
+
+`exec_stages`/`stage_document_links`/`reports` (ADR-0034) are the tables the pipeline writes its per-step output to; `pipeline_runs` (ADR-0035) is the submission/polling layer the frontend talks to on top of them. Full request/response docs: the "Pipeline runs" section of `docs/api-reference.md`.
+
+> **Open question**: nothing currently updates `documents.status` when a `pipeline_runs` row completes or fails — the two statuses can disagree. Flagged in ADR-0035, not resolved yet.
 
 ---
 

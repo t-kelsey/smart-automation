@@ -6,16 +6,12 @@ defmodule ApiWeb.DocumentController do
   action_fallback ApiWeb.FallbackController
 
   @doc """
-  Uploads a raw document (multipart field `file`). It is stored (ADR-0014) and handed to the
-  extraction pipeline in the background (ADR-0033, `PIPELINE_URL`); the response is `202` with
-  the document, whose `status` moves from `processing` to `extracted`/`failed`/... as the
-  pipeline reports back.
+  Uploads a raw document (multipart field `file`). It is stored (ADR-0014) and left `pending` —
+  uploading no longer starts processing by itself (ADR-0035); the frontend calls
+  `POST /api/pipeline_runs` separately once it has a run config to submit.
   """
   def create(conn, %{"file" => %Plug.Upload{} = upload}) do
     with {:ok, document} <- Boreholes.create_uploaded_document(upload) do
-      Api.Pipeline.submit_async(document)
-      document = Boreholes.get_document(document.id)
-
       conn
       |> put_status(:accepted)
       |> render(:create, document: document)

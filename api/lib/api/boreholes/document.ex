@@ -19,7 +19,10 @@ defmodule Api.Boreholes.Document do
     field :role, :string, virtual: true
 
     many_to_many :boreholes, Api.Boreholes.Borehole, join_through: Api.Boreholes.BoreholeDocument
-    many_to_many :exec_stages, Api.Boreholes.ExecStage, join_through: Api.Boreholes.StageDocumentLink
+
+    many_to_many :exec_stages, Api.Boreholes.ExecStage,
+      join_through: Api.Boreholes.StageDocumentLink
+
     has_many :reports, Api.Boreholes.Report
 
     timestamps(type: :utc_datetime)

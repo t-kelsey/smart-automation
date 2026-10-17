@@ -87,6 +87,7 @@ class ApiService:
                 raise ApiError(f"document {document_id} is not a PDF, only PDFs are supported")
         return dest
 
-    def set_document_status(self, document_id: str, status: str) -> dict:
-        """`PUT /documents/:id/status`: `extracted` or `failed`."""
-        return self._send("PUT", f"/documents/{document_id}/status", {"status": status})
+    def set_pipeline_run_status(self, pipeline_id: str, status: str) -> dict:
+        """`PUT /pipeline_runs/:id/status`: `completed` or `failed` (ADR-0035). `pipeline_id` is the
+        `pipeline_runs.id` the API gave `/execute` back as `pipeline_id`."""
+        return self._send("PUT", f"/pipeline_runs/{pipeline_id}/status", {"status": status})
