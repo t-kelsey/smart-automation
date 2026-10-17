@@ -17,6 +17,14 @@ defmodule Api.MockData do
   alias Api.Repo
 
   @max_count 10_000
+
+  # The hackathon takes place near Offenburg, so every non-empty data set contains a few
+  # boreholes there: {place, lat, lon, elevation_m}.
+  @local_spots [
+    {"Offenburg", 48.4733, 7.9441, 164},
+    {"Offenburg", 48.4651, 7.9298, 160},
+    {"Gengenbach", 48.4059, 8.0164, 160}
+  ]
   @chunk 1_000
 
   # -- Vocabulary -------------------------------------------------------------------------------
@@ -388,7 +396,8 @@ defmodule Api.MockData do
 
   @doc """
   Inserts `count` mock boreholes (capped at #{@max_count}) with layers and documents.
-  Options: `:seed` (default 42). Returns `%{boreholes:, layers:, documents:}` counts.
+  The first three are located near Offenburg
+  (Baden-Württemberg). Options: `:seed` (default 42). Returns `%{boreholes:, layers:, documents:}` counts.
   """
   def generate(count, opts \\ []) do
     count = count |> max(0) |> min(@max_count)
@@ -396,7 +405,16 @@ defmodule Api.MockData do
     :rand.seed(:exsss, {seed, seed * 7 + 1, seed * 13 + 2})
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    records = Enum.map(1..count//1, &build_borehole(&1, now))
+    germany = Enum.find(@regions, &(&1.country == "Germany"))
+    local = Enum.take(@local_spots, count)
+
+    records =
+      Enum.map(1..count//1, fn index ->
+        case Enum.at(local, index - 1) do
+          nil -> build_borehole(index, now)
+          spot -> build_borehole(index, now, germany, spot, 0.02)
+        end
+      end)
 
     Repo.transaction(
       fn ->
@@ -449,7 +467,10 @@ defmodule Api.MockData do
 
   defp build_borehole(index, now) do
     region = pick(@regions)
-    {place, lat, lon, elevation} = pick(region.places)
+    build_borehole(index, now, region, pick(region.places), 0.25)
+  end
+
+  defp build_borehole(index, now, region, {place, lat, lon, elevation}, spread) do
     lang = region.lang
     id = Ecto.UUID.generate()
     total_depth = round1(uniform(5.0, 80.0))
@@ -468,14 +489,15 @@ defmodule Api.MockData do
       drilled_at: drilled_at,
       end_date: if(:rand.uniform() < 0.7, do: Date.add(drilled_at, :rand.uniform(14) - 1)),
       location: %Geo.Point{
-        coordinates: {round5(lon + uniform(-0.25, 0.25)), round5(lat + uniform(-0.2, 0.2))},
+        coordinates:
+          {round5(lon + uniform(-spread, spread)), round5(lat + uniform(-spread, spread))},
         srid: 4326
       },
       source_coordinate_system: region.crs,
       source_coordinate_raw: nil,
       total_depth_m: decimal(total_depth),
       borehole_length_m: nil,
-      elevation_m: decimal(max(0.0, elevation + uniform(-30.0, 30.0)), 2),
+      elevation_m: decimal(max(0.0, elevation + uniform(-30.0, 30.0) * spread * 4), 2),
       groundwater_level_m:
         if(:rand.uniform() < 0.6, do: decimal(uniform(0.5, total_depth * 0.7))),
       verified: :rand.uniform() < 0.4,
