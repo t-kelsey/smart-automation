@@ -7,6 +7,7 @@ to the first borehole.
 """
 
 import re
+from pathlib import Path
 
 from .schema import Borehole
 
@@ -67,8 +68,9 @@ def split(source_file: str, markdown: str) -> list[Borehole]:
 
     return [
         Borehole(
+            name=bid or Path(source_file).stem,
+            external_id=bid,
             source_file=source_file,
-            borehole_id=bid,
             raw_markdown="\n".join(section),
             translate_errors=[error.strip() for line in section for error in ERROR_RE.findall(line)],
         )
