@@ -4,19 +4,28 @@ defmodule Api.MockData do
   and demos (`mix boreholes.mock`, also used by `priv/repo/seeds.exs`).
 
   The output is deterministic for a given seed. Generated rows are marked with
-  `metadata.source = "mock"` on boreholes and a `mock/` prefix on `documents.storage_path`, so
-  they can be removed again without touching real data. Mock documents point at no real file.
+  `metadata.source = "mock"` on boreholes, so they can be removed again without touching real
+  data. Every mock document, however it is named, points at the same example log
+  (`priv/repo/assets/borehole_log_example.pdf`), which `install_example_file/0` copies into the
+  document storage directory whenever mock data is created.
 
-  Like the real logs, texts are in the local language of each region (German, English, French,
-  Spanish, Portuguese), including colour words and stratigraphy names.
+  Like the real logs, the `raw_text` of a layer is in the local language of each region (German,
+  English, French, Spanish, Portuguese), as are the stratigraphy names. The standardised fields
+  (`petrography`, `color`) only use the DIN 4023 vocabulary of `standards/din-4023/din-4023.json`,
+  for every country.
   """
 
   import Ecto.Query
 
+  alias Api.Boreholes
   alias Api.Boreholes.{Borehole, BoreholeDocument, BoreholeLayer, Document}
   alias Api.Repo
 
-  @max_count 10_000
+  # The one file behind every mock document, and the name it is stored under.
+  @example_asset "repo/assets/borehole_log_example.pdf"
+  @example_storage_name "mock_borehole_log_example.pdf"
+
+  @max_count 1_000_000
 
   # The hackathon takes place near Offenburg, so every non-empty data set contains a few
   # boreholes there: {place, lat, lon, elevation_m}.
@@ -131,11 +140,14 @@ defmodule Api.MockData do
     }
   ]
 
-  # Per lithology: description variants per language, plausible colours, and whether it is rock.
+  # Per lithology: the designation in the DIN 4023 vocabulary (`standard`, German, the same for every
+  # country, see standards/din-4023/din-4023.json), plausible colours, whether it is rock, and the
+  # description as a local log would word it (`text`, only used for `raw_text`).
   @lithologies %{
     topsoil: %{
       rock: false,
       colors: [:dark_brown],
+      standard: ["Mutterboden", "Mutterboden, schwach tonig, humos"],
       text: %{
         de: ["Mutterboden, humos", "Oberboden, schwach tonig, humos"],
         en: ["Topsoil, humous"],
@@ -147,6 +159,7 @@ defmodule Api.MockData do
     fill: %{
       rock: false,
       colors: [:grey, :brown],
+      standard: ["Auffüllung, Kies, sandig", "Auffüllung, Sand, kiesig"],
       text: %{
         de: ["Auffüllung, Kies, sandig, mit Ziegelresten", "Auffüllung, Sand, kiesig"],
         en: ["Made ground, gravelly sand with brick fragments"],
@@ -158,6 +171,11 @@ defmodule Api.MockData do
     gravel: %{
       rock: false,
       colors: [:grey, :brown, :yellow],
+      standard: [
+        "Kies, steinig, schwach grobsandig",
+        "Kies, sandig, schwach schluffig",
+        "Kies, stark sandig"
+      ],
       text: %{
         de: [
           "Kies [gerundet] (steinig, schwach grobsandig)",
@@ -173,6 +191,7 @@ defmodule Api.MockData do
     sand: %{
       rock: false,
       colors: [:yellow, :beige, :brown],
+      standard: ["Mittelsand, schwach kiesig", "Feinsand, schluffig", "Sand, schwach kiesig"],
       text: %{
         de: ["Sand, mittelsandig, schwach kiesig", "Feinsand, schluffig"],
         en: ["Fine to medium sand, loose", "Silty sand, medium dense"],
@@ -184,6 +203,7 @@ defmodule Api.MockData do
     silt: %{
       rock: false,
       colors: [:olive, :grey, :beige],
+      standard: ["Schluff, tonig", "Schluff, schwach feinsandig"],
       text: %{
         de: ["Schluff, tonig, steif", "Schluff, schwach feinsandig"],
         en: ["Clayey silt, soft to firm"],
@@ -195,6 +215,7 @@ defmodule Api.MockData do
     clay: %{
       rock: false,
       colors: [:grey, :brown, :olive],
+      standard: ["Ton, schluffig", "Ton, schwach sandig"],
       text: %{
         de: ["Ton, schluffig, steif bis halbfest", "Ton, schwach sandig"],
         en: ["Stiff clay, high plasticity", "Silty clay, soft"],
@@ -206,6 +227,7 @@ defmodule Api.MockData do
     sandstone: %{
       rock: true,
       colors: [:beige, :red_brown, :yellow],
+      standard: ["Sandstein"],
       text: %{
         de: ["Sandstein, feinkörnig, mürbe", "Sandstein, mittelkörnig, fest"],
         en: ["Sandstone, fine grained, moderately weathered"],
@@ -217,6 +239,7 @@ defmodule Api.MockData do
     claystone: %{
       rock: true,
       colors: [:dark_grey, :grey, :red_brown],
+      standard: ["Tonstein"],
       text: %{
         de: ["Tonstein, geschichtet, angewittert", "Tonstein, klüftig"],
         en: ["Mudstone, laminated", "Claystone, fissured"],
@@ -228,6 +251,7 @@ defmodule Api.MockData do
     limestone: %{
       rock: true,
       colors: [:light_grey, :beige],
+      standard: ["Kalkstein"],
       text: %{
         de: ["Kalkstein, fest, klüftig", "Kalkstein, verkarstet"],
         en: ["Limestone, strong, jointed", "Chalk, weak, with flints"],
@@ -239,6 +263,7 @@ defmodule Api.MockData do
     marl: %{
       rock: true,
       colors: [:red_brown, :grey, :olive],
+      standard: ["Mergelstein"],
       text: %{
         de: ["Mergelstein, verwittert, mit Gipsknollen", "Mergel, tonig"],
         en: ["Marl, weathered"],
@@ -305,6 +330,20 @@ defmodule Api.MockData do
       beige: "bege",
       olive: "oliva"
     }
+  }
+
+  # `layer.color` only holds colour names of the DIN 4023 standard file (`farben`); the local
+  # colour words above only appear in `raw_text`.
+  @standard_colors %{
+    grey: "grau",
+    dark_grey: "grau",
+    light_grey: "grau",
+    brown: "gelblichbraun",
+    dark_brown: "dunkelbraun",
+    red_brown: "rot",
+    yellow: "gelb",
+    beige: "gelb",
+    olive: "oliv"
   }
 
   # Young (soil) and old (rock) units, as they would appear on local logs.
@@ -379,20 +418,35 @@ defmodule Api.MockData do
     pt: ["Prefeitura Municipal", "Metrô", "DNIT"]
   }
 
-  @doc_kinds [
-    {"Schichtenverzeichnis", ".pdf", "application/pdf"},
-    {"Bohrprofil", ".pdf", "application/pdf"},
-    {"Kernfoto", ".jpg", "image/jpeg"},
-    {"Bohrbericht", ".docx",
-     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-  ]
+  @doc_kinds ["Schichtenverzeichnis", "Bohrprofil", "Kernfoto", "Bohrbericht"]
 
   @statuses ~w(pending processing extracted failed reviewed)
 
   # -- Public API -------------------------------------------------------------------------------
 
-  @doc "Upper limit for `generate/2`; the prototype is sized for this many boreholes."
+  @doc "Upper limit for `generate/2`; generation builds all rows in memory first, so very large counts need a lot of RAM."
   def max_count, do: @max_count
+
+  @doc """
+  Copies the example log into the document storage directory (see `Api.Boreholes.storage_dir/0`)
+  and returns its `storage_path`, size and page count. Called whenever mock data is created.
+  """
+  def install_example_file do
+    source = Path.join(:code.priv_dir(:api), @example_asset)
+    target = Path.join(Boreholes.storage_dir(), @example_storage_name)
+
+    File.mkdir_p!(Path.dirname(target))
+    File.cp!(source, target)
+
+    pdf = File.read!(source)
+
+    %{
+      storage_path: @example_storage_name,
+      size_bytes: byte_size(pdf),
+      # Counts page objects (not the `/Pages` tree); good enough for the example file.
+      page_count: max(1, length(Regex.scan(~r{/Type\s*/Page[^s]}, pdf)))
+    }
+  end
 
   @doc """
   Inserts `count` mock boreholes (capped at #{@max_count}) with layers and documents.
@@ -404,6 +458,7 @@ defmodule Api.MockData do
     seed = Keyword.get(opts, :seed, 42)
     :rand.seed(:exsss, {seed, seed * 7 + 1, seed * 13 + 2})
     now = DateTime.utc_now() |> DateTime.truncate(:second)
+    example = if count > 0, do: install_example_file()
 
     germany = Enum.find(@regions, &(&1.country == "Germany"))
     local = Enum.take(@local_spots, count)
@@ -411,8 +466,8 @@ defmodule Api.MockData do
     records =
       Enum.map(1..count//1, fn index ->
         case Enum.at(local, index - 1) do
-          nil -> build_borehole(index, now)
-          spot -> build_borehole(index, now, germany, spot, 0.02)
+          nil -> build_borehole(index, now, example)
+          spot -> build_borehole(index, now, example, germany, spot, 0.02)
         end
       end)
 
@@ -465,12 +520,12 @@ defmodule Api.MockData do
 
   # -- Generation -------------------------------------------------------------------------------
 
-  defp build_borehole(index, now) do
+  defp build_borehole(index, now, example) do
     region = pick(@regions)
-    build_borehole(index, now, region, pick(region.places), 0.25)
+    build_borehole(index, now, example, region, pick(region.places), 0.25)
   end
 
-  defp build_borehole(index, now, region, {place, lat, lon, elevation}, spread) do
+  defp build_borehole(index, now, example, region, {place, lat, lon, elevation}, spread) do
     lang = region.lang
     id = Ecto.UUID.generate()
     total_depth = round1(uniform(5.0, 80.0))
@@ -506,7 +561,7 @@ defmodule Api.MockData do
       updated_at: now
     }
 
-    documents = build_documents(name, region.country, now)
+    documents = build_documents(name, region.country, example, now)
 
     %{
       borehole: borehole,
@@ -561,8 +616,11 @@ defmodule Api.MockData do
         end
 
       lithology = @lithologies[key]
-      petrography = pick(lithology.text[lang])
-      color = @colors[lang][pick(lithology.colors)]
+      color_key = pick(lithology.colors)
+      petrography = pick(lithology.standard)
+      color = @standard_colors[color_key]
+      raw_petrography = pick(lithology.text[lang])
+      raw_color = @colors[lang][color_key]
       stratigraphy = pick(@stratigraphy[lang][if(lithology.rock, do: :rock, else: :soft)])
 
       %{
@@ -575,7 +633,7 @@ defmodule Api.MockData do
         petrography: petrography,
         color: color,
         raw_text:
-          "#{format_depth(from, lang)}-#{format_depth(to, lang)} #{petrography}, #{color}",
+          "#{format_depth(from, lang)}-#{format_depth(to, lang)} #{raw_petrography}, #{raw_color}",
         metadata: %{},
         inserted_at: now,
         updated_at: now
@@ -583,23 +641,21 @@ defmodule Api.MockData do
     end)
   end
 
-  defp build_documents(name, country, now) do
+  defp build_documents(name, country, example, now) do
     stem = name |> String.replace(~r/[^\w]+/u, "_") |> String.trim("_")
 
     @doc_kinds
     |> Enum.take_random(:rand.uniform(2))
-    |> Enum.map(fn {kind, ext, mime} ->
-      id = Ecto.UUID.generate()
-
+    |> Enum.map(fn kind ->
       %{
-        id: id,
-        original_filename: "#{stem}_#{kind}#{ext}",
-        storage_path: "mock/#{id}#{ext}",
-        mime_type: mime,
+        id: Ecto.UUID.generate(),
+        original_filename: "#{stem}_#{kind}.pdf",
+        storage_path: example.storage_path,
+        mime_type: "application/pdf",
         source_country: country,
         status: pick(@statuses),
-        page_count: if(ext == ".jpg", do: 1, else: :rand.uniform(12)),
-        size_bytes: 50_000 + :rand.uniform(5_000_000),
+        page_count: example.page_count,
+        size_bytes: example.size_bytes,
         raw_extraction: nil,
         inserted_at: now,
         updated_at: now

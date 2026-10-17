@@ -15,17 +15,10 @@ alias Api.Boreholes.BoreholeLayer
 alias Api.Boreholes.Document
 alias Api.Repo
 
-# Reuse real filenames already sitting in priv/storage/ (from `mix documents.backfill`) where
-# available, so seeded documents point at something that actually exists on disk. Falls back to a
-# made-up filename if priv/storage/ is empty (e.g. a fresh clone with no sample data loaded yet) —
-# fine for seeding, nothing reads the file from disk during this script.
-storage_files =
-  Path.join(:code.priv_dir(:api), "storage/*")
-  |> Path.wildcard()
-  |> Enum.map(&Path.basename/1)
-  |> Enum.reject(&(&1 in [".gitkeep", ".DS_Store"]))
-
-storage_file = fn index -> Enum.at(storage_files, index, "placeholder-#{index}.pdf") end
+# Every seeded and generated document points at one example log, which is copied into the
+# document storage directory (DOCUMENT_STORAGE_DIR or priv/storage/) so the files can be opened.
+example_file = Api.MockData.install_example_file()
+storage_file = fn _index -> example_file.storage_path end
 
 # Re-running the seeds replaces the previously seeded and generated rows instead of duplicating
 # them; real data (e.g. from `mix documents.backfill`) is not touched.
@@ -84,64 +77,72 @@ insert_layers.(schoenberg, [
     depth_from_m: "0.0",
     depth_to_m: "3.5",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (steinig, schwach grobsandig, stark schluffig)",
-    color: "grau"
+    petrography: "Kies, steinig, schwach grobsandig, stark schluffig",
+    color: "grau",
+    raw_text: "Kies [gerundet] (steinig, schwach grobsandig, stark schluffig), grau"
   },
   %{
     position: 2,
     depth_from_m: "3.5",
     depth_to_m: "6.5",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (steinig, schwach sandig, schwach schluffig)",
-    color: "braun"
+    petrography: "Kies, steinig, schwach sandig, schwach schluffig",
+    color: "gelblichbraun",
+    raw_text: "Kies [gerundet] (steinig, schwach sandig, schwach schluffig), braun"
   },
   %{
     position: 3,
     depth_from_m: "6.5",
     depth_to_m: "8.9",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (schwach grobsandig, steinig)",
-    color: "grau"
+    petrography: "Kies, schwach grobsandig, steinig",
+    color: "grau",
+    raw_text: "Kies [gerundet] (schwach grobsandig, steinig), grau"
   },
   %{
     position: 4,
     depth_from_m: "8.9",
     depth_to_m: "10.2",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (stark grobsandig, stark mittelsandig, steinig)",
-    color: "bunt"
+    petrography: "Kies, stark grobsandig, stark mittelsandig, steinig",
+    color: "gelb",
+    raw_text: "Kies [gerundet] (stark grobsandig, stark mittelsandig, steinig), bunt"
   },
   %{
     position: 5,
     depth_from_m: "10.2",
     depth_to_m: "11.0",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (stark grobsandig, steinig)",
-    color: "graubraun"
+    petrography: "Kies, stark grobsandig, steinig",
+    color: "gelblichbraun",
+    raw_text: "Kies [gerundet] (stark grobsandig, steinig), graubraun"
   },
   %{
     position: 6,
     depth_from_m: "11.0",
     depth_to_m: "14.5",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (schwach grobsandig, steinig)",
-    color: "bunt"
+    petrography: "Kies, schwach grobsandig, steinig",
+    color: "gelb",
+    raw_text: "Kies [gerundet] (schwach grobsandig, steinig), bunt"
   },
   %{
     position: 7,
     depth_from_m: "14.5",
     depth_to_m: "15.6",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (stark grobsandig, steinig)",
-    color: "bunt"
+    petrography: "Kies, stark grobsandig, steinig",
+    color: "gelb",
+    raw_text: "Kies [gerundet] (stark grobsandig, steinig), bunt"
   },
   %{
     position: 8,
     depth_from_m: "15.6",
     depth_to_m: "18.3",
     stratigraphy: "Neuenburg-Formation",
-    petrography: "Kies [gerundet] (schwach grobsandig, steinig)",
-    color: "bunt"
+    petrography: "Kies, schwach grobsandig, steinig",
+    color: "gelb",
+    raw_text: "Kies [gerundet] (schwach grobsandig, steinig), bunt"
   }
 ])
 
@@ -185,24 +186,27 @@ insert_layers.(melbourne, [
     depth_from_m: "0.0",
     depth_to_m: "0.4",
     stratigraphy: "Topsoil",
-    petrography: "Sandy CLAY, low plasticity, dark grey, fine sand",
-    color: "dark grey"
+    petrography: "Ton, feinsandig",
+    color: "grau",
+    raw_text: "Sandy CLAY, low plasticity, dark grey, fine sand, dark grey"
   },
   %{
     position: 2,
     depth_from_m: "0.4",
     depth_to_m: "1.0",
     stratigraphy: "Natural",
-    petrography: "Sandy CLAY, medium to high plasticity, dark grey, fine sand",
-    color: "dark grey"
+    petrography: "Ton, feinsandig",
+    color: "grau",
+    raw_text: "Sandy CLAY, medium to high plasticity, dark grey, fine sand, dark grey"
   },
   %{
     position: 3,
     depth_from_m: "1.0",
     depth_to_m: "1.8",
     stratigraphy: "Natural",
-    petrography: "Clayey SAND, fine sand, dark grey, medium plasticity clay",
-    color: "dark grey"
+    petrography: "Feinsand, tonig",
+    color: "grau",
+    raw_text: "Clayey SAND, fine sand, dark grey, medium plasticity clay, dark grey"
   }
 ])
 
@@ -230,24 +234,27 @@ insert_layers.(af01, [
     depth_from_m: "0.0",
     depth_to_m: "4.0",
     stratigraphy: "Benin Formation",
-    petrography: "Soft grey CLAY with organic matter",
-    color: "dark grey"
+    petrography: "Ton, humos",
+    color: "grau",
+    raw_text: "Soft grey CLAY with organic matter, dark grey"
   },
   %{
     position: 2,
     depth_from_m: "4.0",
     depth_to_m: "12.0",
     stratigraphy: "Benin Formation",
-    petrography: "Loose to medium dense SAND, fine to medium grained",
-    color: "yellow-brown"
+    petrography: "Sand",
+    color: "gelblichbraun",
+    raw_text: "Loose to medium dense SAND, fine to medium grained, yellow-brown"
   },
   %{
     position: 3,
     depth_from_m: "12.0",
     depth_to_m: "22.0",
     stratigraphy: "Benin Formation",
-    petrography: "Dense SAND with gravel lenses",
-    color: "brown"
+    petrography: "Sand, kiesig",
+    color: "gelblichbraun",
+    raw_text: "Dense SAND with gravel lenses, brown"
   }
 ])
 
@@ -285,32 +292,36 @@ insert_layers.(eur02, [
     depth_from_m: "0.0",
     depth_to_m: "2.0",
     stratigraphy: "Remblais",
-    petrography: "Remblais hétérogènes, sableux",
-    color: "brun"
+    petrography: "Auffüllung, Sand",
+    color: "gelblichbraun",
+    raw_text: "Remblais hétérogènes, sableux, brun"
   },
   %{
     position: 2,
     depth_from_m: "2.0",
     depth_to_m: "9.0",
     stratigraphy: "Calcaire grossier",
-    petrography: "Calcaire grossier, fissuré, blanchâtre",
-    color: "blanc"
+    petrography: "Kalkstein",
+    color: "grau",
+    raw_text: "Calcaire grossier, fissuré, blanchâtre, blanc"
   },
   %{
     position: 3,
     depth_from_m: "9.0",
     depth_to_m: "18.0",
     stratigraphy: "Argile verte",
-    petrography: "Argile plastique, verdâtre",
-    color: "vert"
+    petrography: "Ton",
+    color: "grün",
+    raw_text: "Argile plastique, verdâtre, vert"
   },
   %{
     position: 4,
     depth_from_m: "18.0",
     depth_to_m: "30.0",
     stratigraphy: "Sables de Beauchamp",
-    petrography: "Sables fins, compacts, beiges",
-    color: "beige"
+    petrography: "Feinsand",
+    color: "gelb",
+    raw_text: "Sables fins, compacts, beiges, beige"
   }
 ])
 
@@ -337,24 +348,27 @@ insert_layers.(mea01, [
     depth_from_m: "0.0",
     depth_to_m: "6.0",
     stratigraphy: "Aeolian deposits",
-    petrography: "Loose SAND, fine to medium, calcareous",
-    color: "light brown"
+    petrography: "Sand",
+    color: "gelblichbraun",
+    raw_text: "Loose SAND, fine to medium, calcareous, light brown"
   },
   %{
     position: 2,
     depth_from_m: "6.0",
     depth_to_m: "20.0",
     stratigraphy: "Fars Formation",
-    petrography: "Weak to moderately weak GYPSUM/calcisiltite",
-    color: "white-grey"
+    petrography: "Gips",
+    color: "grau",
+    raw_text: "Weak to moderately weak GYPSUM/calcisiltite, white-grey"
   },
   %{
     position: 3,
     depth_from_m: "20.0",
     depth_to_m: "40.0",
     stratigraphy: "Fars Formation",
-    petrography: "Moderately strong calcareous SANDSTONE",
-    color: "cream"
+    petrography: "Sandstein",
+    color: "gelb",
+    raw_text: "Moderately strong calcareous SANDSTONE, cream"
   }
 ])
 
@@ -381,24 +395,27 @@ insert_layers.(nam02, [
     depth_from_m: "0.0",
     depth_to_m: "5.0",
     stratigraphy: "Beaumont Formation",
-    petrography: "Stiff fat CLAY (CH), dark brown",
-    color: "dark brown"
+    petrography: "Ton",
+    color: "dunkelbraun",
+    raw_text: "Stiff fat CLAY (CH), dark brown, dark brown"
   },
   %{
     position: 2,
     depth_from_m: "5.0",
     depth_to_m: "10.0",
     stratigraphy: "Beaumont Formation",
-    petrography: "Medium dense silty SAND",
-    color: "tan"
+    petrography: "Sand, schluffig",
+    color: "gelblichbraun",
+    raw_text: "Medium dense silty SAND, tan"
   },
   %{
     position: 3,
     depth_from_m: "10.0",
     depth_to_m: "15.0",
     stratigraphy: "Beaumont Formation",
-    petrography: "Very stiff sandy CLAY",
-    color: "grey-brown"
+    petrography: "Ton, sandig",
+    color: "gelblichbraun",
+    raw_text: "Very stiff sandy CLAY, grey-brown"
   }
 ])
 
@@ -436,24 +453,27 @@ insert_layers.(sam01, [
     depth_from_m: "0.0",
     depth_to_m: "3.0",
     stratigraphy: "Formação Resende",
-    petrography: "Argila silto-arenosa, mole, marrom",
-    color: "marrom"
+    petrography: "Ton, schluffig, sandig",
+    color: "gelblichbraun",
+    raw_text: "Argila silto-arenosa, mole, marrom, marrom"
   },
   %{
     position: 2,
     depth_from_m: "3.0",
     depth_to_m: "8.0",
     stratigraphy: "Formação Resende",
-    petrography: "Areia argilosa, medianamente compacta",
-    color: "amarelo"
+    petrography: "Sand, tonig",
+    color: "gelb",
+    raw_text: "Areia argilosa, medianamente compacta, amarelo"
   },
   %{
     position: 3,
     depth_from_m: "8.0",
     depth_to_m: "12.5",
     stratigraphy: "Embasamento cristalino",
-    petrography: "Gnaisse alterado, duro",
-    color: "cinza"
+    petrography: "massige Metamorphite",
+    color: "grau",
+    raw_text: "Gnaisse alterado, duro, cinza"
   }
 ])
 
@@ -481,16 +501,18 @@ insert_layers.(sea01, [
     depth_from_m: "0.0",
     depth_to_m: "10.0",
     stratigraphy: "Jakarta Alluvium",
-    petrography: "Very soft CLAY, grey, high plasticity",
-    color: "grey"
+    petrography: "Ton",
+    color: "grau",
+    raw_text: "Very soft CLAY, grey, high plasticity, grey"
   },
   %{
     position: 2,
     depth_from_m: "10.0",
     depth_to_m: "25.0",
     stratigraphy: "Jakarta Alluvium",
-    petrography: "Loose silty SAND with occasional peat",
-    color: "dark grey"
+    petrography: "Sand, schluffig, torfig",
+    color: "grau",
+    raw_text: "Loose silty SAND with occasional peat, dark grey"
   }
 ])
 
@@ -530,8 +552,8 @@ insert_layers.(tough_one, [
     depth_from_m: "2.0",
     depth_to_m: "5.4",
     stratigraphy: nil,
-    petrography: "vermutlich Kies",
-    color: "grau?",
+    petrography: "Kies",
+    color: "grau",
     raw_text: "2,0-5,4(?) Kies grau?"
   }
 ])
@@ -554,7 +576,7 @@ tough_one_scan_2 =
 
 attach_documents.(tough_one, [tough_one_scan, tough_one_scan_2])
 
-# Plus generated boreholes for lists, search and the map: MOCK_BOREHOLES=10000 for the maximum.
+# Plus generated boreholes for lists, search and the map: MOCK_BOREHOLES=10000000 for the maximum.
 mock_count = String.to_integer(System.get_env("MOCK_BOREHOLES", "1000"))
 Api.MockData.generate(min(mock_count, Api.MockData.max_count()))
 

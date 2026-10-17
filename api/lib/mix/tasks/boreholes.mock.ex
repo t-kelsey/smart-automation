@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Boreholes.Mock do
   generated mock rows are removed first, so the task can be re-run; seeded and real data stay.
 
       mix boreholes.mock                # 1000 boreholes
-      mix boreholes.mock --count 10000  # the prototype's maximum
+      mix boreholes.mock --count 10000000  # the maximum
       mix boreholes.mock --count 0      # only remove mock data
       mix boreholes.mock --seed 7       # a different, but again reproducible, data set
   """

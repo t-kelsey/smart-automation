@@ -244,7 +244,8 @@ defmodule Api.Boreholes do
 
   def document_file_path(_document), do: nil
 
-  defp storage_dir do
+  @doc "The directory holding the stored document files (`DOCUMENT_STORAGE_DIR` or `priv/storage`)."
+  def storage_dir do
     Application.get_env(:api, :document_storage_dir) ||
       Path.join(:code.priv_dir(:api), "storage")
   end
