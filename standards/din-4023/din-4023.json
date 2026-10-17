@@ -1,0 +1,752 @@
+{
+  "beschreibung": "Einheitlicher Standard für bem, api und web. Sprache: Deutsch.",
+  "norm": {
+    "bezeichnung": "DIN 4023",
+    "titel": "Geotechnische Erkundung und Untersuchung – Zeichnerische Darstellung der Ergebnisse von Bohrungen und sonstigen direkten Aufschlüssen",
+    "ausgabe_schraffuren": "2006-02",
+    "ausgabe_tabelle_1": "2023-02",
+    "quellen": [
+      {
+        "datei": "data/Standards_Formats/DIN 4023 Schraffuren.pdf",
+        "inhalt": "Schraffuren DIN 4023 - 2006-02 (Fell & Kernbach), 47 Zeichen"
+      },
+      {
+        "datei": "data/Standards_Formats/DIN 4023.pdf",
+        "inhalt": "DIN 4023:2023-02 (ersetzt 2006-02), Tabelle 1 Seite 10, Anhang A Tabelle A.1 Seite 17"
+      }
+    ],
+    "hinweis": "Die bereitgestellte DIN 4023.pdf ist die Ausgabe 2023-02, nicht 2006-02. Tabelle 1 wurde daher nach 2023-02 übernommen. Gegenüber 2006-02 ergänzt sind 'Grobschluff' und 'Großer Block'; die Farbmaßzahlen nach DIN 6164-1 sind entfallen. Alle übrigen Zeilen von Tabelle 1 entsprechen dem Schraffurblatt 2006-02."
+  },
+  "farben": [
+    {
+      "name": "oliv",
+      "rgb": [
+        105,
+        99,
+        62
+      ],
+      "hex": "#69633E",
+      "ral": 7008
+    },
+    {
+      "name": "gelb",
+      "rgb": [
+        219,
+        171,
+        6
+      ],
+      "hex": "#DBAB06",
+      "ral": 1032
+    },
+    {
+      "name": "gelblichbraun",
+      "rgb": [
+        165,
+        105,
+        58
+      ],
+      "hex": "#A5693A",
+      "ral": 8023
+    },
+    {
+      "name": "rosa",
+      "rgb": [
+        195,
+        114,
+        128
+      ],
+      "hex": "#C37280",
+      "ral": 3014
+    },
+    {
+      "name": "orange",
+      "rgb": [
+        198,
+        84,
+        47
+      ],
+      "hex": "#C6542F",
+      "ral": 2013
+    },
+    {
+      "name": "dunkelbraun",
+      "rgb": [
+        93,
+        71,
+        64
+      ],
+      "hex": "#5D4740",
+      "ral": 8015
+    },
+    {
+      "name": "rot",
+      "rgb": [
+        190,
+        77,
+        88
+      ],
+      "hex": "#BE4D58",
+      "ral": 3033
+    },
+    {
+      "name": "lila",
+      "rgb": [
+        135,
+        70,
+        128
+      ],
+      "hex": "#874680",
+      "ral": 4008
+    },
+    {
+      "name": "violett",
+      "rgb": [
+        103,
+        81,
+        129
+      ],
+      "hex": "#675181",
+      "ral": 4005
+    },
+    {
+      "name": "violettblau",
+      "rgb": [
+        65,
+        73,
+        108
+      ],
+      "hex": "#41496C",
+      "ral": 7015
+    },
+    {
+      "name": "dunkelblau",
+      "rgb": [
+        42,
+        76,
+        103
+      ],
+      "hex": "#2A4C67",
+      "ral": 5025
+    },
+    {
+      "name": "hellblau",
+      "rgb": [
+        47,
+        125,
+        183
+      ],
+      "hex": "#2F7DB7",
+      "ral": 5012
+    },
+    {
+      "name": "gelbgrün",
+      "rgb": [
+        97,
+        154,
+        70
+      ],
+      "hex": "#619A46",
+      "ral": 6017
+    },
+    {
+      "name": "türkis",
+      "rgb": [
+        98,
+        213,
+        196
+      ],
+      "hex": "#28A9B2",
+      "ral": 6027
+    },
+    {
+      "name": "grün",
+      "rgb": [
+        45,
+        128,
+        74
+      ],
+      "hex": "#2D804A",
+      "ral": 6024
+    },
+    {
+      "name": "grau",
+      "rgb": [
+        127,
+        127,
+        127
+      ],
+      "hex": "#7F7F7F",
+      "ral": 7037
+    },
+    {
+      "name": "schwarz",
+      "rgb": [
+        0,
+        0,
+        0
+      ],
+      "hex": "#000000",
+      "ral": 9005
+    }
+  ],
+  "schraffuren": [
+    {
+      "id": "kies",
+      "bezeichnung": "Kies",
+      "kategorie": "boden",
+      "kurzform": "G",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "grobkies",
+      "bezeichnung": "Grobkies",
+      "kategorie": "boden",
+      "kurzform": "gG",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "mittelkies",
+      "bezeichnung": "Mittelkies",
+      "kategorie": "boden",
+      "kurzform": "mG",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "feinkies",
+      "bezeichnung": "Feinkies",
+      "kategorie": "boden",
+      "kurzform": "fG",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "sand",
+      "bezeichnung": "Sand",
+      "kategorie": "boden",
+      "kurzform": "S",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "grobsand",
+      "bezeichnung": "Grobsand",
+      "kategorie": "boden",
+      "kurzform": "gS",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "mittelsand",
+      "bezeichnung": "Mittelsand",
+      "kategorie": "boden",
+      "kurzform": "mS",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "feinsand",
+      "bezeichnung": "Feinsand",
+      "kategorie": "boden",
+      "kurzform": "fS",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "schluff",
+      "bezeichnung": "Schluff",
+      "kategorie": "boden",
+      "kurzform": "U",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "ton",
+      "bezeichnung": "Ton",
+      "kategorie": "boden",
+      "kurzform": "T",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "torf_humus",
+      "bezeichnung": "Torf/Humus",
+      "kategorie": "boden",
+      "kurzform": "H",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "steine",
+      "bezeichnung": "Steine",
+      "kategorie": "boden",
+      "kurzform": "X",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "bloecke",
+      "bezeichnung": "Blöcke",
+      "kategorie": "boden",
+      "kurzform": "Y",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "vulkan_aschen",
+      "bezeichnung": "Vulkan. Aschen",
+      "kategorie": "boden",
+      "kurzform": "V",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "braunkohle",
+      "bezeichnung": "Braunkohle",
+      "kategorie": "boden",
+      "kurzform": "Bk",
+      "tabelle_din_4023_2023": 1
+    },
+    {
+      "id": "konglomerat",
+      "bezeichnung": "Konglomerat",
+      "kategorie": "fels",
+      "kurzform": "Ko",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "brekzie",
+      "bezeichnung": "Brekzie",
+      "kategorie": "fels",
+      "kurzform": "Br",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "sandstein",
+      "bezeichnung": "Sandstein",
+      "kategorie": "fels",
+      "kurzform": "Sst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "schluffstein",
+      "bezeichnung": "Schluffstein",
+      "kategorie": "fels",
+      "kurzform": "Ust",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "tonstein",
+      "bezeichnung": "Tonstein",
+      "kategorie": "fels",
+      "kurzform": "Tst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "mergelstein",
+      "bezeichnung": "Mergelstein",
+      "kategorie": "fels",
+      "kurzform": "Mst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "kalkstein",
+      "bezeichnung": "Kalkstein",
+      "kategorie": "fels",
+      "kurzform": "Kst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "dolomitstein",
+      "bezeichnung": "Dolomitstein",
+      "kategorie": "fels",
+      "kurzform": "Dst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "anhydrit",
+      "bezeichnung": "Anhydrit",
+      "kategorie": "fels",
+      "kurzform": "Ahst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "gips",
+      "bezeichnung": "Gips",
+      "kategorie": "fels",
+      "kurzform": "Gyst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "salzgestein",
+      "bezeichnung": "Salzgestein",
+      "kategorie": "fels",
+      "kurzform": "Sast",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "tuffstein",
+      "bezeichnung": "Tuffstein",
+      "kategorie": "fels",
+      "kurzform": "Vst",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "steinkohle",
+      "bezeichnung": "Steinkohle",
+      "kategorie": "fels",
+      "kurzform": "Stk",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "quarzit",
+      "bezeichnung": "Quarzit",
+      "kategorie": "fels",
+      "kurzform": "Q",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "vulkanite",
+      "bezeichnung": "Vulkanite",
+      "kategorie": "fels",
+      "kurzform": "Vu",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "plutonite",
+      "bezeichnung": "Plutonite",
+      "kategorie": "fels",
+      "kurzform": "Pl",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "massige_metamorphite",
+      "bezeichnung": "massige Metamorphite",
+      "kategorie": "fels",
+      "kurzform": "Mem",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "blaettrige_metamorphite",
+      "bezeichnung": "blättrige Metamorphite",
+      "kategorie": "fels",
+      "kurzform": "Meb",
+      "tabelle_din_4023_2023": 2
+    },
+    {
+      "id": "mutterboden",
+      "bezeichnung": "Mutterboden",
+      "kategorie": "geologisch",
+      "kurzform": "Mu",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "hanglehm",
+      "bezeichnung": "Hanglehm",
+      "kategorie": "geologisch",
+      "kurzform": "L",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "hangschutt",
+      "bezeichnung": "Hangschutt",
+      "kategorie": "geologisch",
+      "kurzform": "Lx",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "geschiebelehm",
+      "bezeichnung": "Geschiebelehm",
+      "kategorie": "geologisch",
+      "kurzform": "Lg",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "geschiebemergel",
+      "bezeichnung": "Geschiebemergel",
+      "kategorie": "geologisch",
+      "kurzform": "Mg",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "loess",
+      "bezeichnung": "Löss",
+      "kategorie": "geologisch",
+      "kurzform": "Lö",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "loesslehm",
+      "bezeichnung": "Lösslehm",
+      "kategorie": "geologisch",
+      "kurzform": "Löl",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "klei_schlick",
+      "bezeichnung": "Klei, Schlick",
+      "kategorie": "geologisch",
+      "kurzform": "Kl",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "wiesenkalk",
+      "bezeichnung": "Wiesenkalk",
+      "kategorie": "geologisch",
+      "kurzform": "Wk",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "baenderton",
+      "bezeichnung": "Bänderton",
+      "kategorie": "geologisch",
+      "kurzform": "Bt",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "mudde",
+      "bezeichnung": "Mudde",
+      "kategorie": "geologisch",
+      "kurzform": "F",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "auffuellung",
+      "bezeichnung": "Auffüllung",
+      "kategorie": "geologisch",
+      "kurzform": "A",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "kreidestein",
+      "bezeichnung": "Kreidestein",
+      "kategorie": "geologisch",
+      "kurzform": "Krst",
+      "tabelle_din_4023_2023": 3
+    },
+    {
+      "id": "kalktuff",
+      "bezeichnung": "Kalktuff",
+      "kategorie": "geologisch",
+      "kurzform": "Ktst",
+      "tabelle_din_4023_2023": 3
+    }
+  ],
+  "tabelle_1": {
+    "titel": "Tabelle 1 — Kurzformen, Zeichen und Farben für reine Bodenarten nach DIN EN ISO 14688-1",
+    "farben_hinweis": "Farbe nach Anhang A, Tabelle A.1 (informativ); Namen verweisen auf 'farben'.",
+    "bodenarten": [
+      {
+        "id": "grosser_block",
+        "benennung": {
+          "hauptanteil": "Großer Block",
+          "nebenanteil": "mit großem Block"
+        },
+        "kurzform": {
+          "hauptanteil": "gY",
+          "nebenanteil": "gy"
+        },
+        "schraffur": null,
+        "farbe": "rot",
+        "hinweis": "Neu in DIN 4023:2023-02 (nicht in der Ausgabe 2006-02 enthalten). Das Schraffurblatt 2006-02 enthält kein eigenes Zeichen; Tabelle 1 zeigt ein Blockzeichen mit größeren Körnern."
+      },
+      {
+        "id": "block",
+        "benennung": {
+          "hauptanteil": "Block",
+          "nebenanteil": "mit Block"
+        },
+        "kurzform": {
+          "hauptanteil": "Y",
+          "nebenanteil": "y"
+        },
+        "schraffur": "bloecke",
+        "farbe": "rot"
+      },
+      {
+        "id": "stein",
+        "benennung": {
+          "hauptanteil": "Stein",
+          "nebenanteil": "steinig"
+        },
+        "kurzform": {
+          "hauptanteil": "X",
+          "nebenanteil": "x"
+        },
+        "schraffur": "steine",
+        "farbe": "rot"
+      },
+      {
+        "id": "kies",
+        "benennung": {
+          "hauptanteil": "Kies",
+          "nebenanteil": "kiesig"
+        },
+        "kurzform": {
+          "hauptanteil": "G",
+          "nebenanteil": "g"
+        },
+        "schraffur": "kies",
+        "farbe": "gelb"
+      },
+      {
+        "id": "grobkies",
+        "benennung": {
+          "hauptanteil": "Grobkies",
+          "nebenanteil": "grobkiesig"
+        },
+        "kurzform": {
+          "hauptanteil": "gG",
+          "nebenanteil": "gg"
+        },
+        "schraffur": "grobkies",
+        "farbe": "gelb"
+      },
+      {
+        "id": "mittelkies",
+        "benennung": {
+          "hauptanteil": "Mittelkies",
+          "nebenanteil": "mittelkiesig"
+        },
+        "kurzform": {
+          "hauptanteil": "mG",
+          "nebenanteil": "mg"
+        },
+        "schraffur": "mittelkies",
+        "farbe": "gelb"
+      },
+      {
+        "id": "feinkies",
+        "benennung": {
+          "hauptanteil": "Feinkies",
+          "nebenanteil": "feinkiesig"
+        },
+        "kurzform": {
+          "hauptanteil": "fG",
+          "nebenanteil": "fg"
+        },
+        "schraffur": "feinkies",
+        "farbe": "gelb"
+      },
+      {
+        "id": "sand",
+        "benennung": {
+          "hauptanteil": "Sand",
+          "nebenanteil": "sandig"
+        },
+        "kurzform": {
+          "hauptanteil": "S",
+          "nebenanteil": "s"
+        },
+        "schraffur": "sand",
+        "farbe": "orange"
+      },
+      {
+        "id": "grobsand",
+        "benennung": {
+          "hauptanteil": "Grobsand",
+          "nebenanteil": "grobsandig"
+        },
+        "kurzform": {
+          "hauptanteil": "gS",
+          "nebenanteil": "gs"
+        },
+        "schraffur": "grobsand",
+        "farbe": "orange"
+      },
+      {
+        "id": "mittelsand",
+        "benennung": {
+          "hauptanteil": "Mittelsand",
+          "nebenanteil": "mittelsandig"
+        },
+        "kurzform": {
+          "hauptanteil": "mS",
+          "nebenanteil": "ms"
+        },
+        "schraffur": "mittelsand",
+        "farbe": "orange"
+      },
+      {
+        "id": "feinsand",
+        "benennung": {
+          "hauptanteil": "Feinsand",
+          "nebenanteil": "feinsandig"
+        },
+        "kurzform": {
+          "hauptanteil": "fS",
+          "nebenanteil": "fs"
+        },
+        "schraffur": "feinsand",
+        "farbe": "orange"
+      },
+      {
+        "id": "schluff",
+        "benennung": {
+          "hauptanteil": "Schluff",
+          "nebenanteil": "schluffig"
+        },
+        "kurzform": {
+          "hauptanteil": "U",
+          "nebenanteil": "u"
+        },
+        "schraffur": "schluff",
+        "farbe": "oliv"
+      },
+      {
+        "id": "grobschluff",
+        "benennung": {
+          "hauptanteil": "Grobschluff",
+          "nebenanteil": "grobschluffig"
+        },
+        "kurzform": {
+          "hauptanteil": "gU",
+          "nebenanteil": "gu"
+        },
+        "schraffur": "schluff",
+        "farbe": "türkis",
+        "hinweis": "Neu in DIN 4023:2023-02 (nicht in der Ausgabe 2006-02 enthalten). Das Zeichen entspricht dem von Schluff (Schraffur 'schluff'); nur die Farbe unterscheidet sich."
+      },
+      {
+        "id": "ton",
+        "benennung": {
+          "hauptanteil": "Ton",
+          "nebenanteil": "tonig"
+        },
+        "kurzform": {
+          "hauptanteil": "T",
+          "nebenanteil": "t"
+        },
+        "schraffur": "ton",
+        "farbe": "violett"
+      },
+      {
+        "id": "torf_humus",
+        "benennung": {
+          "hauptanteil": "Torf, Humus",
+          "nebenanteil": "torfig, humos"
+        },
+        "kurzform": {
+          "hauptanteil": "H",
+          "nebenanteil": "h"
+        },
+        "schraffur": "torf_humus",
+        "farbe": "dunkelbraun"
+      },
+      {
+        "id": "vulkanische_aschen",
+        "benennung": {
+          "hauptanteil": "Vulkanische Aschen",
+          "nebenanteil": null
+        },
+        "kurzform": {
+          "hauptanteil": "V",
+          "nebenanteil": null
+        },
+        "schraffur": "vulkan_aschen",
+        "farbe": "grau"
+      },
+      {
+        "id": "braunkohle",
+        "benennung": {
+          "hauptanteil": "Braunkohle",
+          "nebenanteil": null
+        },
+        "kurzform": {
+          "hauptanteil": "Bk",
+          "nebenanteil": null
+        },
+        "schraffur": "braunkohle",
+        "farbe": "dunkelbraun"
+      }
+    ]
+  }
+}
