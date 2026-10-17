@@ -43,6 +43,14 @@ mix phx.server       # Starts the dev server on localhost:4000
 `mix setup` runs `mix ecto.create` + `mix ecto.migrate` for you. If you ever need to run them
 individually (e.g. after pulling new migrations), that's `mix ecto.create` and `mix ecto.migrate`.
 
+`mix setup` also applies `priv/repo/seeds.exs`, which inserts a few mock boreholes/layers/a
+document so there's something to query right away. To re-apply the seeds on their own (e.g. after
+an `mix ecto.reset`, which drops and recreates the database), run:
+
+```bash
+mix run priv/repo/seeds.exs
+```
+
 Run `mix precommit` before considering any backend change done — it compiles with
 warnings-as-errors, checks for unused deps, formats, and runs the full test suite.
 
