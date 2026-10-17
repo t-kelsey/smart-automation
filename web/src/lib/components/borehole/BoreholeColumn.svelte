@@ -21,20 +21,40 @@
 		colored?: boolean;
 		selectedId?: string | null;
 		onselect?: (id: string | null) => void;
+		/**
+		 * Height in pixels the drawing may use; the scale is chosen so that the whole column fits.
+		 * Without it the column is drawn at a fixed scale.
+		 */
+		availableHeight?: number;
 	}
 
-	let { layers, totalDepth, colored = true, selectedId = null, onselect }: Props = $props();
+	let {
+		layers,
+		totalDepth,
+		colored = true,
+		selectedId = null,
+		onselect,
+		availableHeight
+	}: Props = $props();
 
-	const scale = 14; // units per metre
+	const defaultScale = 14; // units (pixels) per metre
+	const minScale = 1;
 	const top = 8;
-	const colX = 50;
-	const colW = 60;
+	const bottomMargin = 14;
+	const colX = 60;
+	const colW = 90;
 	const half = colW / 2;
-	const width = colX + colW + 70;
+	const width = colX + colW + 90;
 
+	/** Units per metre; one unit is one pixel, so text keeps its size whatever the depth. */
+	let scale = $derived(
+		availableHeight && totalDepth > 0
+			? Math.max(minScale, (availableHeight - top - bottomMargin) / totalDepth)
+			: defaultScale
+	);
 	const y = (depth: number) => top + depth * scale;
 	let bottom = $derived(y(totalDepth));
-	let height = $derived(bottom + 14);
+	let height = $derived(bottom + bottomMargin);
 
 	/** Pushes sorted positions apart so that labels do not overlap. */
 	function spread(positions: number[], gap: number, limit: number): number[] {
@@ -57,12 +77,12 @@
 		const sorted = [...layers].sort((a, b) => a.startDepth - b.startDepth);
 		const labelYs = spread(
 			sorted.map((l) => y((l.startDepth + l.endDepth) / 2)),
-			11.5,
+			14,
 			bottom
 		);
 		const depthYs = spread(
 			sorted.map((l) => y(l.endDepth) - 2),
-			10.5,
+			13,
 			bottom + 10
 		);
 		return sorted.map((layer, i) => {
@@ -84,9 +104,12 @@
 	});
 </script>
 
+<!-- Drawn at pixel size; `max-w-full` shrinks it (keeping the aspect ratio) on narrow containers. -->
 <svg
 	viewBox="0 0 {width} {height}"
-	class="w-full"
+	{width}
+	{height}
+	class="mx-auto block max-w-full"
 	role="img"
 	aria-label="Borehole cross section after DIN 4023"
 	font-family="inherit"
@@ -159,7 +182,7 @@
 			x={colX + colW + 8}
 			y={row.labelY}
 			dominant-baseline="middle"
-			font-size="10"
+			font-size="12"
 			fill="currentColor"
 			font-weight={selected ? 700 : 600}
 		>
@@ -171,14 +194,14 @@
 		<line x1={colX} x2={colX} y1={top} y2={bottom} />
 		<line x1={colX + colW} x2={colX + colW} y1={top} y2={bottom} />
 		{#each rows as row (row.layer.id)}
-			<line x1={colX - 30} x2={colX + colW} y1={row.y1} y2={row.y1} />
+			<line x1={colX - 36} x2={colX + colW} y1={row.y1} y2={row.y1} />
 		{/each}
-		<line x1={colX - 30} x2={colX + colW + 6} y1={top} y2={top} stroke-width="1.6" />
-		<line x1={colX - 30} x2={colX + colW + 6} y1={bottom} y2={bottom} stroke-width="1.6" />
+		<line x1={colX - 36} x2={colX + colW + 6} y1={top} y2={top} stroke-width="1.6" />
+		<line x1={colX - 36} x2={colX + colW + 6} y1={bottom} y2={bottom} stroke-width="1.6" />
 	</g>
 
 	<!-- depths below the borehole start -->
-	<g fill="currentColor" font-size="9" text-anchor="end">
+	<g fill="currentColor" font-size="11" text-anchor="end">
 		{#each rows as row (row.layer.id)}
 			<text x={colX - 4} y={row.depthY}>{row.layer.endDepth.toFixed(1)}</text>
 		{/each}

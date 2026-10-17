@@ -24,11 +24,11 @@ can sit side by side (e.g. for comparing documents).
 		ZoomOutIcon
 	} from '@lucide/svelte';
 	import { Alert } from '#lib/components/alert/index.ts';
-	import type { BoreholeDocument } from '#lib/domain/borehole.ts';
+	import type { StoredDocument } from '#lib/domain/borehole.ts';
 	import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 
 	interface Props {
-		document: Pick<BoreholeDocument, 'name' | 'type' | 'url'>;
+		document: Pick<StoredDocument, 'name' | 'type' | 'url'>;
 		class?: string;
 	}
 

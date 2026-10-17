@@ -716,15 +716,18 @@ const statuses: DocumentStatus[] = ['pending', 'processing', 'extracted', 'faile
 
 function makeDocuments(boreholeId: string, name: string, country: string): BoreholeDocument[] {
 	const stem = name.replace(/\s+/g, '');
-	return faker.helpers.arrayElements(documentTypes, { min: 1, max: 3 }).map(({ ext, type }) => ({
-		id: `${boreholeId}-D-${ext}`,
-		name: `${stem}_${faker.word.noun()}.${ext}`,
-		type,
-		status: faker.helpers.arrayElement(statuses),
-		language: country,
-		pages: type === 'image' ? undefined : faker.number.int({ min: 1, max: 12 }),
-		sizeKb: faker.number.int({ min: 120, max: 5000 })
-	}));
+	return faker.helpers
+		.arrayElements(documentTypes, { min: 1, max: 3 })
+		.map(({ ext, type }, index) => ({
+			id: `${boreholeId}-D-${ext}`,
+			name: `${stem}_${faker.word.noun()}.${ext}`,
+			type,
+			role: index === 0 ? 'original' : 'additional',
+			status: faker.helpers.arrayElement(statuses),
+			language: country,
+			pages: type === 'image' ? undefined : faker.number.int({ min: 1, max: 12 }),
+			sizeKb: faker.number.int({ min: 120, max: 5000 })
+		}));
 }
 
 function makeBorehole(index: number): Borehole {
@@ -879,6 +882,7 @@ const bk1042: Borehole = {
 	documents: [
 		{
 			id: 'D1',
+			role: 'original',
 			name: 'BK1042_Schichtenverzeichnis.pdf',
 			type: 'pdf',
 			status: 'reviewed',
@@ -888,6 +892,7 @@ const bk1042: Borehole = {
 		},
 		{
 			id: 'D2',
+			role: 'additional',
 			name: 'BK1042_Kernfoto_Kasten1-4.jpg',
 			type: 'image',
 			status: 'extracted',
@@ -895,6 +900,7 @@ const bk1042: Borehole = {
 		},
 		{
 			id: 'D3',
+			role: 'additional',
 			name: 'BK1042_Bohrbericht.docx',
 			type: 'docx',
 			status: 'pending',
