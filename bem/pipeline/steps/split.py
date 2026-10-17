@@ -6,15 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .. import pdfutil, schemas
 from ..naming import base, stamped
+from ..output import Recorder, dump_json
 from ..ai import PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
 
 def _dump(path: pathlib.Path, data) -> None:
-    path = stamped(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    dump_json(stamped(path), data)
 
 
 # --------------------------------------------------------------------------
@@ -36,7 +35,11 @@ Give your final answer only through the structured output, not as prose."""
 
 
 def split_boreholes(
-    pages_pdf: pathlib.Path, out_dir: pathlib.Path, report: StepReport, page_hints: list[str]
+    pages_pdf: pathlib.Path,
+    out_dir: pathlib.Path,
+    report: StepReport,
+    page_hints: list[str],
+    recorder: Recorder = Recorder(),
 ) -> list[pathlib.Path]:
     step_dir = out_dir / "02_split"
     n = pdfutil.page_count(pages_pdf)
@@ -57,8 +60,8 @@ def split_boreholes(
     for attempt in (1, 2):
         result = get_ai().run(
             prompt,
-            model="haiku",
-            effort="medium",
+            model=report.model,
+            effort=report.effort,
             schema=schemas.SPLIT_BOREHOLES,
             report=report,
             add_dirs=[out_dir],
@@ -89,7 +92,7 @@ def split_boreholes(
         pdfutil.write_pages(pages_pdf, g["pages"], dest)
         g["file"] = dest.name
         files.append(dest)
-    _dump(step_dir / "grouping.json", {"boreholes": groups})
+    recorder.record("split", {"boreholes": groups}, path=stamped(step_dir / "grouping.json"))
     log(f"step 2: {len(files)} borehole file(s): " + "; ".join(f"{g['label']} = pages {g['pages']}" for g in groups))
     return files
 

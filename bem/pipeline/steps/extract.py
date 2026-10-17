@@ -6,15 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .. import pdfutil, schemas
 from ..naming import base, stamped
+from ..output import Recorder, dump_json
 from ..ai import PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
 
 def _dump(path: pathlib.Path, data) -> None:
-    path = stamped(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    dump_json(stamped(path), data)
 
 
 # --------------------------------------------------------------------------
@@ -37,26 +36,31 @@ illegible or doubtful parts in warnings."""
 
 
 def extract_boreholes(
-    files: list[pathlib.Path], out_dir: pathlib.Path, report: StepReport, workers: int
+    files: list[pathlib.Path],
+    out_dir: pathlib.Path,
+    report: StepReport,
+    workers: int,
+    recorder: Recorder = Recorder(),
 ) -> list[tuple[pathlib.Path, dict]]:
     step_dir = out_dir / "03_extract"
     log(f"step 3: extracting {len(files)} borehole(s)")
 
-    def extract(f: pathlib.Path):
+    def extract(item: tuple[int, pathlib.Path]):
+        position, f = item
         n = pdfutil.page_count(f)
         data = get_ai().run(
             EXTRACT_PROMPT.format(path=f, n=n, max_pages=MAX_READ_PAGES),
-            model="sonnet",
-            effort="high",
+            model=report.model,
+            effort=report.effort,
             schema=schemas.EXTRACT_BOREHOLE,
             report=report,
             add_dirs=[out_dir],
             max_turns=8 + n // MAX_READ_PAGES * 2,
         )
-        _dump(step_dir / f"{base(f.stem)}.json", data)
+        recorder.record("extract", data, position=position, path=stamped(step_dir / f"{base(f.stem)}.json"))
         if not data["is_single_borehole"]:
             log(f"step 3: WARNING {f.name} holds {data['borehole_count_in_file']} boreholes")
         return f, data
 
     with ThreadPoolExecutor(workers) as pool:
-        return list(pool.map(extract, files))
+        return list(pool.map(extract, enumerate(files, 1)))

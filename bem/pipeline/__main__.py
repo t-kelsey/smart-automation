@@ -1,14 +1,18 @@
 """Run with: uv run python -m pipeline <file.pdf>"""
 
 import argparse
+import contextlib
 import json
 import pathlib
 import shutil
 import sys
+import tempfile
 import time
 
 from .ai import PipelineError, StepReport, Timer, Usage, backend_names, get_ai, log
+from .config import PipelineConfig
 from .naming import run_id, stamped
+from .output import OnStage, Recorder, dump_json, persist_enabled
 from .steps.extract import extract_boreholes
 from .steps.filter import filter_pages
 from .steps.split import split_boreholes
@@ -47,6 +51,58 @@ def print_report(reports: list[StepReport], total_wall: float) -> None:
     )
 
 
+def run_pipeline(
+    pdf: pathlib.Path,
+    out_dir: pathlib.Path | None = None,
+    chunk_size: int = 10,
+    workers: int = 4,
+    config: PipelineConfig | None = None,
+    on_stage: OnStage | None = None,
+) -> tuple[list[dict], list[StepReport], float]:
+    """Run all four steps on one PDF; every step hands its output to `on_stage(stage, position, data)`.
+
+    The intermediate PDFs the model reads live in `out_dir`. With BEM_ENV=prod (or no `out_dir`)
+    that is a temporary directory that is removed afterwards, and no JSON is written locally.
+    Returns (results, step reports, wall seconds); raises PipelineError if a step fails.
+    """
+    with contextlib.ExitStack() as stack:
+        if out_dir is None or not persist_enabled():
+            out_dir = pathlib.Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="bem-")))
+        return _run(pdf, out_dir, chunk_size, workers, config or PipelineConfig(), Recorder(on_stage))
+
+
+def _run(
+    pdf: pathlib.Path, out_dir: pathlib.Path, chunk_size: int, workers: int, c: PipelineConfig, recorder: Recorder
+) -> tuple[list[dict], list[StepReport], float]:
+    reports = [
+        StepReport("1 filter pages", c.filter.model, c.filter.effort),
+        StepReport("2 split boreholes", c.split.model, c.split.effort),
+        StepReport("3 extract", c.extract.model, c.extract.effort),
+        StepReport("4 transform to db", c.transform.model, c.transform.effort),
+    ]
+    r1, r2, r3, r4 = reports
+    results: list[dict] = []
+    t0 = time.monotonic()
+    try:
+        with Timer(r1):
+            filtered = filter_pages(pdf, out_dir, r1, chunk_size, workers, recorder)
+        if filtered is not None:
+            pages_pdf, page_hints = filtered
+            with Timer(r2):
+                files = split_boreholes(pages_pdf, out_dir, r2, page_hints, recorder)
+            with Timer(r3):
+                extracted = extract_boreholes(files, out_dir, r3, workers, recorder)
+            with Timer(r4):
+                results = transform_boreholes(extracted, out_dir, r4, workers, recorder)
+        else:
+            log("no borehole log pages found, nothing to do")
+    finally:
+        wall = time.monotonic() - t0
+        dump_json(stamped(out_dir / "report.json"), [r.to_dict() for r in reports])
+        print_report(reports, wall)
+    return results, reports, wall
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Borehole PDF -> database payloads via Claude.")
     parser.add_argument("pdf", type=pathlib.Path)
@@ -63,47 +119,23 @@ def main() -> int:
 
     pdf = args.pdf.resolve()
     out_dir = (args.out / pdf.stem).resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
-    get_ai(args.ai).debug_dir = out_dir / "debug"
+    get_ai(args.ai).debug_dir = out_dir / "debug" if persist_enabled() else None
     log(f"run id: {run_id()}")
     log(f"input: {pdf} ({pdf.stat().st_size / 1024:.0f} KiB) -> output: {out_dir}")
 
-    reports = [
-        StepReport("1 filter pages", "haiku", "high"),
-        StepReport("2 split boreholes", "haiku", "medium"),
-        StepReport("3 extract", "sonnet", "high"),
-        StepReport("4 transform to db", "haiku", "high"),
-    ]
-    r1, r2, r3, r4 = reports
-    results: list[dict] = []
-    t0 = time.monotonic()
     try:
-        with Timer(r1):
-            filtered = filter_pages(pdf, out_dir, r1, args.chunk_size, args.workers)
-        if filtered is not None:
-            pages_pdf, page_hints = filtered
-            with Timer(r2):
-                files = split_boreholes(pages_pdf, out_dir, r2, page_hints)
-            with Timer(r3):
-                extracted = extract_boreholes(files, out_dir, r3, args.workers)
-            with Timer(r4):
-                results = transform_boreholes(extracted, out_dir, r4, args.workers)
-        else:
-            log("no borehole log pages found, nothing to do")
+        results, _, _ = run_pipeline(pdf, out_dir, args.chunk_size, args.workers)
     except PipelineError as e:
         log(f"pipeline failed: {e}")
         return 1
-    finally:
-        stamped(out_dir / "report.json").write_text(
-            json.dumps([r.to_dict() for r in reports], indent=2)
-        )
-        print_report(reports, time.monotonic() - t0)
 
-    result_file = stamped(out_dir / "result.json")
-    result_file.write_text(
-        json.dumps({"source": str(pdf), "boreholes": results}, indent=2, ensure_ascii=False)
-    )
-    log(f"result: {result_file} ({len(results)} borehole(s))")
+    result = {"source": str(pdf), "boreholes": results}
+    if persist_enabled():
+        result_file = stamped(out_dir / "result.json")
+        dump_json(result_file, result)
+        log(f"result: {result_file} ({len(results)} borehole(s))")
+    else:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
 

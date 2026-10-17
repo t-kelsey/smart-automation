@@ -37,6 +37,54 @@ uv run python -m pipeline path/to/report.pdf
 
 Progress and the final report (time, tokens, cost per step) go to stderr.
 
+## HTTP server (`POST /execute`)
+
+The API sends uploaded documents here (`PIPELINE_URL=http://localhost:8000/execute`, ADR-0033).
+
+```sh
+uv run python -m pipeline.server   # settings from bem/.env (copy .env.example), port BEM_PORT, default 8000
+```
+
+- `POST /execute`: JSON body with the document id and the run config. It answers `202` at once and queues the run; invalid
+  input returns `422`. The document must already exist in the API.
+  ```json
+  {"document_id": "<uuid>", "pipeline_id": "optional, echoed back",
+   "config": {"filter": {"model": "haiku", "effort": "high"}, "split": {...}, "extract": {...}, "transform": {...}}}
+  ```
+  `config` is optional and so is every step in it; omitted steps use their defaults ([config.py](pipeline/config.py)).
+  One worker starts stage 1 (filter) by downloading the PDF with `GET /api/documents/:id/file` (a document that is
+  missing or not a PDF ends `failed`), runs the pipeline and posts each borehole to `POST /api/boreholes` (linked to the
+  document). It finishes with `PUT /api/documents/:id/status` set to `extracted` or `failed`.
+
+```sh
+curl -X POST http://localhost:8000/execute \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "pipeline_id": "my-pipeline",
+    "config": {
+      "filter":    {"model": "haiku",  "effort": "high"},
+      "split":     {"model": "haiku",  "effort": "medium"},
+      "extract":   {"model": "sonnet", "effort": "high"},
+      "transform": {"model": "haiku",  "effort": "high"}
+    }
+  }'
+# -> 202 {"document_id": "...", "pipeline_id": "my-pipeline", "status": "queued", "config": {...}}
+```
+
+- After every step the server uploads its output: `POST /api/exec_stages` (`type` filter|split|extract|transform, `position` = 1-based
+  borehole index for extract/transform, `data` = the step's JSON), then `POST /api/reports` (`{"steps": [...]}`) and
+  `POST /api/boreholes` per borehole. Boreholes must satisfy DIN 4023 ([din4023.py](pipeline/din4023.py), checked against
+  `standards/din-4023/din-4023.json`): petrography is normalised to the standard's terms and a borehole with an unmappable
+  layer is not uploaded (the document ends `failed`). Client: [api_service.py](pipeline/api_service.py), URL from `BEM_API_URL`
+  (`.env`, default `http://localhost:4000`).
+- `BEM_ENV=dev` (default) also writes results, report and debug files under `out/`; `BEM_ENV=prod` writes nothing locally
+  (intermediate PDFs go to a temp dir that is deleted, as is the uploaded file).
+- Tests: `uv run python -m unittest discover tests`.
+- `GET /health`: `{"status": "ok", "queued": n}`.
+- Env: `BEM_API_URL`, `BEM_PORT`, `BEM_WORKDIR` (default `out/server`), `BEM_CHUNK_SIZE`, `BEM_WORKERS`, `BEM_AI`.
+- The queue is in memory: a restart loses queued files.
+
 ## Output
 
 Everything is written to `out/<pdf-name>/` (git-ignored). Every file name is prefixed with

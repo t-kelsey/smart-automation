@@ -32,6 +32,9 @@ services:
       PHX_PUBLIC_SCHEME: http
       SEED_MOCK_DATA: ${SEED_MOCK_DATA:-false}
       MOCK_BOREHOLES: ${MOCK_BOREHOLES:-1000}
+      # Where uploaded documents are sent for extraction, e.g. http://pipeline:8000/execute
+      # (needs `docker compose --profile bem up`). Empty: uploads are stored but not processed.
+      PIPELINE_URL: ${PIPELINE_URL:-}
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:

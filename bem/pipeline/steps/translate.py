@@ -4,17 +4,16 @@ import json
 import pathlib
 from concurrent.futures import ThreadPoolExecutor
 
-from .. import pdfutil, schemas
+from .. import din4023, pdfutil, schemas
 from ..naming import base, stamped
+from ..output import Recorder, dump_json
 from ..ai import PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
 
 def _dump(path: pathlib.Path, data) -> None:
-    path = stamped(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    dump_json(stamped(path), data)
 
 
 # --------------------------------------------------------------------------
@@ -41,8 +40,10 @@ Rules:
 - layers: keep order, position starts at 1.
   - stratigraphy: formation/age as a short English term or the formation abbreviation
     plus its name if known; null if absent.
-  - petrography: the main soil or rock type as a standard English DIN 4023 term
-    (e.g. "clay", "silty sand", "limestone"), lowercase.
+  - petrography: the main soil or rock type as a German DIN 4023 term, written exactly as in the
+    allowed list below (this field is NOT translated to English). {din4023}
+    Examples: "Sand", "Sand, schluffig", "Ton, schluffig, sandig", "Sandstein". Choose the closest
+    term; never invent one.
   - color: English colour words only (e.g. "grey-brown"), null if absent.
   - raw_text: the original layer description exactly as extracted (untranslated).
   - metadata: remaining layer details as string key/value pairs (e.g. notes), else {{}}.
@@ -53,30 +54,42 @@ Rules:
 
 
 def transform_boreholes(
-    extracted: list[tuple[pathlib.Path, dict]], out_dir: pathlib.Path, report: StepReport, workers: int
+    extracted: list[tuple[pathlib.Path, dict]],
+    out_dir: pathlib.Path,
+    report: StepReport,
+    workers: int,
+    recorder: Recorder = Recorder(),
 ) -> list[dict]:
     step_dir = out_dir / "04_transform"
     log(f"step 4: transforming {len(extracted)} borehole(s) to the database schema")
 
-    def transform(item: tuple[pathlib.Path, dict]):
-        f, data = item
+    def transform(item: tuple[int, tuple[pathlib.Path, dict]]):
+        position, (f, data) = item
         payload = get_ai().run(
-            TRANSFORM_PROMPT.format(data=json.dumps(data, ensure_ascii=False, indent=1)),
-            model="haiku",
-            effort="high",
+            TRANSFORM_PROMPT.format(
+                data=json.dumps(data, ensure_ascii=False, indent=1), din4023=din4023.vocabulary_hint()
+            ),
+            model=report.model,
+            effort=report.effort,
             schema=schemas.DB_PAYLOAD,
             report=report,
             tools="",
             max_turns=2,
         )
-        issues = validate_payload(payload)
+        payload, din_issues = din4023.conform(payload)
+        issues = validate_payload(payload) + din_issues
         for i in issues:
             log(f"step 4: WARNING {f.stem}: {i}")
-        _dump(step_dir / f"{base(f.stem)}.json", {"payload": payload, "validation_issues": issues})
+        recorder.record(
+            "transform",
+            {"payload": payload, "validation_issues": issues},
+            position=position,
+            path=stamped(step_dir / f"{base(f.stem)}.json"),
+        )
         return {"payload": payload, "validation_issues": issues, "source_file": f.name}
 
     with ThreadPoolExecutor(workers) as pool:
-        return list(pool.map(transform, extracted))
+        return list(pool.map(transform, enumerate(extracted, 1)))
 
 
 def validate_payload(p: dict) -> list[str]:

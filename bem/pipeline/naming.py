@@ -15,6 +15,13 @@ def run_id() -> str:
     return _run_id
 
 
+def new_run() -> str:
+    """Start a new execution (long-running processes call this per job)."""
+    global _run_id
+    _run_id = None
+    return run_id()
+
+
 def stamped(path: pathlib.Path) -> pathlib.Path:
     """`dir/name.ext` -> `dir/<run id>_name.ext`."""
     return path.with_name(f"{run_id()}_{_PREFIX.sub('', path.name)}")

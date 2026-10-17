@@ -26,7 +26,7 @@ if storage_dir = System.get_env("DOCUMENT_STORAGE_DIR") do
   config :api, :document_storage_dir, storage_dir
 end
 
-# Pipeline (bem) endpoint that uploaded documents are sent to, e.g. http://bem:8000/process.
+# Pipeline (bem) endpoint that uploaded documents are sent to, e.g. http://pipeline:8000/execute.
 # Unset: uploads are stored but not processed.
 pipeline_url = System.get_env("PIPELINE_URL")
 

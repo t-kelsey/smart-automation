@@ -6,15 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .. import pdfutil, schemas
 from ..naming import base, stamped
+from ..output import Recorder, dump_json
 from ..ai import PipelineError, StepReport, get_ai, log
 
 MAX_READ_PAGES = 20  # the Read tool renders at most 20 PDF pages per call
 
 
 def _dump(path: pathlib.Path, data) -> None:
-    path = stamped(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    dump_json(stamped(path), data)
 
 
 # --------------------------------------------------------------------------
@@ -38,7 +37,12 @@ only through the structured output, not as prose."""
 
 
 def filter_pages(
-    pdf: pathlib.Path, out_dir: pathlib.Path, report: StepReport, chunk_size: int, workers: int
+    pdf: pathlib.Path,
+    out_dir: pathlib.Path,
+    report: StepReport,
+    chunk_size: int,
+    workers: int,
+    recorder: Recorder = Recorder(),
 ) -> tuple[pathlib.Path, list[str]] | None:
     """Returns (PDF with only borehole log pages, one hint per kept page), or None if there are none."""
     step_dir = out_dir / "01_filter"
@@ -57,8 +61,8 @@ def filter_pages(
         n = end - start + 1
         result = get_ai().run(
             FILTER_PROMPT.format(path=chunk_pdf, n=n),
-            model="haiku",
-            effort="high",
+            model=report.model,
+            effort=report.effort,
             schema=schemas.CLASSIFY_PAGES,
             report=report,
             add_dirs=[out_dir],
@@ -81,7 +85,11 @@ def filter_pages(
         pages = [row for rows in pool.map(classify, chunks) for row in rows]
 
     kept = [p["page"] for p in pages if p["is_borehole_log"]]
-    _dump(step_dir / "classification.json", {"source": str(pdf), "total_pages": total, "kept_pages": kept, "pages": pages})
+    recorder.record(
+        "filter",
+        {"source": pdf.name, "total_pages": total, "kept_pages": kept, "pages": pages},
+        path=stamped(step_dir / "classification.json"),
+    )
     log(f"step 1: keeping {len(kept)} of {total} pages")
     if not kept:
         return None
