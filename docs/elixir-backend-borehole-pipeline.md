@@ -179,18 +179,20 @@ One row per `extraction_result` (1:1), cascading the same way.
 - `PUT /api/documents/:document_id/triage_sections/:section_index/sink_result` — upsert the sink result for one section
 - `GET /api/documents/:document_id/pipeline_trace` — the full trace for a document (stage runs + triage sections, each with its extraction/sink result) in one nested response, for troubleshooting
 
-See `bem/API_INTEGRATION.md` for the full contract (bodies, call order) from `bem/`'s side; BEM-side changes to actually call these are out of scope for `api/`.
+`bem/API_INTEGRATION.md` documented the full contract (bodies, call order) from the old `bem/`'s side at the time; that file no longer exists in the repo, and the pipeline it described (and these endpoints) have since been dropped (ADR-0034).
 
 ---
 
-## Pipeline Runs & Stage Tracking (current, ADR-0034/ADR-0035)
+## Pipeline Runs & Stage Tracking (current, ADR-0034/ADR-0035/ADR-0037)
 
-The current pipeline is `claude_test/` (`claude_test/README.md`), not `bem/`: a sequence of `claude -p` calls — `01_filter` (keep only borehole-log pages) → `02_split` (one PDF per borehole) → `03_extract` (raw-language JSON per borehole) → `04_transform` (English, DB-shaped `{payload, validation_issues}` per borehole) — followed by `POST /api/boreholes` per extracted borehole. The flow a frontend developer needs, end to end:
+See [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the consolidated, current account of this whole flow (with a sequence diagram) — it supersedes reading ADR-0033/0034/0035 in sequence. Summary:
+
+The current pipeline is `bem/` (`bem/README.md`; ADR-0034/ADR-0035 call it `claude_test/`, a name that no longer matches the repo), not the old five-stage `bem/` design described above: a sequence of `claude -p` calls — `01_filter` (keep only borehole-log pages) → `02_split` (one PDF per borehole) → `03_extract` (raw-language JSON per borehole) → `04_transform` (English, DB-shaped `{payload, validation_issues}` per borehole) — followed by `POST /api/boreholes` per extracted borehole. The flow a frontend developer needs, end to end:
 
 1. **Upload**: `POST /api/documents` (ADR-0033) stores the file and creates a `documents` row (`status: "pending"`). This no longer starts processing by itself (ADR-0035).
-2. **Pick a config, then submit**: once the user has chosen per-stage model/effort settings (a free-form map), the frontend calls `POST /api/pipeline_runs` with `{document_id, config}`. The backend creates a `pipeline_runs` row (`status: "new"`) and itself submits the run to `claude_test/` over `PIPELINE_URL`: a file-free JSON webhook (`document_id`, `pipeline_id`, `config`, no file bytes), moving `status` to `"running"` on success or `"failed"` if the pipeline can't be reached. The pipeline fetches the document's file itself via `GET /api/documents/:id/file` (ADR-0035) — the same mechanism it uses for the split-out per-borehole PDFs it uploads mid-run via `POST /api/documents` (ADR-0034).
+2. **Pick a config, then submit**: once the user has chosen per-stage model/effort settings (a free-form map), the frontend calls `POST /api/pipeline_runs` with `{document_id, config}`. The backend creates a `pipeline_runs` row (`status: "new"`) and itself submits the run to `bem/` over `PIPELINE_URL`: a file-free JSON webhook (`document_id`, `pipeline_id`, `config`, no file bytes), moving `status` to `"running"` on success or `"failed"` if the pipeline can't be reached. The pipeline fetches the document's file itself via `GET /api/documents/:id/file` (ADR-0035). (ADR-0034 designed this endpoint to also serve split-out per-borehole PDFs the pipeline would upload mid-run via `POST /api/documents`, but the current pipeline doesn't upload any such documents — see ADR-0037.)
 3. **Poll progress**: `GET /api/pipeline_runs/:id` returns the run's `status`/`config`, its `exec_stages` (one row per step execution, `type` `filter`/`split`/`extract`/`transform`, append-only so reruns are comparable — ADR-0034) and its `report` (per-step model/time/token/cost stats, `null` until posted).
-4. **Finish**: when the whole run completes, `claude_test/` calls `PUT /api/pipeline_runs/:id/status` with `"completed"` or `"failed"`; by then it has already posted the extracted boreholes via the unchanged `POST /api/boreholes` (ADR-0031).
+4. **Finish**: when the whole run completes, `bem/` calls `PUT /api/pipeline_runs/:id/status` with `"completed"` or `"failed"`; by then it has already posted the extracted boreholes via the unchanged `POST /api/boreholes` (ADR-0031). `PUT /api/documents/:id/status` (ADR-0033) still exists but is no longer called by this flow — legacy/manual bookkeeping only (see `docs/api-reference.md`).
 
 `exec_stages`/`stage_document_links`/`reports` (ADR-0034) are the tables the pipeline writes its per-step output to; `pipeline_runs` (ADR-0035) is the submission/polling layer the frontend talks to on top of them. Full request/response docs: the "Pipeline runs" section of `docs/api-reference.md`.
 
@@ -209,7 +211,7 @@ The current pipeline is `claude_test/` (`claude_test/README.md`), not `bem/`: a 
 ### 2. Ingestion pipeline
 > **Superseded by ADR-0031** for the creation step: there is no external extraction service to poll (`bem/` runs extraction itself and reports results directly, ADR-0030), so the design below was not built. `POST /api/boreholes` (synchronous, see Task 4) is what exists today. The upload endpoint also doesn't exist yet — see `bem/API_INTEGRATION.md` for how `bem/` gets a `document_id` without one.
 
-- ~~Upload endpoint (`POST /api/documents`) accepting a file, stores it (local disk for the hackathon, or S3-compatible bucket), creates a `documents` row with `status: :pending`~~
+- ~~Upload endpoint (`POST /api/documents`) accepting a file, stores it (local disk for the hackathon, or S3-compatible bucket), creates a `documents` row with `status: :pending`~~ — built since, see ADR-0033 and "Pipeline Runs & Stage Tracking" above.
 - ~~Background job (use `Oban` — add dep) that:~~
   1. ~~Calls the external extraction service via `Req` (per `AGENTS.md`, avoid `:httpoison`/`:tesla`)~~
   2. ~~Stores the raw JSON result in `documents.raw_extraction`~~

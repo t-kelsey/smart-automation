@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Type: application/json`). No authentication is currently implemented. Errors always have the shape `{ "errors": { "detail": "..." } }`.
 
-This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031), the document upload endpoints (ADR-0033), and the `claude_test/` pipeline submission/tracking endpoints (ADR-0034, ADR-0035, see the "Pipeline runs" section below). Uploading a document (`POST /api/documents`) no longer starts processing by itself (ADR-0035) — the frontend uploads a file, lets the user pick a per-stage model/effort `config`, then calls `POST /api/pipeline_runs` to actually submit the run and polls `GET /api/pipeline_runs/:id` for progress.
+This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031), the document upload endpoints (ADR-0033), and the `bem/` pipeline submission/tracking endpoints (ADR-0034, ADR-0035 call this pipeline `claude_test/`; see the "Pipeline runs" section below). Uploading a document (`POST /api/documents`) no longer starts processing by itself (ADR-0035) — the frontend uploads a file, lets the user pick a per-stage model/effort `config`, then calls `POST /api/pipeline_runs` to actually submit the run and polls `GET /api/pipeline_runs/:id` for progress. See [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the consolidated, current account of this whole flow end to end (supersedes reading ADR-0033/0034/0035 in sequence).
 
 > **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0026). Never publish or commit these files.
 
@@ -245,13 +245,30 @@ Metadata of a single document, for the document viewer page. Same fields as the 
 
 ---
 
+## `PUT /api/documents/:id/status`
+
+Sets a document's processing status directly. Body `{ "status": "..." }`, one of `pending`, `processing`, `extracted`, `failed`, `reviewed`.
+
+**Legacy/manual bookkeeping only** — the current `bem/` pipeline (see the "Pipeline runs" section and [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md)) never calls this endpoint; it reports a run's outcome on `pipeline_runs` instead (`PUT /api/pipeline_runs/:id/status`). Nothing currently keeps `documents.status` in sync with a `pipeline_runs` row's status, so the two can disagree. Use this endpoint only for manual status corrections outside of a pipeline run.
+
+`200` with the same shape as [`GET /api/documents/:id`](#get-apidocumentsid). `422` if `status` is not one of the allowed values. `404` if the document does not exist or the id is not a UUID.
+
+```bash
+curl -X PUT "http://localhost:4000/api/documents/c7a2.../status" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "reviewed"}'
+```
+
+---
+
 ## `GET /api/documents/:id/file`
 
 The stored source file of a document, for viewing in the application (ADR-0026). Works for any
-document id, not just the one from the end user's initial upload — including the split-out
-per-borehole PDFs the pipeline itself uploads mid-run via `POST /api/documents` (ADR-0034). This
-is how the pipeline fetches every file it needs, keyed by `document_id`; the `pipeline_runs`
-webhook below never pushes file bytes.
+document id, not just the one from the end user's initial upload — it is also how the pipeline
+fetches the document's file by `document_id` once a run is submitted; the `pipeline_runs` webhook
+below never pushes file bytes. (ADR-0034 designed this to also cover split-out per-borehole PDFs
+the pipeline would upload mid-run via `POST /api/documents`, but the current `bem/` pipeline
+doesn't upload any such documents — see ADR-0037.)
 
 | Param | Description |
 |---|---|
@@ -268,7 +285,7 @@ curl -OJ "http://localhost:4000/api/documents/c7a2.../file?download=1"
 
 ## Pipeline runs (`pipeline_runs` / `exec_stages` / `reports`)
 
-Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `claude_test/` pipeline runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
+Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `bem/` pipeline (`claude_test/` in ADR-0034/ADR-0035) runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
 
 ### `POST /api/pipeline_runs`
 
@@ -276,8 +293,7 @@ Creates a pipeline run for a document and submits it to the pipeline (ADR-0035).
 
 Submission POSTs a small JSON body (`document_id`, `pipeline_id`, `config`) to `PIPELINE_URL` — no
 file bytes. The pipeline fetches the document's file itself via
-[`GET /api/documents/:id/file`](#get-apidocumentsidfile), the same way it fetches any split-out
-per-borehole PDF it uploads mid-run.
+[`GET /api/documents/:id/file`](#get-apidocumentsidfile).
 
 ```json
 {
@@ -291,7 +307,7 @@ per-borehole PDF it uploads mid-run.
 | `document_id` | UUID of an existing document (from `POST /api/documents`). |
 | `config` | Free-form map of per-stage model/effort choices, stored as-is and sent to the pipeline unchanged. |
 
-Submission happens synchronously in this request: the response's `status` reflects whether the pipeline could be reached (`running`) or not (`new` if no `PIPELINE_URL` is configured, `failed` if the pipeline refused the request or couldn't be reached).
+Submission happens synchronously in this request: the response's `status` reflects whether the pipeline could be reached (`running`) or not (`new` if no `PIPELINE_URL` is configured, `failed` if the pipeline refused the request or couldn't be reached). See [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the full flow this kicks off.
 
 `201`:
 
@@ -308,7 +324,7 @@ Submission happens synchronously in this request: the response's `status` reflec
 }
 ```
 
-`422` (`{ "errors": { "detail": "..." } }`) if `document_id` is missing or invalid. `400` if `document_id` doesn't reference an existing document.
+`400` (`{ "errors": { "detail": "..." } }`) if `document_id` is missing, not a valid UUID, or doesn't reference an existing document.
 
 ```bash
 curl -X POST "http://localhost:4000/api/pipeline_runs" \
@@ -384,7 +400,7 @@ Records one step execution. Append-only — rerunning a step adds a new row rath
 | `data` | Free-form JSON, the step's output file as-is. |
 | `document_ids` | At least one document UUID this stage's output belongs to — the original source document, and/or (for `extract`/`transform`) the split-out per-borehole PDF once that is itself a tracked document. Creates the `stage_document_links` rows. |
 
-`201` with `{ "data": <exec_stage, plus "document_ids"> }`. `422` if `type` is invalid or `data`/`document_ids` is missing. `400` if any `document_ids` entry doesn't reference an existing document.
+`201` with `{ "data": <exec_stage, plus "document_ids"> }`. `422` if `type`, `run_id` or `data` is missing/invalid (changeset validation). `400` if `document_ids` is missing/empty, or any entry doesn't reference an existing document.
 
 ### `GET /api/documents/:document_id/exec_stages`
 
@@ -394,7 +410,7 @@ Every stage execution linked to a document, newest first (a document can have se
 { "data": [ { "id": "...", "type": "extract", "run_id": "20261017-180433", "position": 1, "data": {}, "inserted_at": "..." } ] }
 ```
 
-`404` if the document doesn't exist.
+`200` with `{ "data": [] }` if the document doesn't exist or the id is not a UUID — this endpoint does not check that the document exists, it just returns whatever is linked (nothing, in that case).
 
 ### `POST /api/reports`
 
