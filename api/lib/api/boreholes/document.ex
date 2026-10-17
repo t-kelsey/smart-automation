@@ -18,6 +18,9 @@ defmodule Api.Boreholes.Document do
 
     many_to_many :boreholes, Api.Boreholes.Borehole, join_through: Api.Boreholes.BoreholeDocument
 
+    has_many :pipeline_stage_runs, Api.Boreholes.PipelineStageRun
+    has_many :triage_sections, Api.Boreholes.TriageSection
+
     timestamps(type: :utc_datetime)
   end
 
