@@ -32,10 +32,13 @@ def collect_inputs(paths: list[Path]) -> list[Path]:
 
 
 def save_stage(stage: str, path: Path, content: str, suffix: str = ".md") -> None:
-    """Write one stage's output to output/<stage>/<input stem><suffix> (debug only)."""
+    """Write one stage's output to output/<stage>/<parent folder>__<input stem><suffix> (debug only).
+
+    The folder prefix keeps apart inputs that share a file name (e.g. Report01.pdf).
+    """
     out_dir = OUTPUT_DIR / stage
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / f"{path.stem}{suffix}").write_text(content, encoding="utf-8")
+    (out_dir / f"{path.parent.name}__{path.stem}{suffix}").write_text(content, encoding="utf-8")
 
 
 def process_file(path: Path, sink, debug: bool) -> int:
@@ -43,7 +46,7 @@ def process_file(path: Path, sink, debug: bool) -> int:
 
     With debug, the output of OCR, translation, triage and extraction is saved under output/.
     """
-    document = ocr_file(path)              # any format -> TextDocument (digital text layer or OCR'd pages)
+    document = ocr_file(path)              # any format -> markdown (every page is OCR'd)
     if debug:
         save_stage("ocr", path, document)
     document, _ = translate(document)  # local terms -> English, keywords labeled
