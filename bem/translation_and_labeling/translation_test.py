@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from translation_and_extraction import translate
+from bem.translation_and_labeling.translation_and_labeling import translate
 
 BEM_DIR = Path(__file__).resolve().parents[1]
 OCR_DIR = BEM_DIR / "output" / "ocr"

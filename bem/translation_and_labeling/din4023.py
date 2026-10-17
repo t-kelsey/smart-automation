@@ -19,10 +19,10 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from bem.translation_and_extraction.format_keys import FORMAT_TARGETS, VALUE_KIND, resolve_label
+from bem.translation_and_labeling.format_keys import FORMAT_TARGETS, VALUE_KIND, resolve_label
 
 if TYPE_CHECKING:
-    from bem.translation_and_extraction.mt import Translator
+    from bem.translation_and_labeling.mt import Translator
 
 log = logging.getLogger(__name__)
 

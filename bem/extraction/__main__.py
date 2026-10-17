@@ -6,7 +6,7 @@
 Input : a plain-text file (OCR output of one borehole report)
 Output: <out-dir>/<name>.json   record + status + issues + provenance   (always)
         <out-dir>/<name>.md     record in template format               (only with --markdown)
-The default out-dir is ./output, relative to the folder you run the command in.
+The default out-dir is bem/output/extraction (inside the repo, wherever you run the command from).
 """
 from __future__ import annotations
 
@@ -22,6 +22,9 @@ from pathlib import Path
 from .extract import extract, make_client
 from .render import render
 from .validate import check_all, status
+
+# this file lives in bem/extraction/, so two levels up is bem/  ->  bem/output/extraction
+DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "output" / "extraction"
 
 
 class Spinner:
@@ -61,7 +64,7 @@ class Spinner:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract one borehole record from an OCR text file.")
     ap.add_argument("input", type=Path, help="OCR text file (.txt)")
-    ap.add_argument("--out-dir", type=Path, default=Path("output"), help="output folder (default: ./output)")
+    ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="output folder (default: bem/output/extraction)")
     ap.add_argument("--markdown", action="store_true", help="also write the record in template Markdown format")
     ap.add_argument("--model", default="qwen3.5:2b")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
