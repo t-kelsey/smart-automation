@@ -23,6 +23,7 @@ Implemented exactly as designed in that section:
   - `PUT /api/documents/:document_id/triage_sections/:section_index/sink_result`
 - Latest run only — no append-only history, consistent with the original design decision.
 - Debug/internal only: nothing here is ever serialised in a public API response, same rule as `storage_path`/`raw_extraction` (ADR-0014).
+- A read endpoint, `GET /api/documents/:document_id/pipeline_trace`, assembles the full trace for a document — its stage runs and its triage sections each with their (possibly absent) extraction and sink result — in one nested response, for the troubleshooting this whole feature exists for. Not in `docs/api-reference.md`: same debug/internal-only rule as the four `PUT` endpoints.
 
 `bem/API_INTEGRATION.md` documents the contract for whoever wires up `bem/`'s output.
 

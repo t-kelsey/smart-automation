@@ -11,6 +11,14 @@ defmodule ApiWeb.PipelineController do
 
   action_fallback ApiWeb.FallbackController
 
+  @doc "Full pipeline trace for a document: stage runs + triage sections with their extraction/sink results."
+  def trace(conn, %{"document_id" => document_id}) do
+    case Boreholes.get_document_pipeline_trace(document_id) do
+      nil -> {:error, :not_found}
+      trace -> render(conn, :trace, trace: trace)
+    end
+  end
+
   @doc "Upserts the OCR or translation result for a document."
   def put_stage(conn, %{"document_id" => document_id, "stage" => stage} = params) do
     with {:ok, run} <- Boreholes.put_pipeline_stage_run(document_id, stage, params) do

@@ -175,6 +175,7 @@ One row per `extraction_result` (1:1), cascading the same way.
 - `PUT /api/documents/:document_id/triage_sections` — replace all triage sections for a document in one call (body: list of sections)
 - `PUT /api/documents/:document_id/triage_sections/:section_index/extraction_result` — upsert the extraction result for one section
 - `PUT /api/documents/:document_id/triage_sections/:section_index/sink_result` — upsert the sink result for one section
+- `GET /api/documents/:document_id/pipeline_trace` — the full trace for a document (stage runs + triage sections, each with its extraction/sink result) in one nested response, for troubleshooting
 
 See `bem/API_INTEGRATION.md` for the full contract (bodies, call order) from `bem/`'s side; BEM-side changes to actually call these are out of scope for `api/`.
 

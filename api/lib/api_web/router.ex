@@ -18,6 +18,7 @@ defmodule ApiWeb.Router do
 
     put "/documents/:document_id/pipeline_stages/:stage", PipelineController, :put_stage
     put "/documents/:document_id/triage_sections", PipelineController, :put_triage_sections
+    get "/documents/:document_id/pipeline_trace", PipelineController, :trace
 
     put "/documents/:document_id/triage_sections/:section_index/extraction_result",
         PipelineController,

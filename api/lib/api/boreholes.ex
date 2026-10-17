@@ -249,6 +249,34 @@ defmodule Api.Boreholes do
       Path.join(:code.priv_dir(:api), "storage")
   end
 
+  @doc """
+  Assembles the full pipeline trace for a document — its OCR/translation stage runs, and its
+  triage sections each with their extraction and sink result — for troubleshooting (ADR-0030).
+
+  Returns `nil` if the id is not a valid UUID or no such document exists.
+  """
+  def get_document_pipeline_trace(id) do
+    case get_document(id) do
+      nil ->
+        nil
+
+      document ->
+        stage_runs =
+          from(p in PipelineStageRun, where: p.document_id == ^document.id, order_by: p.stage)
+          |> Repo.all()
+
+        sections =
+          from(t in TriageSection,
+            where: t.document_id == ^document.id,
+            order_by: t.section_index
+          )
+          |> Repo.all()
+          |> Repo.preload(extraction_result: :sink_result)
+
+        %{document: document, pipeline_stage_runs: stage_runs, triage_sections: sections}
+    end
+  end
+
   # -- Query building --------------------------------------------------------------------------
 
   defp filtered_query(filters) do

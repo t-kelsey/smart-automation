@@ -120,6 +120,15 @@ Failure (step 3 returned non-2xx, or wasn't attempted):
 pipeline_stages/ocr  →  pipeline_stages/translation  →  triage_sections  →  for each section: extraction_result  →  POST /boreholes  →  sink_result
 ```
 
+## Checking what got recorded
+
+Not part of the write flow above, but useful while debugging it:
+
+```
+GET /api/documents/:document_id/pipeline_trace
+```
+Returns everything reported for that document in one nested response — its `pipeline_stage_runs`, and its `triage_sections` each with their `extraction_result`/`sink_result` (`null` if not reported yet). Good for checking "did my `PUT` calls actually land the way I think they did" without going into the database directly.
+
 ## Rules that don't change
 
 - Never send anything from `data/` (the confidential sample dataset) to any service outside this
