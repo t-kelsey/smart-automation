@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Type: application/json`). No authentication is currently implemented. Errors always have the shape `{ "errors": { "detail": "..." } }`.
 
-This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031). A file-upload endpoint doesn't exist yet — see [`bem/API_INTEGRATION.md`](../bem/API_INTEGRATION.md) for how `bem/` gets a `document_id` without one, and for the separate debug/internal pipeline-stage-tracking endpoints (ADR-0030), not covered here since they're never public.
+This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031) and the document upload endpoints (ADR-0033). The [Pipeline stage tracking](#pipeline-stage-tracking-exec_stages--reports-draft) section below is a draft for the `claude_test/` pipeline (ADR-0034), not yet implemented.
 
 > **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0026). Never publish or commit these files.
 
@@ -259,6 +259,60 @@ The stored source file of a document, for viewing in the application (ADR-0026).
 ```bash
 curl -OJ "http://localhost:4000/api/documents/c7a2.../file?download=1"
 ```
+
+---
+
+## Pipeline stage tracking (`exec_stages` / `reports`, draft)
+
+**Not implemented yet** — draft for review, matching the tables from ADR-0034. Debug/internal only (never consumed by `web/`'s public pages), written by the `claude_test/` pipeline as it runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
+
+### `POST /api/exec_stages`
+
+Records one step execution. Append-only — rerunning a step adds a new row rather than replacing the previous one, so every attempt stays comparable.
+
+```json
+{
+  "type": "extract",
+  "run_id": "20261017-180433",
+  "position": 1,
+  "data": { "...": "the step's JSON file as-is, e.g. the raw 03_extract output" },
+  "document_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"]
+}
+```
+
+| Field | Description |
+|---|---|
+| `type` | `filter`, `split`, `extract` or `transform`. |
+| `run_id` | Shared id string grouping every stage (and the `report`) of one pipeline run. |
+| `position` | Borehole index within the run (1, 2, …) for `extract`/`transform`; omit/`null` for the whole-document `filter`/`split` steps. |
+| `data` | Free-form JSON, the step's output file as-is. |
+| `document_ids` | At least one document UUID this stage's output belongs to — the original source document, and/or (for `extract`/`transform`) the split-out per-borehole PDF once that is itself a tracked document. Creates the `stage_document_links` rows. |
+
+`201` with `{ "data": <exec_stage, plus "document_ids"> }`. `422` if `type` is invalid or `data`/`document_ids` is missing. `400` if any `document_ids` entry doesn't reference an existing document.
+
+### `GET /api/documents/:document_id/exec_stages`
+
+Every stage execution linked to a document, newest first (a document can have several — append-only history). Optional `?type=` / `?run_id=` filters.
+
+```json
+{ "data": [ { "id": "...", "type": "extract", "run_id": "20261017-180433", "position": 1, "data": {}, "inserted_at": "..." } ] }
+```
+
+`404` if the document doesn't exist.
+
+### `POST /api/reports`
+
+Records one pipeline run's `report.json` (per-step model/time/token/cost stats).
+
+```json
+{
+  "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "run_id": "20261017-180433",
+  "data": { "...": "report.json as-is" }
+}
+```
+
+`201` with `{ "data": <report> }`. `422` if a required field is missing. `400` if `document_id` doesn't reference an existing document.
 
 ---
 

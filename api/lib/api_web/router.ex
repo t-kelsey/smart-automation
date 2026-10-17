@@ -16,18 +16,11 @@ defmodule ApiWeb.Router do
     post "/documents", DocumentController, :create
     get "/documents/:id", DocumentController, :show
     get "/documents/:id/file", DocumentController, :file
+    put "/documents/:id/status", DocumentController, :update_status
 
-    put "/documents/:document_id/pipeline_stages/:stage", PipelineController, :put_stage
-    put "/documents/:document_id/status", PipelineController, :put_status
-    put "/documents/:document_id/triage_sections", PipelineController, :put_triage_sections
-    get "/documents/:document_id/pipeline_trace", PipelineController, :trace
+    post "/exec_stages", ExecStageController, :create
+    get "/documents/:document_id/exec_stages", ExecStageController, :index
 
-    put "/documents/:document_id/triage_sections/:section_index/extraction_result",
-        PipelineController,
-        :put_extraction_result
-
-    put "/documents/:document_id/triage_sections/:section_index/sink_result",
-        PipelineController,
-        :put_sink_result
+    post "/reports", ReportController, :create
   end
 end

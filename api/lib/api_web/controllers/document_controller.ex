@@ -33,6 +33,20 @@ defmodule ApiWeb.DocumentController do
   end
 
   @doc """
+  Updates a document's processing status, reported by the extraction pipeline as it progresses
+  (ADR-0033): `"pending"`/`"processing"` while it runs, `"extracted"`/`"failed"` when it's done.
+  """
+  def update_status(conn, %{"id" => id, "status" => status}) do
+    with %Boreholes.Document{} = document <- Boreholes.get_document(id),
+         {:ok, _document} <- Boreholes.update_document_status(document, status) do
+      render(conn, :show, document: Boreholes.get_document_with_boreholes(id))
+    else
+      nil -> {:error, :not_found}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  @doc """
   Streams a source document from the managed storage, for viewing in the application
   (ADR-0026). `?download=1` asks the browser to save it instead of displaying it.
   """

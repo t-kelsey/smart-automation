@@ -10,10 +10,9 @@ defmodule Api.Boreholes do
   alias Api.Boreholes.BoreholeDocument
   alias Api.Boreholes.BoreholeLayer
   alias Api.Boreholes.Document
-  alias Api.Boreholes.ExtractionResult
-  alias Api.Boreholes.PipelineStageRun
-  alias Api.Boreholes.SinkResult
-  alias Api.Boreholes.TriageSection
+  alias Api.Boreholes.ExecStage
+  alias Api.Boreholes.Report
+  alias Api.Boreholes.StageDocumentLink
 
   @typedoc """
   Filters for `list_boreholes/1`; every key is optional.
@@ -293,38 +292,104 @@ defmodule Api.Boreholes do
     document |> Document.changeset(%{status: status}) |> Repo.update()
   end
 
+  # -- Pipeline stage tracking (write path for `claude_test/`, ADR-0034) --------------------------
+  # Debug/internal only, never consumed by `web/`. Append-only: unlike the dropped bem tables
+  # (ADR-0030), reruns add new rows instead of replacing previous ones.
+
+  @doc """
+  Records one pipeline step execution (`attrs` with `"type"`, `"run_id"`, `"position"`, `"data"`),
+  linked to every document id in `attrs["document_ids"]` (at least one required).
+  """
+  def create_exec_stage(attrs) do
+    document_ids = attrs["document_ids"] || attrs[:document_ids] || []
+
+    Repo.transaction(fn ->
+      with {:ok, exec_stage} <- %ExecStage{} |> ExecStage.changeset(attrs) |> Repo.insert(),
+           {:ok, _links} <- link_documents(exec_stage, document_ids) do
+        Repo.preload(exec_stage, :documents)
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp link_documents(_exec_stage, []) do
+    {:error, "document_ids must have at least one entry"}
+  end
+
+  defp link_documents(exec_stage, document_ids) do
+    Enum.reduce_while(document_ids, {:ok, []}, fn document_id, {:ok, acc} ->
+      case get_document(document_id) do
+        nil ->
+          {:halt,
+           {:error, "document_ids does not reference an existing document: #{document_id}"}}
+
+        document ->
+          %StageDocumentLink{}
+          |> StageDocumentLink.changeset(%{
+            exec_stage_id: exec_stage.id,
+            document_id: document.id
+          })
+          |> Repo.insert()
+          |> case do
+            {:ok, link} -> {:cont, {:ok, [link | acc]}}
+            {:error, changeset} -> {:halt, {:error, changeset}}
+          end
+      end
+    end)
+  end
+
+  @doc """
+  Every `exec_stage` linked to a document (via `stage_document_links`), newest first. Optional
+  `filters["type"]`/`filters["run_id"]` narrow it down. `[]` if the id is not a valid UUID or no
+  such document exists.
+  """
+  def list_document_exec_stages(document_id, filters \\ %{}) do
+    case Ecto.UUID.cast(document_id) do
+      {:ok, uuid} ->
+        from(e in ExecStage,
+          join: l in StageDocumentLink,
+          on: l.exec_stage_id == e.id,
+          where: l.document_id == ^uuid,
+          distinct: true,
+          order_by: [desc: e.inserted_at]
+        )
+        |> filter_exec_stages(filters)
+        |> Repo.all()
+        |> Repo.preload(:documents)
+
+      :error ->
+        []
+    end
+  end
+
+  defp filter_exec_stages(query, filters) do
+    query
+    |> maybe_filter(:type, filters["type"] || filters[:type])
+    |> maybe_filter(:run_id, filters["run_id"] || filters[:run_id])
+  end
+
+  defp maybe_filter(query, _field, nil), do: query
+  defp maybe_filter(query, :type, type), do: where(query, [e], e.type == ^type)
+  defp maybe_filter(query, :run_id, run_id), do: where(query, [e], e.run_id == ^run_id)
+
+  @doc """
+  Records one pipeline run's report (`attrs` with `"document_id"`, `"run_id"`, `"data"`).
+  `"document_id"` must reference an existing document.
+  """
+  def create_report(attrs) do
+    document_id = attrs["document_id"] || attrs[:document_id]
+
+    case get_document(document_id) do
+      nil -> {:error, "document_id does not reference an existing document"}
+      _document -> %Report{} |> Report.changeset(attrs) |> Repo.insert()
+    end
+  end
+
   @doc "The directory holding the stored document files (`DOCUMENT_STORAGE_DIR` or `priv/storage`)."
   def storage_dir do
     Application.get_env(:api, :document_storage_dir) ||
       Path.join(:code.priv_dir(:api), "storage")
-  end
-
-  @doc """
-  Assembles the full pipeline trace for a document — its OCR/translation stage runs, and its
-  triage sections each with their extraction and sink result — for troubleshooting (ADR-0030).
-
-  Returns `nil` if the id is not a valid UUID or no such document exists.
-  """
-  def get_document_pipeline_trace(id) do
-    case get_document(id) do
-      nil ->
-        nil
-
-      document ->
-        stage_runs =
-          from(p in PipelineStageRun, where: p.document_id == ^document.id, order_by: p.stage)
-          |> Repo.all()
-
-        sections =
-          from(t in TriageSection,
-            where: t.document_id == ^document.id,
-            order_by: t.section_index
-          )
-          |> Repo.all()
-          |> Repo.preload(extraction_result: :sink_result)
-
-        %{document: document, pipeline_stage_runs: stage_runs, triage_sections: sections}
-    end
   end
 
   # -- Query building --------------------------------------------------------------------------
@@ -469,93 +534,4 @@ defmodule Api.Boreholes do
   end
 
   defp escape_like(s), do: String.replace(s, ~r/([\\%_])/, "\\\\\\1")
-
-  # -- Pipeline stage tracking (write path for `bem/`, design doc: ------------------------------
-  # docs/elixir-backend-borehole-pipeline.md, "Proposed Extension: Pipeline Stage Tracking".
-  # Debug/internal only, never consumed by `web/`. Latest run only: each `put_*`/`replace_*`
-  # call below replaces the previous result for that document/stage/section rather than keeping
-  # history. `attrs` is expected to be the string-keyed map straight from controller params.
-
-  @doc """
-  Upserts the OCR or translation result for a document. `stage` is `"ocr"` or `"translation"`.
-  """
-  def put_pipeline_stage_run(document_id, stage, attrs) do
-    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
-         true <- Repo.exists?(from(d in Document, where: d.id == ^uuid)) do
-      (Repo.get_by(PipelineStageRun, document_id: uuid, stage: stage) ||
-         %PipelineStageRun{document_id: uuid, stage: stage})
-      |> PipelineStageRun.changeset(attrs)
-      |> Repo.insert_or_update()
-    else
-      _ -> {:error, :not_found}
-    end
-  end
-
-  @doc """
-  Replaces every triage section for a document with `sections_attrs` (each a map, "section_index"
-  defaults to its 0-based position in the list). Deleting the old sections cascades to their
-  `extraction_results`/`sink_results` automatically.
-  """
-  def replace_triage_sections(document_id, sections_attrs) do
-    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
-         true <- Repo.exists?(from(d in Document, where: d.id == ^uuid)) do
-      Repo.transaction(fn ->
-        Repo.delete_all(from(t in TriageSection, where: t.document_id == ^uuid))
-
-        sections_attrs
-        |> Enum.with_index()
-        |> Enum.reduce_while([], fn {attrs, index}, acc ->
-          %TriageSection{document_id: uuid}
-          |> TriageSection.changeset(Map.put_new(attrs, "section_index", index))
-          |> Repo.insert()
-          |> case do
-            {:ok, section} -> {:cont, [section | acc]}
-            {:error, changeset} -> {:halt, {:error, changeset}}
-          end
-        end)
-        |> case do
-          {:error, changeset} -> Repo.rollback(changeset)
-          sections -> Enum.reverse(sections)
-        end
-      end)
-    else
-      _ -> {:error, :not_found}
-    end
-  end
-
-  @doc """
-  Upserts the extraction result for the triage section at `section_index` within a document.
-  """
-  def put_extraction_result(document_id, section_index, attrs) do
-    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
-         %TriageSection{} = section <-
-           Repo.get_by(TriageSection, document_id: uuid, section_index: section_index) do
-      (Repo.get_by(ExtractionResult, triage_section_id: section.id) ||
-         %ExtractionResult{triage_section_id: section.id})
-      |> ExtractionResult.changeset(attrs)
-      |> Repo.insert_or_update()
-    else
-      _ -> {:error, :not_found}
-    end
-  end
-
-  @doc """
-  Upserts the sink result for the extraction result of the triage section at `section_index`
-  within a document. `attrs["created_borehole_id"]` links the sink attempt to the borehole it
-  actually created, if any.
-  """
-  def put_sink_result(document_id, section_index, attrs) do
-    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
-         %TriageSection{} = section <-
-           Repo.get_by(TriageSection, document_id: uuid, section_index: section_index),
-         %ExtractionResult{} = extraction <-
-           Repo.get_by(ExtractionResult, triage_section_id: section.id) do
-      (Repo.get_by(SinkResult, extraction_result_id: extraction.id) ||
-         %SinkResult{extraction_result_id: extraction.id})
-      |> SinkResult.changeset(attrs)
-      |> Repo.insert_or_update()
-    else
-      _ -> {:error, :not_found}
-    end
-  end
 end

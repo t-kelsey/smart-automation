@@ -19,9 +19,8 @@ defmodule Api.Boreholes.Document do
     field :role, :string, virtual: true
 
     many_to_many :boreholes, Api.Boreholes.Borehole, join_through: Api.Boreholes.BoreholeDocument
-
-    has_many :pipeline_stage_runs, Api.Boreholes.PipelineStageRun
-    has_many :triage_sections, Api.Boreholes.TriageSection
+    many_to_many :exec_stages, Api.Boreholes.ExecStage, join_through: Api.Boreholes.StageDocumentLink
+    has_many :reports, Api.Boreholes.Report
 
     timestamps(type: :utc_datetime)
   end
