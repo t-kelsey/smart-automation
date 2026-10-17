@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Challenge
+
+According to the challenge description on the website the goal and the metric are relevant for the evaluation of the solution. These should always be considered when designing, assessing and implementing a feature.
+
+### Challenge Goal
+
+Develop a system that automatically extracts borehole profiles from PDFs, scans and images, converts them into a standardised format, georeferences them and stores them in a central database that can be searched via an interactive world map.
+
+### Challenge Metric
+
+Success metric: The solution demonstrates reliable extraction, standardisation, georeferencing and storage of borehole profiles. The extracted profiles can be searched in the database and displayed on an interactive world map. Examples can be found in the provided dataset.
+
 ## Project
 
 Hackathon project (Herrenknecht challenge): automated extraction and standardisation of drilling/borehole data into a global geodatabase. Monorepo with two independent apps:
@@ -34,12 +46,14 @@ Architecture Decision Records capture important architectural decisions (e.g. ch
 A Postgres instance is required (docker or local).
 
 API (run in `api/`):
+
 - `mix setup` — deps + create/migrate/seed DB
 - `mix phx.server` — dev server on localhost:4000
 - `mix test` (auto creates/migrates DB); single file: `mix test test/path_test.exs`; rerun failures: `mix test --failed`
 - `mix precommit` — compile with warnings-as-errors, unlock unused deps, format, test. Run when finished with changes.
 
 Web (run in `web/`):
+
 - `pnpm install`, `pnpm dev`
 - `pnpm check` (svelte-check), `pnpm lint` (prettier + eslint), `pnpm format`
 - No test runner is configured.
@@ -53,4 +67,3 @@ Web (run in `web/`):
 ## Source of truth
 
 `api/` owns the data model and API response shape (see `docs/elixir-backend-borehole-pipeline.md` and `docs/adr/`). If `web/`'s existing types or mock data disagree with what the backend actually defines/returns, the backend wins — update the frontend's types/mock data to match it, not the other way around. See ADR-0023.
-
