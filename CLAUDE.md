@@ -47,6 +47,7 @@ Web (run in `web/`):
 ## Conventions
 
 - `api/AGENTS.md` holds the Phoenix/Elixir/Ecto rules; follow it. Notable: use `Req` for HTTP (not HTTPoison/Tesla/httpc); generate migrations with `mix ecto.gen.migration`; don't put programmatically-set fields like `user_id` in `cast`.
+- Web data access follows ADR-0009: UI → service (`web/src/lib/services`) → repository interface (`web/src/lib/repositories`, API or mock). UI code must not import repositories (ESLint enforces it). `PUBLIC_DATA_SOURCE=mock|api` selects the implementation (default `mock`); mock data lives in `repositories/mock/mock-data.ts` (faker).
 - `web/AGENTS.md` expects the Svelte MCP tools (`list-sections`, `get-documentation`, `svelte-autofixer`) to be used when writing Svelte code; Svelte skills live in `web/.github/skills/`.
 
 ## Source of truth
