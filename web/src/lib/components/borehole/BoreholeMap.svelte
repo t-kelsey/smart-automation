@@ -1,5 +1,6 @@
 <script module lang="ts">
 	import type { BoreholeSummary, MapPoint } from '#lib/domain/borehole.ts';
+	import type { DominantLayer } from '#lib/components/borehole/dot-icons.ts';
 	import { notify } from '#lib/components/toast/index.ts';
 	import { createServices } from '#lib/services/index.ts';
 
@@ -11,6 +12,11 @@
 	let pointsPromise: Promise<MapPoint[]> | undefined;
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain cache, nothing renders from it
 	const summaryCache = new Map<string, BoreholeSummary>();
+	// Dominant material per borehole, loaded only for boreholes drawn as single dots.
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain cache, nothing renders from it
+	const materials = new Map<string, DominantLayer | null>();
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain lookup, nothing renders from it
+	const materialsPending = new Set<string>();
 
 	const getServices = () => (servicesPromise ??= createServices({ fetch: globalThis.fetch }));
 
@@ -46,6 +52,15 @@
 	import { LocateFixedIcon } from '@lucide/svelte';
 	import Supercluster from 'supercluster';
 	import { mapColors } from './map-colors.ts';
+	import {
+		colorIconSvg,
+		iconSize,
+		dominantLayer,
+		iconPixelRatio,
+		patternIconSvg,
+		plainIconSvg,
+		renderIcon
+	} from './dot-icons.ts';
 	interface MapView {
 		lat: number;
 		lon: number;
@@ -73,6 +88,8 @@
 		onViewChange?: (view: MapView) => void;
 		/** Show a button in the lower right corner that moves the map to the user's location. */
 		showLocate?: boolean;
+		/** Fill each dot with the hatch of its biggest layer; off shows the plain verified/unverified colour. */
+		showFill?: boolean;
 		/** Called once the map has rendered its first complete view. */
 		onReady?: () => void;
 	}
@@ -85,6 +102,7 @@
 		onMapClick,
 		onViewChange,
 		showLocate = false,
+		showFill = false,
 		onReady
 	}: Props = $props();
 
@@ -93,6 +111,13 @@
 
 	let mapInstance: maplibregl.Map | undefined;
 	let locateNow: (() => void) | undefined;
+	let redrawDots: (() => void) | undefined;
+
+	// Redraw the dots when the fill is switched on or off.
+	$effect(() => {
+		void showFill;
+		redrawDots?.();
+	});
 	let locating = $state(false);
 
 	/** A picture of what the map currently shows, or undefined if it cannot be taken. */
@@ -136,71 +161,171 @@
 		map.addSource('boreholes', { type: 'geojson', data: emptyCollection });
 		map.addLayer({
 			id: 'boreholes',
-			type: 'circle',
+			type: 'symbol',
 			source: 'boreholes',
-			paint: {
-				'circle-radius': 8,
-				'circle-color': ['case', ['get', 'verified'], mapColors.verified, mapColors.unverified],
-				'circle-stroke-width': 2.5,
-				'circle-stroke-color': '#ffffff'
+			layout: {
+				'icon-image': ['get', 'icon'],
+				'icon-allow-overlap': true,
+				'icon-ignore-placement': true
 			}
 		});
 		const source = map.getSource<maplibregl.GeoJSONSource>('boreholes');
 
-		// --- clusters: plain button markers
-		const clusterMarkers = new Map<number, maplibregl.Marker>();
-		function createClusterMarker(clusterId: number, count: number, lngLat: [number, number]) {
+		// --- dots: the inner circle is the hatch of the dominant material, or the verified colour until it is loaded
+		const iconPending = new Set<string>();
+		let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+		let active = true;
+		// Redraws the dots once icons or materials arrive; a burst of responses shares one redraw
+		function scheduleRefresh() {
+			if (!active || refreshTimer) return;
+			refreshTimer = setTimeout(() => {
+				refreshTimer = undefined;
+				update();
+			}, 100);
+		}
+		// Adds the icon once it is rasterised; true when it can be drawn now
+		function ensureIcon(id: string, svg: () => string): boolean {
+			if (map.hasImage(id)) return true;
+			if (!iconPending.has(id)) {
+				iconPending.add(id);
+				renderIcon(svg())
+					.then((image) => {
+						if (active && !map.hasImage(id))
+							map.addImage(id, image, { pixelRatio: iconPixelRatio });
+					})
+					.catch(() => {})
+					.finally(() => {
+						iconPending.delete(id);
+						scheduleRefresh();
+					});
+			}
+			return false;
+		}
+		// The material's hatch once known, else the verified colour
+		function resolveIcon(point: MapPoint, layer: DominantLayer | null | undefined): string {
+			const ring = '#ffffff';
+			if (layer) {
+				const id = `dot-pattern-${layer.material}-${layer.color}-${point.verified}`;
+				if (ensureIcon(id, () => patternIconSvg(layer, ring))) return id;
+			}
+			const id = `dot-color-${point.verified}`;
+			ensureIcon(id, () => colorIconSvg(point.verified ? mapColors.verified : mapColors.unverified, ring));
+			return id;
+		}
+		// The verified or unverified colour on a white rim, without the material fill
+		function resolvePlainIcon(point: MapPoint): string {
+			const id = `dot-plain-${point.verified}`;
+			ensureIcon(id, () => plainIconSvg(point.verified ? mapColors.verified : mapColors.unverified));
+			return id;
+		}
+		// Loads the dominant material of a borehole once; the map points do not carry it
+		function requestMaterial(id: string) {
+			if (materials.has(id) || materialsPending.has(id)) return;
+			materialsPending.add(id);
+			getServices()
+				.then(({ boreholes }) => boreholes.getById(id))
+				.then((borehole) => {
+					materials.set(id, dominantLayer(borehole) ?? null);
+				})
+				.catch(() => {
+					materials.set(id, null);
+				})
+				.finally(() => {
+					materialsPending.delete(id);
+					scheduleRefresh();
+				});
+		}
+
+		// --- markers: plain button markers for clusters, and for single boreholes at zoom 5 or less
+		const markers = new Map<string, maplibregl.Marker>();
+		// Size grows with log(count): 70% of the 36px base for small clusters, 170% for all boreholes
+		const markerBaseSize = 36;
+		const markerScaleMax = Math.log10(Math.max(points.length, 2));
+		// Zoom scales it linearly too: 100% at zoom 5, 300% at zoom 15
+		function applyMarkerSize(element: HTMLElement, count: number) {
+			const t = Math.min(1, Math.log10(Math.max(count, 1)) / markerScaleMax);
+			const zoomScale = Math.min(3, Math.max(1, 1 + (map.getZoom() - 5) / 5));
+			const size = Math.round(markerBaseSize * (0.7 + 1.0 * t) * zoomScale);
+			element.style.width = element.style.height = `${size}px`;
+			// The 12px label on the 36px base keeps its ratio as the circle grows
+			element.style.fontSize = `${size / 3}px`;
+		}
+		function createCountMarker(count: number, lngLat: [number, number], onClick: () => void) {
 			const element = document.createElement('button');
 			element.type = 'button';
 			element.textContent = count >= 1000 ? `${Math.round(count / 100) / 10}k` : String(count);
-			element.setAttribute('aria-label', `Cluster of ${count} boreholes, click to zoom in`);
-			element.className =
-				'flex size-9 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-primary-500 text-xs font-semibold text-white shadow-md';
-			element.addEventListener('click', () =>
-				map.easeTo({ center: lngLat, zoom: index.getClusterExpansionZoom(clusterId) })
+			element.setAttribute(
+				'aria-label',
+				`${count === 1 ? 'Borehole' : `Cluster of ${count} boreholes`}, click to zoom in`
 			);
+			element.dataset.count = String(count);
+			applyMarkerSize(element, count);
+			element.className =
+				'flex cursor-pointer items-center justify-center rounded-full border-2 border-white bg-primary-500 text-xs font-semibold text-white shadow-md';
+			element.addEventListener('click', onClick);
 			return new maplibregl.Marker({ element }).setLngLat(lngLat).addTo(map);
 		}
 
 		function update() {
 			const b = map.getBounds();
+			const zoom = map.getZoom();
+			const grouped = zoom <= 5;
 			const items = index.getClusters(
 				[b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-				Math.round(map.getZoom())
+				Math.round(zoom)
 			);
 			const singles: GeoJSON.Feature[] = [];
-			const clusterIds = new Set<number>();
+			const seen = new Set<string>();
 			for (const item of items) {
 				const properties = item.properties;
+				const lngLat = item.geometry.coordinates as [number, number];
 				if ('cluster' in properties && properties.cluster) {
-					clusterIds.add(properties.cluster_id);
-					if (!clusterMarkers.has(properties.cluster_id))
-						clusterMarkers.set(
-							properties.cluster_id,
-							createClusterMarker(
-								properties.cluster_id,
-								properties.point_count,
-								item.geometry.coordinates as [number, number]
+					const key = `cluster:${properties.cluster_id}`;
+					seen.add(key);
+					if (!markers.has(key))
+						markers.set(
+							key,
+							createCountMarker(properties.point_count, lngLat, () =>
+								map.easeTo({
+									center: lngLat,
+									zoom: index.getClusterExpansionZoom(properties.cluster_id)
+								})
 							)
 						);
 				} else {
 					const point = byId.get((properties as { id: string }).id);
-					if (point)
+					if (!point) continue;
+					if (grouped) {
+						const key = `point:${point.id}`;
+						seen.add(key);
+						if (!markers.has(key))
+							markers.set(
+								key,
+								createCountMarker(1, lngLat, () => map.easeTo({ center: lngLat, zoom: 6 }))
+							);
+					} else {
+						if (showFill) requestMaterial(point.id);
 						singles.push({
 							type: 'Feature',
 							geometry: item.geometry,
-							properties: { id: point.id, verified: point.verified }
+							properties: { id: point.id, icon: showFill ? resolveIcon(point, materials.get(point.id)) : resolvePlainIcon(point) }
 						});
+					}
 				}
 			}
-			for (const [id, marker] of clusterMarkers) {
-				if (clusterIds.has(id)) continue;
+			for (const [key, marker] of markers) {
+				const element = marker.getElement();
+				if (seen.has(key)) {
+					applyMarkerSize(element, Number(element.dataset.count));
+					continue;
+				}
 				marker.remove();
-				clusterMarkers.delete(id);
+				markers.delete(key);
 			}
 			source?.setData({ type: 'FeatureCollection', features: singles });
 		}
 		update();
+		redrawDots = update;
 		map.on('moveend', update);
 
 		// --- the shared hover card
@@ -223,7 +348,7 @@
 		const cardMarker = new maplibregl.Marker({
 			element: cardElement,
 			anchor: 'bottom',
-			offset: [0, -12]
+			offset: [0, -(iconSize / 2 + 4)]
 		});
 		cardElement.hidden = true;
 		cardMarker.setLngLat([0, 0]).addTo(map);
@@ -273,12 +398,17 @@
 		// Touch has no hover: a tap opens the card, a tap on the background closes it.
 		map.on('click', 'boreholes', onEnter);
 		map.on('click', (e) => {
+			// Clicks on the card reach the map too (markers sit in its canvas container): they must not close it
+			if (e.originalEvent.target instanceof Element && e.originalEvent.target.closest('[role=tooltip]')) return;
 			if (!map.queryRenderedFeatures(e.point, { layers: ['boreholes'] }).length) scheduleHide();
 		});
 
 		cleanups.push(() => {
 			clearTimeout(hideTimer);
-			clusterMarkers.forEach((marker) => marker.remove());
+			active = false;
+			redrawDots = undefined;
+			clearTimeout(refreshTimer);
+			markers.forEach((marker) => marker.remove());
 			cardMarker.remove();
 			unmount(cardComponent);
 		});

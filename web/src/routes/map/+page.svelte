@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
+	import { PaintBucketIcon } from '@lucide/svelte';
 	import BoreholeMap from '#lib/components/borehole/BoreholeMap.svelte';
 	import MapHelpDrawer from '#lib/components/borehole/MapHelpDrawer.svelte';
+	import MapLegend from '#lib/components/borehole/MapLegend.svelte';
 	import { setLastMapView, takeMapSnapshot } from '#lib/map-handoff.svelte.ts';
 	// Picture of the dashboard map; covers the first frames, then fades out once the map is drawn.
 	const cover = takeMapSnapshot();
 	let ready = $state(false);
+	let showFill = $state(false);
 
 	// ?lat=&lon=&zoom= start the map at a given view, e.g. when opened from the dashboard or a shared
 	// link. Read once: the map keeps the URL in sync while moving and must not restart because of it.
@@ -35,12 +38,26 @@
 		{initialView}
 		onViewChange={syncUrl}
 		showLocate
+		{showFill}
 		onReady={() => (ready = true)}
 		padding={{ top: 80, bottom: 80, left: 340, right: 80 }}
 	/>
 	<!-- Left of the zoom controls. -->
 	<div class="absolute top-2.5 right-14 z-10">
 		<MapHelpDrawer />
+	</div>
+	<!-- Bottom right, above the locate button. -->
+	<div class="absolute right-2.5 bottom-20 z-10 flex flex-col items-end gap-2">
+		<MapLegend {showFill} />
+		<button
+			type="button"
+			class="btn btn-sm shadow-md {showFill ? 'preset-filled-primary-500' : 'preset-filled-surface-50-950'}"
+			aria-pressed={showFill}
+			onclick={() => (showFill = !showFill)}
+		>
+			<PaintBucketIcon class="size-4" />
+			Fill: {showFill ? 'on' : 'off'}
+		</button>
 	</div>
 	{#if cover}
 		<img
