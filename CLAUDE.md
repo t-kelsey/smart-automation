@@ -48,3 +48,8 @@ Web (run in `web/`):
 
 - `api/AGENTS.md` holds the Phoenix/Elixir/Ecto rules; follow it. Notable: use `Req` for HTTP (not HTTPoison/Tesla/httpc); generate migrations with `mix ecto.gen.migration`; don't put programmatically-set fields like `user_id` in `cast`.
 - `web/AGENTS.md` expects the Svelte MCP tools (`list-sections`, `get-documentation`, `svelte-autofixer`) to be used when writing Svelte code; Svelte skills live in `web/.github/skills/`.
+
+## Source of truth
+
+`api/` owns the data model and API response shape (see `docs/elixir-backend-borehole-pipeline.md` and `docs/adr/`). If `web/`'s existing types or mock data disagree with what the backend actually defines/returns, the backend wins — update the frontend's types/mock data to match it, not the other way around. See ADR-0017.
+
