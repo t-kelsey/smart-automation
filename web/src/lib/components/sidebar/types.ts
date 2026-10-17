@@ -8,6 +8,8 @@ export interface SidebarLinkItem {
 	label: string;
 	href: string;
 	icon?: LucideIcon;
+	/** Open the link at the last map position (`/map?lat=&lon=&zoom=`) instead of the plain page. */
+	keepMapView?: boolean;
 }
 
 export interface SidebarTitleItem {

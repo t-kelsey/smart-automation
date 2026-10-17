@@ -40,7 +40,9 @@
 	import * as maplibregl from 'maplibre-gl';
 	import { mount, unmount } from 'svelte';
 	import BoreholeHoverCard from '#lib/components/borehole/BoreholeHoverCard.svelte';
+	import { LocateFixedIcon } from '@lucide/svelte';
 	import Supercluster from 'supercluster';
+	import { mapColors } from './map-colors.ts';
 	interface MapView {
 		lat: number;
 		lon: number;
@@ -66,6 +68,8 @@
 		onMapClick?: (view: MapView) => void;
 		/** Called with the new view whenever the map has finished moving. */
 		onViewChange?: (view: MapView) => void;
+		/** Show a button in the lower right corner that moves the map to the user's location. */
+		showLocate?: boolean;
 		/** Called once the map has rendered its first complete view. */
 		onReady?: () => void;
 	}
@@ -77,11 +81,14 @@
 		cooperative = false,
 		onMapClick,
 		onViewChange,
+		showLocate = false,
 		onReady
 	}: Props = $props();
 
 	let container: HTMLDivElement;
 	let mapInstance: maplibregl.Map | undefined;
+	let locateNow: (() => void) | undefined;
+	let locating = $state(false);
 
 	/** A picture of what the map currently shows, or undefined if it cannot be taken. */
 	export function snapshot(): string | undefined {
@@ -127,9 +134,9 @@
 			type: 'circle',
 			source: 'boreholes',
 			paint: {
-				'circle-radius': 6,
-				'circle-color': ['case', ['get', 'verified'], '#22c55e', '#3b82f6'],
-				'circle-stroke-width': 2,
+				'circle-radius': 8,
+				'circle-color': ['case', ['get', 'verified'], mapColors.verified, mapColors.unverified],
+				'circle-stroke-width': 2.5,
 				'circle-stroke-color': '#ffffff'
 			}
 		});
@@ -309,7 +316,9 @@
 		map.addControl(new maplibregl.NavigationControl(), 'top-right');
 		// Show the user's position as a dot, and move there if asked to.
 		const dot = document.createElement('div');
-		dot.className = 'size-4 rounded-full border-2 border-white bg-blue-500 shadow-md';
+		dot.className = 'size-4 rounded-full border-2 border-white shadow-md';
+		dot.style.background = mapColors.location;
+		dot.style.boxShadow = `0 0 0 6px ${mapColors.location}40`;
 		dot.setAttribute('aria-label', 'Your location');
 		const userMarker = new maplibregl.Marker({ element: dot });
 		const showUser = (position: [number, number], move: boolean) => {
@@ -334,6 +343,26 @@
 					if (follow) notify.warning('Location unavailable', 'Showing the default map view.');
 				}
 			);
+		// The locate button always asks, so a denial is reported.
+		locateNow = () => {
+			if (!navigator.geolocation) {
+				notify.warning('Location unavailable', 'This browser cannot determine your position.');
+				return;
+			}
+			locating = true;
+			navigator.geolocation.getCurrentPosition(
+				({ coords }) => {
+					locating = false;
+					lastPosition = [coords.longitude, coords.latitude];
+					userMarker.setLngLat(lastPosition).addTo(map);
+					map.easeTo({ center: lastPosition, zoom: Math.max(map.getZoom(), 13) });
+				},
+				() => {
+					locating = false;
+					notify.warning('Location unavailable', 'Allow location access to find your position.');
+				}
+			);
+		};
 		// Only ask for permission when the map should move there; otherwise reuse a granted one.
 		if (follow) locate();
 		else
@@ -355,9 +384,25 @@
 			cleanups.forEach((cleanup) => cleanup());
 			userMarker.remove();
 			mapInstance = undefined;
+			locateNow = undefined;
 			map.remove();
 		};
 	});
 </script>
 
-<div bind:this={container} class="size-full"></div>
+<div class="relative size-full">
+	<div bind:this={container} class="size-full"></div>
+	{#if showLocate}
+		<!-- Above the attribution, in line with the zoom controls. -->
+		<button
+			type="button"
+			class="absolute right-2.5 bottom-9 z-10 btn-icon preset-filled-surface-50-950 shadow-md"
+			title="Show my location"
+			aria-label="Show my location"
+			disabled={locating}
+			onclick={() => locateNow?.()}
+		>
+			<LocateFixedIcon class="size-5 {locating ? 'animate-pulse' : ''}" />
+		</button>
+	{/if}
+</div>

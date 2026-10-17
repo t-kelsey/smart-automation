@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Navigation } from '@skeletonlabs/skeleton-svelte';
 	import { page } from '$app/state';
+	import { getLastMapView } from '#lib/map-handoff.svelte.ts';
 
 	import type { SidebarLinkItem } from './types';
 
@@ -11,13 +12,25 @@
 
 	let { link, collapsed = false }: Props = $props();
 
+	// The map keeps its position in the URL; coming from another page it is taken from the last view.
+	let href = $derived.by(() => {
+		const view = link.keepMapView ? getLastMapView() : undefined;
+		if (!view) return link.href;
+		const query = new URLSearchParams({
+			lat: view.lat.toFixed(5),
+			lon: view.lon.toFixed(5),
+			zoom: view.zoom.toFixed(2)
+		});
+		return `${link.href}?${query}`;
+	});
+
 	let active = $derived(
 		page.url.pathname === link.href || page.url.pathname.startsWith(`${link.href}/`)
 	);
 </script>
 
 <Navigation.TriggerAnchor
-	href={link.href}
+	{href}
 	title={link.label}
 	aria-label={link.label}
 	aria-current={active ? 'page' : undefined}

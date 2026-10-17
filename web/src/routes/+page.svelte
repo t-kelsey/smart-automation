@@ -13,7 +13,7 @@
 	import BoreholeTable from '#lib/components/borehole/BoreholeTable.svelte';
 	import { notify } from '#lib/components/toast/index.ts';
 	import BoreholeMap from '#lib/components/borehole/BoreholeMap.svelte';
-	import { getLastMapView, setLastMapView, setMapSnapshot } from '#lib/map-handoff.ts';
+	import { getLastMapView, setLastMapView, setMapSnapshot } from '#lib/map-handoff.svelte.ts';
 	import type { Snippet } from 'svelte';
 	import type { PageProps } from './$types';
 

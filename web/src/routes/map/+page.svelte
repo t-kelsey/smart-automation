@@ -2,7 +2,8 @@
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import BoreholeMap from '#lib/components/borehole/BoreholeMap.svelte';
-	import { setLastMapView, takeMapSnapshot } from '#lib/map-handoff.ts';
+	import MapHelpDrawer from '#lib/components/borehole/MapHelpDrawer.svelte';
+	import { setLastMapView, takeMapSnapshot } from '#lib/map-handoff.svelte.ts';
 	// Picture of the dashboard map; covers the first frames, then fades out once the map is drawn.
 	const cover = takeMapSnapshot();
 	let ready = $state(false);
@@ -33,9 +34,14 @@
 	<BoreholeMap
 		{initialView}
 		onViewChange={syncUrl}
+		showLocate
 		onReady={() => (ready = true)}
 		padding={{ top: 80, bottom: 80, left: 340, right: 80 }}
 	/>
+	<!-- Left of the zoom controls. -->
+	<div class="absolute top-2.5 right-14 z-10">
+		<MapHelpDrawer />
+	</div>
 	{#if cover}
 		<img
 			src={cover}

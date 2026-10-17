@@ -18,7 +18,8 @@ export interface MapView {
 	zoom: number;
 }
 
-let lastView: MapView | undefined;
+// Reactive: the sidebar's Map link follows it.
+let lastView = $state<MapView>();
 
 /** Remember where the user left a map, so the other map (dashboard or /map) continues from there. */
 export function setLastMapView(view: MapView) {
