@@ -34,6 +34,23 @@ export default defineConfig(
 		}
 	},
 	{
+		// UI -> Service -> Repository: the UI may only talk to services (see ADR-0009).
+		files: ['src/routes/**', 'src/lib/components/**'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							group: ['#lib/repositories', '#lib/repositories/*', '**/repositories/**'],
+							message: 'UI code must use services, not repositories (ADR-0009).'
+						}
+					]
+				}
+			]
+		}
+	},
+	{
 		// Override or add rule settings here, such as:
 		// 'svelte/button-has-type': 'error'
 		rules: {}

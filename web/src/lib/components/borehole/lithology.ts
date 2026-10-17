@@ -1,4 +1,4 @@
-import type { LithologyKey } from './types';
+import type { LithologyKey } from '#lib/domain/borehole.ts';
 
 /** Label and SVG pattern id (see LithologyDefs.svelte) per lithology. */
 export const lithologies: Record<LithologyKey, { label: string; patternId: string }> = {

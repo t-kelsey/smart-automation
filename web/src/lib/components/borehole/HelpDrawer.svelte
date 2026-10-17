@@ -2,7 +2,7 @@
 	import { Dialog, Portal } from '@skeletonlabs/skeleton-svelte';
 	import { CircleHelpIcon, XIcon } from '@lucide/svelte';
 	import { lithologies } from './lithology';
-	import type { LithologyKey } from './types';
+	import type { LithologyKey } from '#lib/domain/borehole.ts';
 
 	interface Props {
 		/** Colours used by the layers of the current borehole. */

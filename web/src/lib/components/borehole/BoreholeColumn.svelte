@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { lithologies } from './lithology';
-	import type { BoreholeLayer } from './types';
+	import type { BoreholeLayer } from '#lib/domain/borehole.ts';
 
 	interface Props {
 		layers: BoreholeLayer[];

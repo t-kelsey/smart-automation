@@ -6,6 +6,10 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	server: {
+		// Dev proxy for PUBLIC_DATA_SOURCE=api with the default PUBLIC_API_URL=/api
+		proxy: { '/api': 'http://localhost:4000' }
+	},
 	plugins: [
 		enhancedImages(),
 		tailwindcss(),
