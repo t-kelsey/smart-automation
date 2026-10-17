@@ -4,7 +4,7 @@ import json
 import pathlib
 from concurrent.futures import ThreadPoolExecutor
 
-from .. import din4023, pdfutil, schemas
+from .. import coordinate_systems, din4023, pdfutil, schemas
 from ..naming import base, stamped
 from ..output import Recorder, dump_json
 from ..ai import PipelineError, StepReport, get_ai, log
@@ -31,10 +31,12 @@ Rules:
 - borehole.name: the borehole designation (e.g. "B 1/59"), never null; fall back to
   the project or place name only if no designation exists.
 - Dates: ISO YYYY-MM-DD, null if not fully determinable. Do not invent day or month.
-- Coordinates: set x, y and epsg only if all three are known (x = easting/longitude,
-  y = northing/latitude, epsg = integer code for the stated coordinate system, e.g.
-  31467 for Gauss-Krueger zone 3). Otherwise set all three to null. Always keep the
-  original text in source_coordinate_raw and the system name in source_coordinate_system.
+- Coordinates: x = easting/longitude, y = northing/latitude, as plain numbers exactly as
+  written. Set x and y whenever the source gives numeric coordinates, even if the coordinate
+  system or datum is unclear — never drop real numbers just because the projection is
+  uncertain. Always set epsg to null; it is resolved separately from source_coordinate_system
+  and source_coordinate_raw, not by you. Always keep the coordinate system's name/label in
+  source_coordinate_system and the raw coordinate text in source_coordinate_raw.
 - Depths and elevation in metres, plain numbers. Depths are measured from the surface,
   >= 0, and each layer's depth_to_m must be greater than depth_from_m.
 - layers: keep order, position starts at 1.
@@ -78,6 +80,7 @@ def transform_boreholes(
                 max_turns=2,
             )
             payload, din_issues = din4023.conform(payload)
+            coordinate_systems.resolve(payload["borehole"])
         except Exception as e:
             recorder.record_failure("transform", e, position=position)
             raise
@@ -107,7 +110,11 @@ def validate_payload(p: dict) -> list[str]:
             issues.append(f"borehole.{k} is negative (API requires >= 0)")
     xyz = [b.get("x"), b.get("y"), b.get("epsg")]
     if any(v is None for v in xyz) and not all(v is None for v in xyz):
-        issues.append("x, y, epsg must be all set or all null")
+        issues.append(
+            f"x/y present but epsg could not be resolved from "
+            f"{b.get('source_coordinate_system')!r} ({b.get('source_coordinate_raw')!r}); "
+            "location will not be set"
+        )
     for l in p["layers"]:
         pos = l["position"]
         if l["depth_from_m"] < 0 or l["depth_to_m"] <= l["depth_from_m"]:
