@@ -76,6 +76,9 @@ out.write_text(ocr_file(path), encoding='utf-8')
 - Output: `output/ocr/<parent-folder>__<file-name>.md` (the folder name is a prefix, because different
   reports share file names such as `Report01.pdf`; `--debug` uses the same names).
 - The first run downloads the Docling and EasyOCR models, so it is slow.
+- In the full pipeline, `unload_ocr()` (`src/bem/ocr.py`) runs right after the OCR stage of each file. It
+  drops the Docling converter and empties the CUDA cache, so the OCR models do not hold (GPU) memory
+  while Qwen runs. The next file loads them again, which costs some seconds per file.
 - Quick check with Docling's default settings (no forced OCR), printing to the terminal or a file:
   ```bash
   uv run python tests/docling_test.py <file.pdf>
@@ -109,12 +112,19 @@ borehole. The command below runs it on one translated file on its own (no triage
 Sends one translated file to a Qwen model behind an OpenAI-compatible server, validates the result,
 and writes JSON in the backend's shape (`boreholes` + `borehole_layers`, ADR-0012, ADR-0023).
 
-Start a model server first (default: Ollama):
+Start a model server first (default: Ollama).
+
+Install Ollama (Linux; on macOS/Windows use the installer from <https://ollama.com/download>), then pull Qwen:
 
 ```bash
-ollama pull qwen3.5:2b      # once
+curl -fsSL https://ollama.com/install.sh | sh   # once; on Linux this also starts the service
+ollama pull qwen3.5:2b      # once, downloads the model
 ollama serve                # skip if already running; check with `ollama ps`
+ollama run qwen3.5:2b "hi"  # optional: quick check that the model answers
 ```
+
+With Docker, `docker compose up ollama` (repo root) starts Ollama and pulls the model named in
+`BEM_MODEL_NAME` by itself.
 
 Run the extraction on one translated file:
 

@@ -9,7 +9,7 @@ import logging
 import os
 from pathlib import Path
 
-from bem.ocr import ocr_file
+from bem.ocr import ocr_file, unload_ocr
 from bem.translation_and_labeling.translation_and_labeling import translate
 from bem.triage import split
 from bem.extraction import extract
@@ -57,7 +57,11 @@ def process_file(path: Path, sink, debug: bool, client: ApiClient | None = None)
     track = client if document_id else None
 
     # STAGE 1 - OCR: any format -> markdown (every page is OCR'd)
-    document = ocr_file(path)              
+    try:
+        document = ocr_file(path)
+    finally:
+        # Free the OCR models before extraction loads Qwen (they compete for GPU memory).
+        unload_ocr()
     if debug:
         save_stage("ocr", path, document)
     if track:

@@ -4,6 +4,7 @@ Every page is OCR'd, including digital PDFs, because the text layer loses the
 table structure that borehole logs depend on. Output is one markdown file per input.
 """
 
+import gc
 from pathlib import Path
 
 # Docling is heavy, so it's imported on first use. That keeps importing this module
@@ -55,3 +56,20 @@ def ocr_file(path: Path) -> str:
     # Prefix with the folder name: different inputs can share a file name (e.g. Report01.pdf).
     markdown = _get_converter().convert(path).document.export_to_markdown()
     return markdown
+
+
+def unload_ocr() -> None:
+    """Drop the Docling converter and free its (GPU) memory, so the extraction model can use it.
+
+    The next ocr_file() call loads the models again.
+    """
+    global _converter
+    _converter = None
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
