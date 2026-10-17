@@ -6,6 +6,7 @@ defmodule Api.Repo.Migrations.CreateDocuments do
       add :id, :binary_id, primary_key: true
       add :original_filename, :string, null: false
       add :storage_path, :string, null: false
+      add :mime_type, :string
       add :source_country, :string
       add :status, :string, null: false, default: "pending"
       add :raw_extraction, :map

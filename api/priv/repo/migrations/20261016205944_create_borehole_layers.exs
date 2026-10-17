@@ -12,6 +12,7 @@ defmodule Api.Repo.Migrations.CreateBoreholeLayers do
       add :petrography, :string
       add :color, :string
       add :raw_text, :string
+      add :metadata, :map, null: false, default: %{}
 
       timestamps(type: :utc_datetime)
     end
