@@ -1,5 +1,6 @@
 <script module lang="ts">
 	import type { BoreholeSummary, MapPoint } from '#lib/domain/borehole.ts';
+	import { notify } from '#lib/components/toast/index.ts';
 	import { createServices } from '#lib/services/index.ts';
 
 	// The last known position, so a freshly mounted map can show the user's dot immediately.
@@ -18,6 +19,7 @@
 			.then(({ boreholes }) => boreholes.listMapPoints())
 			.catch((error) => {
 				pointsPromise = undefined;
+				notify.fromError(error, 'Could not load boreholes');
 				throw error;
 			});
 		return pointsPromise;
@@ -95,7 +97,12 @@
 	 * the hovered borehole: thousands of boreholes cost a few hundred DOM nodes at most.
 	 */
 	/* eslint-disable svelte/prefer-svelte-reactivity -- plain caches and lookups, nothing renders from them */
-	function showPoints(map: maplibregl.Map, points: MapPoint[], cleanups: (() => void)[]) {
+	function showPoints(
+		map: maplibregl.Map,
+		points: MapPoint[],
+		cleanups: (() => void)[],
+		fit: boolean
+	) {
 		const byId = new Map<string, MapPoint>();
 		const features: PointFeature[] = [];
 		const bounds = new maplibregl.LngLatBounds();
@@ -108,8 +115,7 @@
 				geometry: { type: 'Point', coordinates: [point.lon, point.lat] }
 			});
 		}
-		if (!bounds.isEmpty() && !initialView)
-			map.fitBounds(bounds, { padding, maxZoom: 14, duration: 0 });
+		if (!bounds.isEmpty() && fit) map.fitBounds(bounds, { padding, maxZoom: 14, duration: 0 });
 
 		const index = new Supercluster<{ id: string }>({ radius: 50, maxZoom: 14 }).load(features);
 
@@ -232,8 +238,9 @@
 			try {
 				const summary = await loadSummary(id);
 				if (card.point?.id === id) card.summary = summary;
-			} catch {
+			} catch (e) {
 				// Leave the placeholders; hovering again retries.
+				notify.fromError(e, 'Could not load borehole details');
 			}
 		}
 		const onEnter = (e: maplibregl.MapLayerMouseEvent) => {
@@ -307,9 +314,14 @@
 		const userMarker = new maplibregl.Marker({ element: dot });
 		const showUser = (position: [number, number], move: boolean) => {
 			userMarker.setLngLat(position).addTo(map);
-			if (move) map.easeTo({ center: position, zoom: 10 });
+			if (move) {
+				centered = true;
+				map.easeTo({ center: position, zoom: 10 });
+			}
 		};
 		const follow = centerOnUser && !initialView;
+		// Set once the map moved to the user, so the later arriving points do not fit the view over it.
+		let centered = false;
 		if (lastPosition) showUser(lastPosition, false);
 		const locate = () =>
 			navigator.geolocation?.getCurrentPosition(
@@ -319,6 +331,7 @@
 				},
 				() => {
 					// Denied or unavailable: keep the fitted view and show no dot.
+					if (follow) notify.warning('Location unavailable', 'Showing the default map view.');
 				}
 			);
 		// Only ask for permission when the map should move there; otherwise reuse a granted one.
@@ -334,7 +347,7 @@
 		// Sources can only be added once the style is loaded.
 		const styleLoaded = new Promise<void>((resolve) => map.once('style.load', () => resolve()));
 		void Promise.all([loadPoints(), styleLoaded]).then(([points]) => {
-			if (!disposed) showPoints(map, points, cleanups);
+			if (!disposed) showPoints(map, points, cleanups, !initialView && !centered);
 		});
 
 		return () => {

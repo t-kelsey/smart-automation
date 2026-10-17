@@ -1,19 +1,10 @@
 import { defineEnvVars } from '@sveltejs/kit/env';
 
 export const variables = defineEnvVars({
-	PUBLIC_DATA_SOURCE: {
-		public: true,
-		description: "'mock' (default) or 'api': which repository the services use (ADR-0009)",
-		schema: (value) => {
-			if (value === undefined || value === '') return 'mock' as const;
-			if (value !== 'mock' && value !== 'api') throw new Error("must be 'mock' or 'api'");
-			return value;
-		}
-	},
 	PUBLIC_MOCK_BOREHOLES: {
 		public: true,
 		description:
-			'Number of generated boreholes in the mock data (default 300; 10000 to stress the map)',
+			'Size of the generated mock data. Only used by the mock repository, which is not wired in (ADR-0029).',
 		schema: (value) => {
 			if (value === undefined || value === '') return 300;
 			const count = Number(value);

@@ -11,12 +11,17 @@
 		SearchIcon
 	} from '@lucide/svelte';
 	import BoreholeTable from '#lib/components/borehole/BoreholeTable.svelte';
+	import { notify } from '#lib/components/toast/index.ts';
 	import BoreholeMap from '#lib/components/borehole/BoreholeMap.svelte';
 	import { getLastMapView, setLastMapView, setMapSnapshot } from '#lib/map-handoff.ts';
 	import type { Snippet } from 'svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+
+	$effect(() => {
+		if (data.loadError) notify.fromError(data.loadError, 'Could not load boreholes');
+	});
 
 	// Continues where the user left a map (this one or /map). Read once: later moves are saved but
 	// must not re-centre the map.
