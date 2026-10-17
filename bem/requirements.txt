@@ -1,6 +1,0 @@
-docling
-pydantic
-requests
-transformers
-sentencepiece
-langdetect
