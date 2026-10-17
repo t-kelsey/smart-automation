@@ -1,41 +1,76 @@
 # bem – borehole extraction pipeline
 
-Pipeline (ADR-0001): **OCR → translation → extraction (Qwen) → JSON**. Each stage reads and
-writes files under `output/`, so you can run and inspect them one at a time:
+Pipeline (ADR-0001, ADR-0007): **OCR → translation → triage → extraction (Qwen) → output**.
+`src/bem/main.py` runs all stages on any number of files or folders; each stage can also be run
+alone (sections 1-3 below).
 
 ```
-data/…/report.pdf ──ocr──▶ output/ocr/*.md ──translate──▶ output/translate/*.md ──qwen──▶ output/extraction/*.json
+report.pdf ─ocr─▶ markdown ─translate─▶ markdown ─triage─▶ one Borehole per ID ─qwen─▶ Borehole ─▶ api | json | print
 ```
 
-Once these stages work end to end, see [`API_INTEGRATION.md`](API_INTEGRATION.md) for how to
-report OCR/translation/triage/extraction results and the final boreholes to `api/`.
+Triage splits a report into one section per borehole ID, and extraction runs once per section.
+With `--debug`, every stage writes its result under `output/` (gitignored, it holds confidential text):
+
+```
+output/ocr/<folder>__<file>.md   output/translate/<folder>__<file>.md
+output/triage/<folder>__<file>__<n>.json   output/extraction/<folder>__<file>__<n>.json
+```
+
+Once the pipeline works end to end, see [`API_INTEGRATION.md`](API_INTEGRATION.md) for how to
+report stage results and the final boreholes to `api/`.
 
 All commands run from this folder (`bem/`) with [uv](https://docs.astral.sh/uv/). The first
-`uv run` creates `.venv` and installs the dependencies from `uv.lock`.
+`uv run` creates `.venv` and installs the dependencies from `uv.lock` (Python 3.14 is required;
+uv downloads it if missing).
 
 ```bash
 cd bem
 uv sync
 ```
 
-`uv run bem` (the full pipeline in `src/bem/main.py`) is not wired up yet. Run the stages below instead.
+## Run the full pipeline
+
+`uv run bem` calls `bem.main:main` (entry point in `pyproject.toml`). `python -m bem.main` does the same.
+It needs the model server from section 3 and the translation models from section 2.
+
+```bash
+uv run bem <file-or-dir>... [--to print|json|api] [--out-dir DIR] [--api-url URL] [--debug]
+
+uv run bem ../data/BoreholeData/<folder> --to json --debug   # → out/<file>__<borehole>.json
+```
+
+| Option | Meaning |
+|---|---|
+| `inputs` | files (`.pdf`, `.png`, `.jpg`, `.tif`, `.docx`) or folders, searched recursively |
+| `--to` | `print` (default) to the terminal, `json` to one file per borehole, `api` to POST to the API |
+| `--out-dir DIR` | where `--to json` writes (default `out/`) |
+| `--api-url URL` | default `http://localhost:4000/api/boreholes` |
+| `--debug` | save the intermediate stage results under `output/` |
+
+- A file that fails is logged and skipped; the run exits with an error listing the failed files.
+- `--to api` does not work yet: the API has no `POST /api/boreholes` endpoint.
+- The payload (`Borehole.to_api_dict()` in `src/bem/schema.py`) puts `source_file` and
+  `translate_errors` into `metadata`, and leaves out the raw markdown.
 
 ## 1. OCR (Docling): document → markdown
 
 `src/bem/ocr.py` converts one PDF or image to markdown. Every page is OCR'd, even digital PDFs,
-because the text layer loses table structure (ADR-0007, ADR-0008). It has no command-line
-interface yet, so call the function:
+because the text layer loses table structure (ADR-0007, ADR-0008). `ocr_file(path)` returns the
+markdown as a string and has no command-line interface, so use the full pipeline with `--debug`, or:
 
 ```bash
 uv run python -c "
 from pathlib import Path
 from bem.ocr import ocr_file
-print(ocr_file(Path('../data/BoreholeData/<folder>/<report>.pdf'), Path('output/ocr')))
+path = Path('../data/BoreholeData/<folder>/<report>.pdf')
+out = Path('output/ocr') / f'{path.parent.name}__{path.stem}.md'
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(ocr_file(path), encoding='utf-8')
 "
 ```
 
 - Output: `output/ocr/<parent-folder>__<file-name>.md` (the folder name is a prefix, because different
-  reports share file names such as `Report01.pdf`).
+  reports share file names such as `Report01.pdf`; `--debug` uses the same names).
 - The first run downloads the Docling and EasyOCR models, so it is slow.
 - Quick check with Docling's default settings (no forced OCR), printing to the terminal or a file:
   ```bash
@@ -63,6 +98,9 @@ HF_HUB_OFFLINE=1 uv run python tests/translation_test.py
 - It is a script, not a pytest test: it has no assertions.
 
 ## 3. Extraction (Qwen): translated markdown → JSON
+
+In the full pipeline, `extract(section)` in `src/bem/extraction/extract.py` does this for each triaged
+borehole. The command below runs it on one translated file on its own (no triage).
 
 Sends one translated file to a Qwen model behind an OpenAI-compatible server, validates the result,
 and writes JSON in the backend's shape (`boreholes` + `borehole_layers`, ADR-0012, ADR-0023).
@@ -113,10 +151,10 @@ Edit these files in `src/bem/extraction/`, no code changes needed:
 | `schema.py` | the JSON output format (Pydantic model). Its field descriptions are part of what the model sees |
 | `validate.py` | consistency and grounding checks, and the `KNOWN_*` vocabularies |
 
-## Run everything for one report
+## Run the stages by hand for one report
 
 ```bash
-uv run python -c "from pathlib import Path; from bem.ocr import ocr_file; ocr_file(Path('../data/BoreholeData/<folder>/<report>.pdf'), Path('output/ocr'))"
+uv run python -c "from pathlib import Path; from bem.ocr import ocr_file; p = Path('../data/BoreholeData/<folder>/<report>.pdf'); o = Path('output/ocr/<folder>__<report>.md'); o.parent.mkdir(parents=True, exist_ok=True); o.write_text(ocr_file(p), encoding='utf-8')"
 uv run python tests/translation_test.py
 uv run python -m bem.extraction output/translate/<folder>__<report>.md --markdown
 ```
