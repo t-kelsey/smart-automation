@@ -244,6 +244,55 @@ defmodule Api.Boreholes do
 
   def document_file_path(_document), do: nil
 
+  @upload_extensions ~w(.pdf .png .jpg .jpeg .tif .tiff .docx)
+
+  @doc """
+  Stores a freshly uploaded raw file as a new document: the file is copied into the managed
+  storage as `<id><ext>` (ADR-0014) and a `documents` row with status `pending` is inserted.
+  Only the file types the pipeline can read are accepted.
+  """
+  @spec create_uploaded_document(Plug.Upload.t()) ::
+          {:ok, Document.t()} | {:error, String.t() | Ecto.Changeset.t()}
+  def create_uploaded_document(%Plug.Upload{path: path, filename: filename}) do
+    extension = filename |> Path.extname() |> String.downcase()
+
+    if extension in @upload_extensions do
+      id = Ecto.UUID.generate()
+      storage_path = "#{id}#{extension}"
+      destination = Path.join(storage_dir(), storage_path)
+
+      with :ok <- File.mkdir_p(storage_dir()),
+           :ok <- File.cp(path, destination),
+           {:ok, %{size: size}} <- File.stat(destination) do
+        attrs = %{
+          original_filename: Path.basename(filename),
+          storage_path: storage_path,
+          mime_type: MIME.from_path(filename),
+          size_bytes: size
+        }
+
+        case Repo.insert(Document.changeset(%Document{id: id}, attrs)) do
+          {:ok, document} ->
+            {:ok, document}
+
+          {:error, changeset} ->
+            File.rm(destination)
+            {:error, changeset}
+        end
+      else
+        {:error, reason} -> {:error, "could not store the file: #{:file.format_error(reason)}"}
+      end
+    else
+      {:error,
+       "unsupported file type #{inspect(extension)}, expected one of #{Enum.join(@upload_extensions, ", ")}"}
+    end
+  end
+
+  @doc "Sets the processing status of a document."
+  def update_document_status(%Document{} = document, status) do
+    document |> Document.changeset(%{status: status}) |> Repo.update()
+  end
+
   @doc "The directory holding the stored document files (`DOCUMENT_STORAGE_DIR` or `priv/storage`)."
   def storage_dir do
     Application.get_env(:api, :document_storage_dir) ||

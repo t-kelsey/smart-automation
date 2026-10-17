@@ -12,6 +12,7 @@ defmodule Api.Application do
       Api.Repo,
       {DNSCluster, query: Application.get_env(:api, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Api.PubSub},
+      {Task.Supervisor, name: Api.TaskSupervisor},
       # Start a worker by calling: Api.Worker.start_link(arg)
       # {Api.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -3,15 +3,18 @@ import type { BoreholeRepository } from '#lib/repositories/borehole-repository.t
 import type { SearchRepository } from '#lib/repositories/search-repository.ts';
 import { BoreholeService } from './borehole-service';
 import { SearchService } from './search-service';
+import { UploadService } from './upload-service';
 
 export { BoreholeService, BoreholeNotFoundError, DocumentNotFoundError } from './borehole-service';
 export type { BoreholeListQuery, PagedResult } from './borehole-service';
 export { RepositoryError } from '#lib/repositories/borehole-repository.ts';
 export { SearchService } from './search-service';
+export { UploadService, UnsupportedFileError } from './upload-service';
 
 export interface Services {
 	boreholes: BoreholeService;
 	search: SearchService;
+	uploads: UploadService;
 }
 
 /**
@@ -25,12 +28,18 @@ export async function createServices({
 }: {
 	fetch: typeof globalThis.fetch;
 }): Promise<Services> {
-	const [{ ApiBoreholeRepository }, { ApiSearchRepository }] = await Promise.all([
-		import('#lib/repositories/api/api-borehole-repository.ts'),
-		import('#lib/repositories/api/api-search-repository.ts')
-	]);
+	const [{ ApiBoreholeRepository }, { ApiSearchRepository }, { ApiUploadRepository }] =
+		await Promise.all([
+			import('#lib/repositories/api/api-borehole-repository.ts'),
+			import('#lib/repositories/api/api-search-repository.ts'),
+			import('#lib/repositories/api/api-upload-repository.ts')
+		]);
 	const options = { baseUrl: config.apiUrl, fetch };
 	const boreholes: BoreholeRepository = new ApiBoreholeRepository(options);
 	const search: SearchRepository = new ApiSearchRepository(options);
-	return { boreholes: new BoreholeService(boreholes), search: new SearchService(search) };
+	return {
+		boreholes: new BoreholeService(boreholes),
+		search: new SearchService(search),
+		uploads: new UploadService(new ApiUploadRepository(options))
+	};
 }

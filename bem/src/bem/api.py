@@ -52,6 +52,10 @@ class ApiClient:
         status = "error" if error else "ok"
         self._put(f"/documents/{document_id}/pipeline_stages/{stage}", {"status": status, "output": output, "error": error})
 
+    def set_status(self, document_id: str, status: str) -> None:
+        """Document status shown in the UI: `extracted` or `failed` once the pipeline is done."""
+        self._put(f"/documents/{document_id}/status", {"status": status})
+
     def put_triage_sections(self, document_id: str, sections: list[Borehole]) -> None:
         body = [
             {

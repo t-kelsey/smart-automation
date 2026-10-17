@@ -23,6 +23,9 @@ config :api, ApiWeb.Endpoint,
 # Document files are read from a temporary directory in tests, not from priv/storage/.
 config :api, :document_storage_dir, Path.join(System.tmp_dir!(), "api_test_storage")
 
+# Uploaded documents are sent to a stubbed pipeline (Req.Test), see Api.PipelineTest.
+config :api, :pipeline_req_options, plug: {Req.Test, Api.Pipeline}
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

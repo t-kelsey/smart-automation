@@ -26,6 +26,19 @@ defmodule ApiWeb.PipelineController do
     end
   end
 
+  @doc "Sets the processing status of a document (`extracted` or `failed` once the pipeline is done)."
+  def put_status(conn, %{"document_id" => document_id, "status" => status}) do
+    with %{} = document <- Boreholes.get_document(document_id),
+         {:ok, document} <- Boreholes.update_document_status(document, status) do
+      json(conn, %{data: %{id: document.id, status: document.status}})
+    else
+      nil -> {:error, :not_found}
+      error -> error
+    end
+  end
+
+  def put_status(_conn, _params), do: {:error, "status is required"}
+
   @doc "Replaces all triage sections for a document."
   def put_triage_sections(conn, %{"document_id" => document_id} = params) do
     with {:ok, sections} <-

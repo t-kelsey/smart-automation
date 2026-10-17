@@ -215,6 +215,12 @@ curl "http://localhost:4000/api/boreholes/search?q=gipskeuper&limit=10"
 
 ---
 
+## `POST /api/documents`
+
+Uploads a raw document (ADR-0033). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and, if the API has `PIPELINE_URL` set, sent to the extraction pipeline in the background.
+
+`202` with `{ "data": <document> }` (same fields as in a borehole's `documents`); `status` is `processing` if a pipeline is configured, else `pending`. It becomes `extracted` or `failed` when the pipeline reports back (`PUT /api/documents/:document_id/status`, body `{ "status": "extracted" }`). `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
+
 ## `GET /api/documents/:id`
 
 Metadata of a single document, for the document viewer page. Same fields as the entries in a borehole's `documents` (never `storage_path` or `raw_extraction`), plus the boreholes it is linked to, ordered by name.

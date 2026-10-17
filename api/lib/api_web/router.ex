@@ -13,10 +13,12 @@ defmodule ApiWeb.Router do
     get "/boreholes", BoreholeController, :index
     post "/boreholes", BoreholeController, :create
 
+    post "/documents", DocumentController, :create
     get "/documents/:id", DocumentController, :show
     get "/documents/:id/file", DocumentController, :file
 
     put "/documents/:document_id/pipeline_stages/:stage", PipelineController, :put_stage
+    put "/documents/:document_id/status", PipelineController, :put_status
     put "/documents/:document_id/triage_sections", PipelineController, :put_triage_sections
     get "/documents/:document_id/pipeline_trace", PipelineController, :trace
 

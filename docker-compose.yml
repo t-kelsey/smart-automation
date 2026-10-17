@@ -32,6 +32,9 @@ services:
       PHX_PUBLIC_SCHEME: http
       SEED_MOCK_DATA: ${SEED_MOCK_DATA:-false}
       MOCK_BOREHOLES: ${MOCK_BOREHOLES:-1000}
+      # Where uploaded documents are sent for extraction, e.g. http://pipeline:8000/process
+      # (needs `docker compose --profile bem up`). Empty: uploads are stored but not processed.
+      PIPELINE_URL: ${PIPELINE_URL:-}
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
@@ -104,6 +107,23 @@ services:
       - ./data:/data:ro
       - ./bem/out:/app/out
       - ./bem/output:/app/output
+
+  # HTTP endpoint of the pipeline: the API posts uploaded documents to it (PIPELINE_URL above).
+  pipeline:
+    profiles: ["bem"]
+    build: ./bem
+    restart: unless-stopped
+    entrypoint: ["bem-serve"]
+    command: []
+    depends_on:
+      api:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    environment:
+      BEM_API_URL: http://api:4000/api
+      BEM_MODEL_BASE_URL: ${BEM_MODEL_BASE_URL:-http://ollama:11434/v1}
+      BEM_MODEL_NAME: ${BEM_MODEL_NAME:-qwen3.5:2b}
 
 volumes:
   db_data:

@@ -10,8 +10,10 @@ Base URL for local dev: `http://localhost:4000/api` (start with `cd api && mix p
 ## 1. Get a `document_id` first
 
 Every call below needs a `document_id` — the UUID of a `documents` row that already exists in
-the database. There is currently **no upload endpoint**; documents are tracked by dropping files
-into `api/priv/uploads/` and running `mix documents.backfill` (see the repo root `README.md`).
+the database. Documents come from `POST /api/documents` (multipart field `file`, ADR-0033), which also sends the file to
+`bem-serve` (`PIPELINE_URL`), or from dropping files into `api/priv/uploads/` and running
+`mix documents.backfill` (see the repo root `README.md`). When the run is done, `bem-serve` sets the
+document status with `PUT /api/documents/:document_id/status` (`{"status": "extracted" | "failed"}`).
 
 That task renames every file to `<document_id><ext>` inside `api/priv/storage/` (ADR-0014). So if
 `bem/` reads its input files from `api/priv/storage/` directly, **the document_id is the file's

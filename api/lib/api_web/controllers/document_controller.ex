@@ -5,6 +5,25 @@ defmodule ApiWeb.DocumentController do
 
   action_fallback ApiWeb.FallbackController
 
+  @doc """
+  Uploads a raw document (multipart field `file`). It is stored (ADR-0014) and handed to the
+  extraction pipeline in the background (ADR-0033, `PIPELINE_URL`); the response is `202` with
+  the document, whose `status` moves from `processing` to `extracted`/`failed`/... as the
+  pipeline reports back.
+  """
+  def create(conn, %{"file" => %Plug.Upload{} = upload}) do
+    with {:ok, document} <- Boreholes.create_uploaded_document(upload) do
+      Api.Pipeline.submit_async(document)
+      document = Boreholes.get_document(document.id)
+
+      conn
+      |> put_status(:accepted)
+      |> render(:create, document: document)
+    end
+  end
+
+  def create(_conn, _params), do: {:error, "multipart field \"file\" is required"}
+
   @doc "Metadata of a single document and the boreholes it belongs to (never the storage path)."
   def show(conn, %{"id" => id}) do
     case Boreholes.get_document_with_boreholes(id) do

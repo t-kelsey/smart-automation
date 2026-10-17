@@ -50,7 +50,8 @@ defmodule Api.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:geo, "~> 3.6"},
-      {:geo_postgis, "~> 3.6"}
+      {:geo_postgis, "~> 3.6"},
+      {:req, "~> 0.5"}
     ]
   end
 

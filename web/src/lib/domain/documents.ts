@@ -10,3 +10,11 @@ export function splitDocuments(documents: BoreholeDocument[]): {
 		additional: documents.filter((doc) => doc.role !== 'original')
 	};
 }
+
+/** A raw document accepted by the API; the extraction pipeline processes it in the background. */
+export interface UploadedDocument {
+	id: string;
+	filename: string;
+	/** `pending` (stored, no pipeline configured), `processing`, `extracted`, `failed`, `reviewed`. */
+	status: string;
+}

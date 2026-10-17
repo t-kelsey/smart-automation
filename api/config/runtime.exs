@@ -26,6 +26,14 @@ if storage_dir = System.get_env("DOCUMENT_STORAGE_DIR") do
   config :api, :document_storage_dir, storage_dir
 end
 
+# Pipeline (bem) endpoint that uploaded documents are sent to, e.g. http://bem:8000/process.
+# Unset: uploads are stored but not processed.
+pipeline_url = System.get_env("PIPELINE_URL")
+
+if pipeline_url not in [nil, ""] do
+  config :api, :pipeline_url, pipeline_url
+end
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||
