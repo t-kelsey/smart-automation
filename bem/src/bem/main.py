@@ -14,6 +14,7 @@ from bem.triage import split
 from bem.extraction import extract
 from bem.api import ApiClient, document_id_from_stem
 from bem.output import make_sink
+from bem.schema import Borehole as PipelineBorehole
 
 log = logging.getLogger("bem")
 
@@ -73,14 +74,17 @@ def process_file(path: Path, sink, debug: bool, client: ApiClient | None = None)
     failures = []
     for i, section in enumerate(sections):
         if debug:
-            save_stage("triage", path, section.model_dump_json(indent=2), f"__{i}.json")
+            save_stage("triage", path, section)
 
-        try:
-            record = extract(section)     # Borehole -> Borehole (JSON-serialisable)
-        except Exception as e:
-            if track:
-                track.put_extraction_result(document_id, i, None, error=str(e))
-            raise
+        # record = extract(section)     # Borehole -> Borehole (JSON-serialisable)
+        # if debug:
+        #     save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")
+        # sink(record)
+        # except Exception as e:
+        #     if track:
+        #         track.put_extraction_result(document_id, i, None, error=str(e))
+        #   raise
+        
         if debug:
             save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")
         if track:

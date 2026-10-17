@@ -30,7 +30,7 @@ class BoreholeLayer(BaseModel):
 class Borehole(BaseModel):
     """One row of boreholes, with its layers. `name` is required by the API."""
 
-    name: str
+    name: str | None = None
     external_id: str | None = None
     purpose: str | None = None
     drilling_method: str | None = None

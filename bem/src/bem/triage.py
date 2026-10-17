@@ -53,29 +53,19 @@ def find_borehole_id(line: str) -> str | None:
 ERROR_RE = re.compile(r"translate_error:[^|]+")
 
 
-def split(source_file: str, markdown: str) -> list[Borehole]:
-    """Group the markdown lines into one Borehole per borehole ID."""
+def split(source_file: str, markdown: str) -> list[str]:
+    """Group the markdown lines by borehole ID and return one Markdown string per borehole."""
     lines = markdown.splitlines()
-    # Matching one line at a time keeps each ID tied to its own row. A label in one
-    # line can't pick up an ID from a different row or table cell.
     found = [find_borehole_id(line) for line in lines]
 
     current: str | None = next((i for i in found if i), None)
     sections: dict[str | None, list[str]] = {}
+
     for line, bid in zip(lines, found):
         current = bid or current
         sections.setdefault(current, []).append(line)
 
-    return [
-        Borehole(
-            name=bid or Path(source_file).stem,
-            external_id=bid,
-            source_file=source_file,
-            raw_markdown="\n".join(section),
-            translate_errors=[error.strip() for line in section for error in ERROR_RE.findall(line)],
-        )
-        for bid, section in sections.items()
-    ]
+    return ["\n".join(section) for section in sections.values()]
 
 
 def _plausible_id(candidate: str) -> bool:
