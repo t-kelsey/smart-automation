@@ -48,6 +48,10 @@ def find_borehole_id(line: str) -> str | None:
     return None
 
 
+# A translate_error marker written by din4023.py, up to the next table cell separator.
+ERROR_RE = re.compile(r"translate_error:[^|]+")
+
+
 def split(source_file: str, markdown: str) -> list[Borehole]:
     """Group the markdown lines into one Borehole per borehole ID."""
     lines = markdown.splitlines()
@@ -62,7 +66,12 @@ def split(source_file: str, markdown: str) -> list[Borehole]:
         sections.setdefault(current, []).append(line)
 
     return [
-        Borehole(source_file=source_file, borehole_id=bid, raw_markdown="\n".join(section))
+        Borehole(
+            source_file=source_file,
+            borehole_id=bid,
+            raw_markdown="\n".join(section),
+            translate_errors=[error.strip() for line in section for error in ERROR_RE.findall(line)],
+        )
         for bid, section in sections.items()
     ]
 
