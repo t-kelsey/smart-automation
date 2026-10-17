@@ -1,8 +1,8 @@
-import type { SearchPage, SearchQuery } from '#lib/domain/borehole.ts';
+import type { SearchCompletion, SearchPage, SearchQuery } from '#lib/domain/borehole.ts';
 import type { SearchRepository } from '../search-repository';
 import { listQuery } from './api-borehole-repository';
 import { ApiClient, type ApiClientOptions } from './api-client';
-import type { ApiFeatureCollection } from './api-types';
+import type { ApiFeatureCollection, ApiItemResponse } from './api-types';
 import { featureToSummary } from './mappers';
 
 /** Forwards queries to `GET /boreholes/search`, which parses the query language and ranks hits. */
@@ -24,5 +24,14 @@ export class ApiSearchRepository implements SearchRepository {
 			total: collection.total,
 			suggestion: collection.suggestion
 		};
+	}
+
+	/** `GET /boreholes/complete`: trigram (q-gram) completions of the last term (ADR-0043). */
+	async complete(q: string, limit: number): Promise<SearchCompletion[]> {
+		const qs = listQuery({ q, limit });
+		const body = await this.client.getJson<ApiItemResponse<SearchCompletion[]>>(
+			`/boreholes/complete${qs}`
+		);
+		return body!.data;
 	}
 }

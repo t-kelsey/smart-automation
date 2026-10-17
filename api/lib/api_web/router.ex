@@ -9,6 +9,7 @@ defmodule ApiWeb.Router do
     pipe_through :api
 
     get "/boreholes/search", BoreholeController, :search
+    get "/boreholes/complete", BoreholeController, :complete
     get "/boreholes/:id", BoreholeController, :show
     get "/boreholes", BoreholeController, :index
     post "/boreholes", BoreholeController, :create

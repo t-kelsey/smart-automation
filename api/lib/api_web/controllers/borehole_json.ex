@@ -17,6 +17,9 @@ defmodule ApiWeb.BoreholeJSON do
     |> then(fn c -> if s = assigns[:suggestion], do: Map.put(c, :suggestion, s), else: c end)
   end
 
+  @doc "Renders search completions (`value`, `kind`, `query`)."
+  def complete(%{completions: completions}), do: %{data: completions}
+
   @doc """
   Renders the full detail of a single borehole, including layers and documents.
   """

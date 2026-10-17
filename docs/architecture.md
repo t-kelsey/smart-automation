@@ -108,8 +108,8 @@ sequenceDiagram
     participant D as PostgreSQL / PostGIS
     participant S as Document storage
 
-    U->>W: Open /search, /map or /borehole
-    W->>A: GET /api/boreholes/search | GET /api/boreholes (paged, filtered)
+    U->>W: Open /map or /borehole (for /search see Flow 3)
+    W->>A: GET /api/boreholes (paged, filtered)
     A->>D: Query (PostGIS for coordinates)
     D-->>A: Rows
     A-->>W: JSON list
@@ -137,3 +137,58 @@ Notes:
 - UI → service → repository → API (ADR-0009). UI code does not import repositories (ESLint enforces it).
 - In `pnpm dev` the Vite proxy forwards `/api`; in Docker `hooks.server.ts` forwards it to `API_INTERNAL_URL`.
 - Editing and review pages (`/borehole/:id/edit`, `/review`) exist, but saving changes is not wired to the API yet.
+
+## Flow 3: Search boreholes
+
+The search page has one input for a small query language over borehole name, place and drilling date (ADR-0042), with completions while typing (ADR-0043). The API parses the query and runs it in PostgreSQL; the web only passes the string through.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant W as Web (/search, SearchBar)
+    participant A as API (Phoenix)
+    participant D as PostgreSQL (pg_trgm)
+
+    U->>W: Type a query, e.g. "1959 place:Stutt"
+    Note over W: Debounced 120 ms, stale answers dropped
+    W->>A: GET /api/boreholes/complete?q=1959 place:Stutt
+    A->>A: SearchQuery.completion_targets: last term, its key and what stays
+    A->>D: Values containing the text or with word similarity of at least 0.6 (trigram GIN indexes)
+    D-->>A: Ranked names / places
+    A-->>W: [{value, kind, query}] with the whole completed query
+    W-->>U: Combobox dropdown (Name / Place / Key)
+    U->>W: Arrow keys + Enter take a completion, Enter again searches
+
+    W->>W: Navigate to /search?q=…, load() → SearchService
+    W->>A: GET /api/boreholes/search?q=…&limit&offset
+    A->>A: SearchQuery.parse: terms (text, name:, place:, date ranges, -negation, a,b)
+    alt Invalid query (e.g. date:19x9)
+        A-->>W: 400 {errors: {detail}}
+        W-->>U: "The query is not valid" with the reason
+    else Valid query
+        A->>D: WHERE per term (ILIKE on name / external_id / place, ranges on drilled_at), score, ORDER BY, LIMIT
+        D-->>A: Page of boreholes + total
+        opt Nothing found
+            A->>D: Closest key, most similar word per misspelt value (trigram similarity)
+            D-->>A: Candidates
+            Note over A: suggestion = corrected query string
+        end
+        A-->>W: FeatureCollection {total, features + score, suggestion?}
+        opt total = 0 and a suggestion (unless ?exact=1)
+            W->>A: GET /api/boreholes/search?q=suggestion
+            A-->>W: Hits for the corrected query
+            Note over W: "Showing results for X, search instead for Y"
+        end
+        W-->>U: Results table with paging
+    end
+```
+
+Notes:
+
+- **Query language** (all terms must match, case-insensitive): bare words and `"phrases"` match name, external id or place; `name:` / `n:`, `place:` / `location:` / `loc:` restrict the column; `date:` takes a year, month, day (`1959-06-12` or `12.06.1959`), a range (`1950..1960`, `1990..`, `..1960`) or a comparison (`>`, `>=`, `<`, `<=`), with `after:` / `before:` as short forms; a bare year or range is a date. `a,b` means either value, `-term` negates. Full syntax in [`api-reference.md`](api-reference.md#search-query-language) and in the Help drawer of the search page.
+- **Where the code is:** parser and completion targets in `Api.Boreholes.SearchQuery`; SQL building, scoring, `suggest_query/1` and `complete_query/2` in `Api.Boreholes`; endpoints `search` and `complete` in `BoreholeController` (registered before `/boreholes/:id`). In the web: `SearchService` (autocorrect re-query, `InvalidSearchQueryError`), `ApiSearchRepository`, `SearchBar.svelte` (Skeleton Combobox), `SearchHelpDrawer.svelte`.
+- **Indexes:** `pg_trgm` GIN indexes on `boreholes.name`, `external_id` and `place` serve substring matches (`ILIKE '%…%'`), completion candidates and autocorrection candidates; a B-tree on `drilled_at` serves date ranges.
+- **Ranking:** per matched text value name 10, external id 8, place 5, plus 5 if the name starts with it; ties by name. Date terms filter only.
+- **Autocorrection vs. completion:** completion uses word similarity of at least 0.6 while typing, so short inputs do not match unrelated values; autocorrection on search uses a looser similarity of 0.3 and only runs when nothing was found. The API returns the suggestion; the web runs it.
+- **Not searched:** layer descriptions, purpose and client (ADR-0042).

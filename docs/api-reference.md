@@ -243,6 +243,43 @@ curl -G "http://localhost:4000/api/boreholes/search" --data-urlencode 'q=Stutgar
 
 ---
 
+## `GET /api/boreholes/complete`
+
+Completions for the term being typed at the end of a search query, for autocompletion while typing (ADR-0043).
+
+| Param | Format | Description |
+|---|---|---|
+| `q` | text | The query as typed so far, in the [query language](#search-query-language). Not trimmed: after a trailing space there is nothing to complete. |
+| `limit` | 1–20 | Maximum number of completions, default 8. |
+
+Only the last term is completed, after its key, `-` and any earlier comma alternatives:
+
+- a bare word: keys it starts (`pla` → `place:`), then names and places;
+- `name:…` names, `place:…` places; dates and unknown keys get no completions;
+- values need at least 2 characters.
+
+Values are found by trigram (q-gram) matching through the `pg_trgm` indexes: values that contain the text (`ILIKE`) or have a word similarity ≥ 0.6 (`<%`), so one missing or extra letter still completes (`place:Stutgart` → `Stuttgart`). Values starting with the text come first, then those with a word starting with it, then those containing it, then by word similarity.
+
+### Response `200 OK`
+
+```json
+{
+  "data": [
+    { "value": "Stuttgart", "kind": "place", "query": "1959 Stuttgart " },
+    { "value": "Stuttgart-Ost", "kind": "name", "query": "1959 Stuttgart-Ost " },
+    { "value": "B 1/59 Stuttgart", "kind": "name", "query": "1959 \"B 1/59 Stuttgart\" " }
+  ]
+}
+```
+
+`kind` is `key`, `name` or `place`. `query` is the whole query with the term completed, ready to put into the search box: values with spaces, commas or that look like a date are quoted, and a space is appended (not after a key). `400` for an invalid `limit`.
+
+```bash
+curl -G "http://localhost:4000/api/boreholes/complete" --data-urlencode 'q=1959 Stutt'
+```
+
+---
+
 ## `POST /api/documents`
 
 Uploads a raw document (ADR-0033). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and the document inserted with `status: "pending"` — uploading no longer starts processing by itself (ADR-0035); call [`POST /api/pipeline_runs`](#post-apipipeline_runs) separately once you have a `config` to submit.
@@ -549,4 +586,4 @@ Records one pipeline run's `report.json` (per-step model/time/token/cost stats).
 
 ## Route ordering note
 
-`/api/boreholes/search` is registered before `/api/boreholes/:id` in the router — required so Phoenix doesn't match the literal path segment `"search"` as an `:id`.
+`/api/boreholes/search` and `/api/boreholes/complete` are registered before `/api/boreholes/:id` in the router — required so Phoenix doesn't match the literal path segments `"search"` and `"complete"` as an `:id`.

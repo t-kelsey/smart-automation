@@ -140,6 +140,22 @@ run the search and close the drawer.
 				</section>
 
 				<section class="space-y-2">
+					<h5 class="h6">Suggestions while typing</h5>
+					<ul class="list-disc space-y-1 pl-5 text-sm">
+						<li>
+							From the second letter on, the word you are typing is completed with matching names
+							and places, and with keys (<em>pla</em> suggests <em>place:</em>). After
+							<em>place:</em> only places are suggested, after <em>name:</em> only names.
+						</li>
+						<li>A missing or extra letter is fine: <em>Stutgart</em> still suggests Stuttgart.</li>
+						<li>
+							<kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd> pick a suggestion,
+							<kbd class="kbd">Enter</kbd> takes it, <kbd class="kbd">Esc</kbd> closes the list.
+						</li>
+					</ul>
+				</section>
+
+				<section class="space-y-2">
 					<h5 class="h6">Autocorrection</h5>
 					<ul class="list-disc space-y-1 pl-5 text-sm">
 						<li>

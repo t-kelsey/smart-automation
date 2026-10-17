@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { Pagination } from '@skeletonlabs/skeleton-svelte';
-	import { ArrowLeft, ArrowRight, SearchIcon, SparklesIcon } from '@lucide/svelte';
+	import { ArrowLeft, ArrowRight, SparklesIcon } from '@lucide/svelte';
 	import { Alert } from '#lib/components/alert/index.ts';
 	import BoreholeTable from '#lib/components/borehole/BoreholeTable.svelte';
+	import SearchBar from '#lib/components/search/SearchBar.svelte';
 	import SearchHelpDrawer from '#lib/components/search/SearchHelpDrawer.svelte';
 	import { searchHref } from '#lib/components/search/search-href.ts';
 	import { notify } from '#lib/components/toast/index.ts';
@@ -32,27 +33,19 @@
 	}
 </script>
 
-<div class="space-y-4">
+<div class="space-y-6">
 	<header class="flex items-center justify-between gap-4">
 		<h1 class="h1">Search</h1>
 		<SearchHelpDrawer />
 	</header>
 
-	<!-- A GET form: SvelteKit navigates to ?q=…, so the load function runs the search. -->
-	<form method="GET" role="search" class="field-group grid-cols-[auto_1fr_auto]">
-		<span class="label preset-tonal-surface"><SearchIcon class="size-4" /></span>
-		<input
-			type="search"
-			name="q"
-			class="input"
-			value={result.query}
-			placeholder="Name, place or date, e.g. place:Stuttgart 1950..1960"
-			aria-label="Search boreholes"
-			autocomplete="off"
-			spellcheck="false"
-		/>
-		<button type="submit" class="btn preset-filled-primary-500">Search</button>
-	</form>
+	<div class="py-2">
+		<SearchBar query={result.query} onsearch={(q) => goto(searchHref(q))} />
+		<p class="mt-3 px-5 text-xs opacity-60">
+			Suggestions appear while you type: <kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd> to pick
+			one, <kbd class="kbd">Enter</kbd> to take it or to search.
+		</p>
+	</div>
 
 	{#if data.queryError}
 		<Alert type="error" title="The query is not valid" message={data.queryError} />

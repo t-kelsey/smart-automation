@@ -251,6 +251,56 @@ defmodule Api.BoreholesTest do
     end
   end
 
+  describe "complete_query/2" do
+    setup do
+      insert_borehole(%{name: "B 1/59 Schönberg", place: "Stuttgart"})
+      insert_borehole(%{name: "KB 3", place: "Freiburg im Breisgau"})
+      insert_borehole(%{name: "Stuttgart-Ost", place: "Esslingen"})
+      :ok
+    end
+
+    defp completions(q, limit \\ 8),
+      do: Enum.map(Boreholes.complete_query(q, limit), &{&1.value, &1.kind, &1.query})
+
+    test "completes names and places, values starting with the text first" do
+      assert completions("stutt") == [
+               {"Stuttgart", :place, "Stuttgart "},
+               {"Stuttgart-Ost", :name, "Stuttgart-Ost "}
+             ]
+    end
+
+    test "completes despite a typo through trigram similarity" do
+      assert {"Stuttgart", :place, "place:Stuttgart "} in completions("place:Stutgart")
+    end
+
+    test "keeps the rest of the query, the key, negation and earlier alternatives" do
+      assert completions("1959 -place:Esslingen,Frei") == [
+               {"Freiburg im Breisgau", :place, ~s(1959 -place:Esslingen,"Freiburg im Breisgau" )}
+             ]
+    end
+
+    test "name: only completes names, and values with spaces are quoted" do
+      assert completions("name:schön") == [
+               {"B 1/59 Schönberg", :name, ~s(name:"B 1/59 Schönberg" )}
+             ]
+    end
+
+    test "completes keys" do
+      assert [{"place:", :key, "place:"} | _] = completions("pla")
+    end
+
+    test "completes nothing after a space, for dates, or for one letter" do
+      assert completions("stuttgart ") == []
+      assert completions("date:19") == []
+      assert completions("x") == []
+    end
+
+    test "returns at most limit entries" do
+      assert length(completions("s", 1)) <= 1
+      assert length(completions("st", 1)) == 1
+    end
+  end
+
   describe "get_borehole/1" do
     test "preloads layers ordered by position and documents" do
       borehole = insert_borehole(%{name: "With Layers"})

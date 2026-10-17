@@ -1,4 +1,10 @@
-import type { Borehole, SearchHit, SearchPage, SearchQuery } from '#lib/domain/borehole.ts';
+import type {
+	Borehole,
+	SearchCompletion,
+	SearchHit,
+	SearchPage,
+	SearchQuery
+} from '#lib/domain/borehole.ts';
 import type { SearchRepository } from '../search-repository';
 import { toSummary } from './mock-borehole-repository';
 import { mockBoreholes } from './mock-data';
@@ -35,5 +41,10 @@ export class MockSearchRepository implements SearchRepository {
 		);
 		const end = limit === undefined ? undefined : offset + limit;
 		return { items: hits.slice(offset, end), total: hits.length };
+	}
+
+	/** No completions in the mock. */
+	async complete(): Promise<SearchCompletion[]> {
+		return [];
 	}
 }

@@ -838,6 +838,64 @@ defmodule Api.Boreholes do
     word
   end
 
+  @typedoc "One completion: the completed `value`, where it is from, and the whole new query."
+  @type completion :: %{value: String.t(), kind: :key | :name | :place, query: String.t()}
+
+  # Columns completed per field, and the kind reported for them.
+  @completion_columns %{text: [:name, :place], name: [:name], place: [:place]}
+
+  @doc """
+  Completions for the term being typed at the end of `query` (ADR-0043): field keys it starts,
+  then names and places found by trigram (q-gram) matching, so a typo still completes. Values
+  that contain the typed text rank first (at the start before at a word start before inside),
+  then by word similarity. At most `limit` entries.
+  """
+  @spec complete_query(String.t(), pos_integer()) :: [completion()]
+  def complete_query(query, limit) do
+    query
+    |> SearchQuery.completion_targets()
+    |> Enum.flat_map(fn
+      %{field: :key, partial: partial} = target ->
+        for key <- SearchQuery.keys_starting_with(partial),
+            do: %{value: key <> ":", kind: :key, query: SearchQuery.complete(target, key)}
+
+      %{field: field, partial: partial} = target ->
+        if String.length(partial) >= 2 do
+          for {value, kind} <- similar_values(@completion_columns[field], partial, limit),
+              do: %{value: value, kind: kind, query: SearchQuery.complete(target, value)}
+        else
+          []
+        end
+    end)
+    |> Enum.take(limit)
+  end
+
+  # Values of `columns` that contain `partial` or are similar to it (`<%`: word similarity at least
+  # pg_trgm's default 0.6), best first. Both conditions are served by the trigram indexes. Column
+  # names come from @completion_columns only.
+  defp similar_values(columns, partial, limit) do
+    candidates =
+      Enum.map_join(columns, " UNION ALL ", fn column ->
+        "(SELECT #{column} AS value, '#{column}' AS kind FROM boreholes " <>
+          "WHERE #{column} ILIKE $2 OR $1 <% #{column} LIMIT 500)"
+      end)
+
+    sql = """
+    SELECT value, kind FROM (#{candidates}) AS candidates
+    GROUP BY value, kind
+    ORDER BY
+      CASE WHEN value ILIKE $3 THEN 3 WHEN value ILIKE $4 THEN 2 WHEN value ILIKE $2 THEN 1 ELSE 0 END DESC,
+      word_similarity($1, value) DESC, length(value), value
+    LIMIT $5
+    """
+
+    escaped = escape_like(partial)
+    params = [partial, "%" <> escaped <> "%", escaped <> "%", "% " <> escaped <> "%", limit]
+
+    Repo.query!(sql, params).rows
+    |> Enum.map(fn [value, kind] -> {value, String.to_existing_atom(kind)} end)
+  end
+
   defp order(query, filters, search) do
     case Map.get(filters, :sort) || if(search, do: {:score, :desc}, else: {:name, :asc}) do
       {:score, dir} when search != nil ->

@@ -235,4 +235,24 @@ defmodule ApiWeb.BoreholeControllerTest do
       assert %{"errors" => %{"detail" => "invalid date" <> _}} = json_response(conn, 400)
     end
   end
+
+  describe "GET /api/boreholes/complete" do
+    test "returns completions with the completed query", %{conn: conn} do
+      insert_borehole(%{name: "B 1", place: "Stuttgart"})
+
+      conn = get(conn, ~p"/api/boreholes/complete?#{[q: "place:stut"]}")
+
+      assert %{
+               "data" => [
+                 %{"value" => "Stuttgart", "kind" => "place", "query" => "place:Stuttgart "}
+               ]
+             } =
+               json_response(conn, 200)
+    end
+
+    test "rejects an invalid limit", %{conn: conn} do
+      conn = get(conn, ~p"/api/boreholes/complete?#{[q: "a", limit: 99]}")
+      assert %{"errors" => %{"detail" => "invalid limit"}} = json_response(conn, 400)
+    end
+  end
 end

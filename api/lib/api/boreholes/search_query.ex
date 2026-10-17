@@ -91,6 +91,98 @@ defmodule Api.Boreholes.SearchQuery do
     end
   end
 
+  @typedoc """
+  The term at the end of a query that is being typed (ADR-0043): `partial` is its unfinished
+  value, `field` where to look for completions, and `prefix` everything before the value that
+  stays (the rest of the query, `-`, the key and earlier comma alternatives).
+  """
+  @type completion_target :: %{
+          prefix: String.t(),
+          field: :text | :name | :place | :key,
+          partial: String.t()
+        }
+
+  @doc """
+  What the term being typed at the end of `query` can be completed to: none (empty query, a
+  trailing space, dates, unknown keys), its field's values, and for a bare word also the keys it
+  starts (`pla` to `place:`, `field: :key`).
+  """
+  @spec completion_targets(String.t()) :: [completion_target()]
+  def completion_targets(query) when is_binary(query) do
+    {head, token} = String.split_at(query, last_token_start(query))
+    [_, minus, key, value] = Regex.run(~r/^(-?)(?:([[:alpha:]]+):)?(.*)$/su, token)
+    # With comma alternatives only the value after the last comma is completed.
+    {alternatives, partial} =
+      case Regex.run(~r/^(.*,)([^,]*)$/su, value) do
+        [_, alternatives, partial] -> {alternatives, partial}
+        nil -> {"", value}
+      end
+
+    partial = String.trim(partial, "\"")
+    prefix = head <> minus <> if(key == "", do: "", else: key <> ":") <> alternatives
+
+    cond do
+      String.trim(partial) == "" ->
+        []
+
+      key == "" ->
+        target = %{prefix: prefix, field: :text, partial: partial}
+
+        if alternatives == "" and minus == "" and Regex.match?(~r/^[[:alpha:]]+$/u, partial),
+          do: [%{target | field: :key}, target],
+          else: [target]
+
+      true ->
+        case Map.get(@keys, String.downcase(key)) do
+          field when field in [:name, :place] ->
+            [%{prefix: prefix, field: field, partial: partial}]
+
+          _ ->
+            []
+        end
+    end
+  end
+
+  @doc """
+  The query with the target's partial value replaced by `value`, quoted if needed, followed by a
+  space so the next term can be typed. A key (`field: :key`) is completed as `key:`.
+  """
+  @spec complete(completion_target(), String.t()) :: String.t()
+  def complete(%{field: :key, prefix: prefix}, key), do: prefix <> key <> ":"
+
+  def complete(%{field: field, prefix: prefix}, value) do
+    value = String.replace(value, "\"", "")
+    # A bare year or date would be read as a date, a space or comma would split the value.
+    quote? =
+      String.match?(value, ~r/[\s,]/u) or (field == :text and match?({:ok, _}, parse_date(value)))
+
+    prefix <> if(quote?, do: ~s("#{value}"), else: value) <> " "
+  end
+
+  @doc "Keys starting with `partial` (case-insensitive), shortest first."
+  @spec keys_starting_with(String.t()) :: [String.t()]
+  def keys_starting_with(partial) do
+    partial = String.downcase(partial)
+
+    @keys
+    |> Map.keys()
+    |> Enum.filter(&String.starts_with?(&1, partial))
+    |> Enum.sort_by(&{String.length(&1), &1})
+  end
+
+  # Index (in graphemes) where the last term starts: after the last space outside quotes.
+  defp last_token_start(query) do
+    query
+    |> String.graphemes()
+    |> Enum.with_index()
+    |> Enum.reduce({false, 0}, fn
+      {"\"", _index}, {quoted, start} -> {not quoted, start}
+      {char, index}, {false, start} -> {false, if(char =~ ~r/^\s$/u, do: index + 1, else: start)}
+      _char, acc -> acc
+    end)
+    |> elem(1)
+  end
+
   @doc "Writes the query back as a query string."
   @spec to_string(t()) :: String.t()
   def to_string(%__MODULE__{terms: terms}), do: Enum.map_join(terms, " ", &term_to_string/1)

@@ -1,4 +1,4 @@
-import type { SearchHit, SearchPage } from '#lib/domain/borehole.ts';
+import type { SearchCompletion, SearchHit, SearchPage } from '#lib/domain/borehole.ts';
 import { RepositoryError } from '#lib/repositories/borehole-repository.ts';
 import type { SearchRepository } from '#lib/repositories/search-repository.ts';
 import { DEFAULT_PAGE_SIZE, type PagedResult } from './borehole-service';
@@ -53,6 +53,15 @@ export class SearchService {
 			}
 		}
 		return this.paged(result, query, current, size);
+	}
+
+	/**
+	 * Completions for the term being typed at the end of `q`. The query is not trimmed: after a
+	 * trailing space a new term starts, which has nothing to complete yet.
+	 */
+	async complete(q: string, limit = 8): Promise<SearchCompletion[]> {
+		if (!q.trim()) return [];
+		return this.repository.complete(q, limit);
 	}
 
 	private async fetch(q: string, page: number, size: number): Promise<SearchPage> {

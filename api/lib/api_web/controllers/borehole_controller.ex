@@ -56,6 +56,15 @@ defmodule ApiWeb.BoreholeController do
     end
   end
 
+  @doc """
+  Completions for the term being typed at the end of `q` (ADR-0043). `limit` is 1–20, default 8.
+  """
+  def complete(conn, params) do
+    with {:ok, limit} <- BoreholeParams.parse_completion_limit(params) do
+      render(conn, :complete, completions: Boreholes.complete_query(params["q"] || "", limit))
+    end
+  end
+
   defp render_list(conn, filters, params) do
     %{entries: entries, total: total} = Boreholes.list_boreholes(filters)
 

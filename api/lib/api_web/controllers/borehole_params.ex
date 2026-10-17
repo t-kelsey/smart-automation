@@ -51,6 +51,12 @@ defmodule ApiWeb.BoreholeParams do
     end
   end
 
+  @doc "The `limit` of the completion endpoint: 1–20, default 8."
+  def parse_completion_limit(params) do
+    with {:ok, limit} <- optional(params, "limit", &parse_integer(&1, 1, 20)),
+         do: {:ok, limit || 8}
+  end
+
   defp optional(params, key, parser) do
     case params[key] do
       nil -> {:ok, nil}

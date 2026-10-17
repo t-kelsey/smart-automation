@@ -136,6 +136,16 @@ export interface SearchHit {
 	snippet?: string;
 }
 
+/** A completion for the term being typed at the end of a search query. */
+export interface SearchCompletion {
+	/** The completed value, e.g. a place name or a key like `place:`. */
+	value: string;
+	/** Where the value comes from. */
+	kind: 'key' | 'name' | 'place';
+	/** The whole query with the term completed. */
+	query: string;
+}
+
 export interface SearchPage extends Page<SearchHit> {
 	/** Only when nothing was found: an autocorrected query, if the backend has one. */
 	suggestion?: string;

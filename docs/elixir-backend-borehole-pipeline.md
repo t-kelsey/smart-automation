@@ -150,6 +150,7 @@ The current pipeline is `bem/` (`bem/README.md`; ADR-0034/ADR-0035 call it `clau
 - `GET /api/boreholes` → GeoJSON `FeatureCollection`, with `bbox`, search in a small query language over name, place and date (`q`, ADR-0042), filters (`verified`, `drilled_from`/`drilled_to`, `min_depth`/`max_depth`), `sort`, paging (`limit`/`offset`, capped at 10 000) and `view=points` for a lightweight map payload (ADR-0025)
 - `GET /api/boreholes/:id` → full detail (Stammdaten + ordered `borehole_layers` + confidentiality-filtered `documents`); `404` JSON for an unknown or malformed id
 - `GET /api/boreholes/search` → same shape as the list endpoint, plus `score` per feature and an autocorrected `suggestion` when nothing was found (ADR-0042)
+- `GET /api/boreholes/complete` → trigram (q-gram) completions of the term being typed at the end of a query (ADR-0043)
 - `GET /api/documents/:id/file` → streams a document's stored file for in-app viewing, `?download=1` for an attachment (ADR-0026, supersedes the "never exposed" part of ADR-0014)
 - `POST /api/boreholes` → creates a borehole + its layers synchronously, optionally linked to an existing document (ADR-0031, supersedes the async design in Task 2 above)
 - Errors are JSON (`{ errors: { detail } }`) via `action_fallback ApiWeb.FallbackController`: `400`/`404` for GETs, `422` with field errors for `POST /api/boreholes` changeset failures
