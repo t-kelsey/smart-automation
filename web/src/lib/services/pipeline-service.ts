@@ -1,5 +1,6 @@
+import type { PipelineConfig } from '#lib/domain/documents.ts';
 import type { Pipeline } from '#lib/domain/pipelines.ts';
-import type { PipelineRepository } from '#lib/repositories/pipeline-repository.ts';
+import type { PipelineRepository, StartedPipeline } from '#lib/repositories/pipeline-repository.ts';
 
 export class PipelineNotFoundError extends Error {
 	constructor(readonly id: string) {
@@ -20,5 +21,10 @@ export class PipelineService {
 		const pipeline = await this.repository.get(id);
 		if (!pipeline) throw new PipelineNotFoundError(id);
 		return pipeline;
+	}
+
+	/** Submits an uploaded document to the pipeline with the chosen per step config. */
+	start(documentId: string, config: PipelineConfig): Promise<StartedPipeline> {
+		return this.repository.start(documentId, config);
 	}
 }

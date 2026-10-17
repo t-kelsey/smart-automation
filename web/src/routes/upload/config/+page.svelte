@@ -20,7 +20,7 @@
 		type PipelineEffort,
 		type PipelineModel
 	} from '#lib/domain/documents.ts';
-	import { getQueuedFiles, unqueueFile } from '#lib/upload-queue.svelte.ts';
+	import { getQueuedFiles, markUploaded, unqueueFile } from '#lib/upload-queue.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -33,26 +33,44 @@
 	onMount(() => document.querySelector('main')?.scrollTo({ top: 0 }));
 
 	/**
-	 * Uploads every queued file (`POST /documents`), which hands it to the extraction pipeline.
-	 * TODO: the chosen `config` is not sent anywhere yet, the API has no way to receive it.
+	 * Uploads every queued file (`POST /documents`) and submits it to the pipeline with the chosen
+	 * config (`POST /pipeline_runs`). A file stays in the list if either step fails; one that is
+	 * already uploaded is not uploaded again on a retry.
 	 */
 	async function start() {
 		uploading = true;
-		let failed = 0;
-		for (const { id, file } of [...queued]) {
+		const runs: string[] = [];
+		for (const queuedFile of [...queued]) {
+			const { id, file } = queuedFile;
 			try {
-				await data.uploads.upload(file);
-				unqueueFile(id);
+				let documentId = queuedFile.documentId;
+				if (!documentId) {
+					documentId = (await data.uploads.upload(file)).id;
+					markUploaded(id, documentId);
+				}
+				const run = await data.pipelines.start(documentId, $state.snapshot(config));
+				if (run.status === 'running') {
+					runs.push(run.id);
+					unqueueFile(id);
+				} else if (run.status === 'failed') {
+					notify.error(`The pipeline refused ${file.name}`, 'It is uploaded; try again later.');
+				} else {
+					notify.error(`${file.name} is uploaded but not started`, 'No pipeline is configured.');
+				}
 			} catch (e) {
-				failed++;
-				notify.fromError(e, `Could not upload ${file.name}`);
+				notify.fromError(e, `Could not process ${file.name}`);
 			}
 		}
 		uploading = false;
-		if (failed === 0) {
-			notify.success('Upload complete.');
-			await goto(resolve('/pipeline'));
-		}
+		if (runs.length === 0) return;
+		notify.success(
+			runs.length === 1 ? 'Extraction started.' : `Extraction started for ${runs.length} files.`
+		);
+		await goto(
+			runs.length === 1 && queued.length === 0
+				? resolve('/pipeline/[id]', { id: runs[0] })
+				: resolve('/pipeline')
+		);
 	}
 </script>
 

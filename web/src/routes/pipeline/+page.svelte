@@ -1,19 +1,32 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Avatar, Tabs } from '@skeletonlabs/skeleton-svelte';
+	import { invalidate } from '$app/navigation';
+	import { Tabs } from '@skeletonlabs/skeleton-svelte';
 	import { CalendarIcon, ClockIcon, RefreshCwIcon, SearchIcon } from '@lucide/svelte';
 	import { notify } from '#lib/components/toast/index.ts';
 	import { StageSummary, StatusBadge } from '#lib/components/pipeline/index.ts';
+	import { retryPipeline } from '#lib/components/pipeline/retry.ts';
 	import {
 		formatClock,
 		formatRelative,
-		initials,
+		isActive,
 		pipelineDuration,
 		pipelineStatus
 	} from '#lib/domain/pipelines.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
+
+	$effect(() => {
+		if (data.loadError) notify.fromError(data.loadError, 'Could not load pipelines');
+	});
+
+	// Keep polling while a pipeline is still going.
+	$effect(() => {
+		if (!data.pipelines.some(isActive)) return;
+		const timer = setInterval(() => invalidate('app:pipelines'), 3000);
+		return () => clearInterval(timer);
+	});
 
 	let tab = $state('all');
 	let filter = $state('');
@@ -92,7 +105,6 @@
 				<tr>
 					<th>Status</th>
 					<th>Pipeline</th>
-					<th>Created by</th>
 					<th>Stages</th>
 					<th><span class="sr-only">Actions</span></th>
 				</tr>
@@ -128,13 +140,6 @@
 								</span>
 							</p>
 						</td>
-						<td>
-							<Avatar class="size-10" aria-label={pipeline.createdBy} title={pipeline.createdBy}>
-								<Avatar.Fallback class="preset-filled-primary-500 text-sm font-semibold">
-									{initials(pipeline.createdBy)}
-								</Avatar.Fallback>
-							</Avatar>
-						</td>
 						<td><StageSummary {pipeline} /></td>
 						<td class="text-right">
 							<button
@@ -142,7 +147,8 @@
 								class="btn-icon preset-outlined-surface-300-700"
 								aria-label="Retry {pipeline.filename}"
 								title="Retry"
-								onclick={() => notify.error('Retrying pipelines is not available yet.')}
+								disabled={isActive(pipeline)}
+								onclick={() => retryPipeline(data.service, pipeline)}
 							>
 								<RefreshCwIcon class="size-4" />
 							</button>

@@ -1,13 +1,15 @@
+import type { PipelineConfig } from './documents';
+
 export type JobStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped';
 
-/** A stage's or a whole pipeline's status, derived from its jobs. */
+/** A stage's or a whole pipeline's status. */
 export type PipelineStatus = JobStatus;
 
 export interface PipelineJob {
 	id: string;
 	name: string;
 	status: JobStatus;
-	/** Seconds; absent while the job has not finished. */
+	/** Seconds; only known for jobs that are a whole stage on their own. */
 	durationSeconds?: number;
 	model?: string;
 	error?: string;
@@ -17,26 +19,33 @@ export interface PipelineStage {
 	key: string;
 	label: string;
 	jobs: PipelineJob[];
+	/** Model and effort the stage runs with (from the report once it exists, else from the config). */
+	model?: string;
+	effort?: string;
+	/** Wall time of the whole stage in seconds, from the report. */
+	durationSeconds?: number;
 }
 
 /** One pipeline run: the extraction of a single uploaded document. */
 export interface Pipeline {
-	/** The id of the document the pipeline processes. */
+	/** The id of the run (`pipeline_runs.id`). */
 	id: string;
+	documentId: string;
 	filename: string;
+	status: PipelineStatus;
 	createdAt: Date;
-	/** Who uploaded the document. */
-	createdBy: string;
+	/** Last status change; the end of the run once it has finished. */
+	updatedAt: Date;
+	config: Partial<PipelineConfig>;
 	stages: PipelineStage[];
 }
 
-/** Stages of the extraction pipeline in processing order. */
+/** Stages of the extraction pipeline in processing order (the `type` of `exec_stages`). */
 export const PIPELINE_STAGES = [
-	{ key: 'filter_pages', label: 'Filter pages' },
-	{ key: 'split_boreholes', label: 'Split boreholes' },
+	{ key: 'filter', label: 'Filter pages' },
+	{ key: 'split', label: 'Split boreholes' },
 	{ key: 'extract', label: 'Extract' },
-	{ key: 'transform', label: 'Transform' },
-	{ key: 'store', label: 'Store' }
+	{ key: 'transform', label: 'Transform' }
 ] as const;
 
 /** Failed beats running beats pending; all skipped counts as skipped, otherwise success. */
@@ -55,15 +64,18 @@ export function stageStatus(stage: PipelineStage): PipelineStatus {
 }
 
 export function pipelineStatus(pipeline: Pipeline): PipelineStatus {
-	return statusOf(pipeline.stages.flatMap((s) => s.jobs));
+	return pipeline.status;
 }
 
-/** Total job time in seconds (jobs of a stage may run in parallel, so stages are summed by their longest job). */
-export function pipelineDuration(pipeline: Pipeline): number {
-	return pipeline.stages.reduce(
-		(sum, stage) => sum + Math.max(0, ...stage.jobs.map((j) => j.durationSeconds ?? 0)),
-		0
-	);
+/** True while the pipeline can still change, so the UI keeps polling. */
+export function isActive(pipeline: Pipeline): boolean {
+	return pipeline.status === 'pending' || pipeline.status === 'running';
+}
+
+/** Seconds from the start to the end of the run, or to `now` while it is still going. */
+export function pipelineDuration(pipeline: Pipeline, now = new Date()): number {
+	const end = isActive(pipeline) ? now : pipeline.updatedAt;
+	return Math.max(0, (end.getTime() - pipeline.createdAt.getTime()) / 1000);
 }
 
 export function countByStatus(jobs: Pick<PipelineJob, 'status'>[]): Record<JobStatus, number> {
@@ -105,11 +117,4 @@ export function formatRelative(date: Date, now = new Date()): string {
 		if (Math.abs(seconds) >= size) return formatter.format(Math.trunc(seconds / size), unit);
 	}
 	return formatter.format(seconds, 'second');
-}
-
-export function initials(name: string): string {
-	const words = name.trim().split(/\s+/);
-	return (
-		words.length > 1 ? words[0][0] + words[words.length - 1][0] : name.slice(0, 2)
-	).toUpperCase();
 }

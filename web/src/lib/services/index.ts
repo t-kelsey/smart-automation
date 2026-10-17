@@ -35,12 +35,12 @@ export async function createServices({
 		{ ApiBoreholeRepository },
 		{ ApiSearchRepository },
 		{ ApiUploadRepository },
-		{ MockPipelineRepository }
+		{ ApiPipelineRepository }
 	] = await Promise.all([
 		import('#lib/repositories/api/api-borehole-repository.ts'),
 		import('#lib/repositories/api/api-search-repository.ts'),
 		import('#lib/repositories/api/api-upload-repository.ts'),
-		import('#lib/repositories/mock/mock-pipeline-repository.ts')
+		import('#lib/repositories/api/api-pipeline-repository.ts')
 	]);
 	const options = { baseUrl: config.apiUrl, fetch };
 	const boreholes: BoreholeRepository = new ApiBoreholeRepository(options);
@@ -49,7 +49,6 @@ export async function createServices({
 		boreholes: new BoreholeService(boreholes),
 		search: new SearchService(search),
 		uploads: new UploadService(new ApiUploadRepository(options)),
-		// Placeholder data until the API exposes pipeline runs.
-		pipelines: new PipelineService(new MockPipelineRepository())
+		pipelines: new PipelineService(new ApiPipelineRepository(options))
 	};
 }

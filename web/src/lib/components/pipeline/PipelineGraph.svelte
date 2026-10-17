@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { RefreshCwIcon } from '@lucide/svelte';
-	import { notify } from '#lib/components/toast/index.ts';
 	import {
 		countByStatus,
 		formatDuration,
@@ -46,6 +44,14 @@
 						<span class="sr-only">{stageStatus(stage)}:</span>
 						{summary(stage.jobs)}
 					</p>
+					{#if stage.model}
+						<p class="text-xs opacity-70">
+							{stage.model}{stage.effort ? ` · ${stage.effort}` : ''}{stage.durationSeconds !==
+							undefined
+								? ` · ${formatDuration(stage.durationSeconds)}`
+								: ''}
+						</p>
+					{/if}
 				</header>
 
 				<ul class="space-y-1 rounded-xl bg-surface-50-950 p-1.5">
@@ -61,15 +67,6 @@
 									<p class="text-xs opacity-60">{formatDuration(job.durationSeconds)}</p>
 								{/if}
 							</div>
-							<button
-								type="button"
-								class="btn-icon size-8 rounded-full border border-surface-400-600 hover:preset-tonal"
-								aria-label="Retry {job.name}"
-								title="Retry"
-								onclick={() => notify.error('Retrying jobs is not available yet.')}
-							>
-								<RefreshCwIcon class="size-4" />
-							</button>
 						</li>
 					{:else}
 						<li class="px-2.5 py-2.5 text-sm opacity-60">No jobs</li>

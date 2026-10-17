@@ -1,10 +1,13 @@
 <script lang="ts">
+	import { invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Tabs } from '@skeletonlabs/skeleton-svelte';
-	import { ArrowLeftIcon, ListIcon, WorkflowIcon } from '@lucide/svelte';
+	import { ArrowLeftIcon, ListIcon, RefreshCwIcon, WorkflowIcon } from '@lucide/svelte';
 	import { PipelineGraph, StatusBadge, StatusIcon } from '#lib/components/pipeline/index.ts';
+	import { retryPipeline } from '#lib/components/pipeline/retry.ts';
 	import {
 		formatDuration,
+		isActive,
 		pipelineDuration,
 		pipelineStatus,
 		stageStatus
@@ -14,6 +17,13 @@
 	let { data }: PageProps = $props();
 	let pipeline = $derived(data.pipeline);
 	let tab = $state('pipeline');
+
+	// Keep polling while the pipeline is still going.
+	$effect(() => {
+		if (!isActive(pipeline)) return;
+		const timer = setInterval(() => invalidate('app:pipelines'), 3000);
+		return () => clearInterval(timer);
+	});
 
 	const formatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 	const jobs = $derived(
@@ -37,6 +47,14 @@
 			pipelineDuration(pipeline)
 		)}
 	</p>
+	<button
+		type="button"
+		class="ml-auto btn preset-tonal"
+		disabled={isActive(pipeline)}
+		onclick={() => retryPipeline(data.service, pipeline)}
+	>
+		<RefreshCwIcon class="size-4" /> Retry
+	</button>
 </header>
 
 <Tabs value={tab} onValueChange={(details) => (tab = details.value)}>
