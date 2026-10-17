@@ -44,6 +44,9 @@
 			<pattern id="lith-marl" width="12" height="10" patternUnits="userSpaceOnUse">
 				<path d="M0 5 H12 M6 0 V5 M0 10 L3 5 M12 10 L9 5" />
 			</pattern>
+			<pattern id="lith-unknown" width="8" height="8" patternUnits="userSpaceOnUse">
+				<path d="M0 8 L8 0" />
+			</pattern>
 		</g>
 	</defs>
 </svg>

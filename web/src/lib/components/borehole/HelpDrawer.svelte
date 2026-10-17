@@ -11,7 +11,9 @@
 
 	let { colors = [] }: Props = $props();
 
-	const lithologyKeys = Object.keys(lithologies) as LithologyKey[];
+	const lithologyKeys = (Object.keys(lithologies) as LithologyKey[]).filter(
+		(key) => key !== 'unknown'
+	);
 </script>
 
 <Dialog>

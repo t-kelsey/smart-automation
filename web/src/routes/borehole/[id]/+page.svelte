@@ -16,7 +16,7 @@
 	import HelpDrawer from '#lib/components/borehole/HelpDrawer.svelte';
 	import LithologyDefs from '#lib/components/borehole/LithologyDefs.svelte';
 	import MapSnippet from '#lib/components/borehole/MapSnippet.svelte';
-	import type { BoreholeDocument } from '#lib/components/borehole/types.ts';
+	import type { BoreholeDocument } from '#lib/domain/borehole.ts';
 	import { lithologies } from '#lib/components/borehole/lithology.ts';
 	import type { PageProps } from './$types';
 	import { Collapsible, Menu, Portal } from '@skeletonlabs/skeleton-svelte';
@@ -31,13 +31,16 @@
 
 	let coreData = $derived([
 		{ label: 'Name', value: borehole.name },
-		{ label: 'Date', value: borehole.date },
-		{ label: 'Boring cause', value: borehole.cause },
-		{ label: 'Height o. NN', value: `${borehole.elevation.toFixed(2)} m` },
+		{ label: 'Date', value: borehole.date ?? '–' },
+		{ label: 'Boring cause', value: borehole.cause ?? '–' },
+		{
+			label: 'Height o. NN',
+			value: borehole.elevation === null ? '–' : `${borehole.elevation.toFixed(2)} m`
+		},
 		{ label: 'Total depth', value: `${borehole.totalDepth.toFixed(1)} m` },
-		{ label: 'Drilling method', value: borehole.drillingMethod },
-		{ label: 'Client', value: borehole.client },
-		{ label: 'Location', value: borehole.location.place }
+		{ label: 'Drilling method', value: borehole.drillingMethod ?? '–' },
+		{ label: 'Client', value: borehole.client ?? '–' },
+		{ label: 'Location', value: borehole.location?.place ?? '–' }
 	]);
 
 	// Unique layer colours for the legend.
@@ -53,7 +56,7 @@
 
 	// TODO: wire these up once the API exists.
 	const documentActions = [
-		{ label: "Download", icon: Download },
+		{ label: 'Download', icon: Download },
 		{ label: 'New Version', icon: UploadIcon },
 		{ label: 'Rename', icon: PencilIcon },
 		{ label: 'Delete', icon: TrashIcon, danger: true }
@@ -68,7 +71,7 @@
 	>
 		<div>
 			<h1 class="h2">Borehole {borehole.name}</h1>
-			<p class="text-sm opacity-70">{borehole.location.place}</p>
+			<p class="text-sm opacity-70">{borehole.location?.place ?? ''}</p>
 		</div>
 		<div class="flex items-center gap-2">
 			<!-- TODO: implement sharing (e.g. copy link to this borehole). -->
@@ -87,7 +90,7 @@
 				<h2 class="mb-3 h5">Cross section</h2>
 				<BoreholeColumn
 					layers={borehole.layers}
-					elevation={borehole.elevation}
+					elevation={borehole.elevation ?? 0}
 					totalDepth={borehole.totalDepth}
 					selectedId={selectedLayerId}
 					onselect={(id) => (selectedLayerId = id)}
@@ -125,7 +128,9 @@
 									<dd class="font-medium">{item.value}</dd>
 								{/each}
 							</dl>
-							<MapSnippet lat={borehole.location.lat} lon={borehole.location.lon} />
+							{#if borehole.location}
+								<MapSnippet lat={borehole.location.lat} lon={borehole.location.lon} />
+							{/if}
 						</div>
 					</Collapsible.Content>
 				</Collapsible>
@@ -155,7 +160,7 @@
 								onmouseleave={() => (selectedLayerId = null)}
 							>
 								<div class="mb-2 flex items-center justify-between gap-2">
-									<span class="font-medium">{layer.id}</span>
+									<span class="font-medium">{layer.position}</span>
 									<span class="text-xs opacity-60">
 										{layer.startDepth.toFixed(1)} m – {layer.endDepth.toFixed(1)} m
 									</span>
@@ -203,7 +208,7 @@
 										onmouseenter={() => (selectedLayerId = layer.id)}
 										onmouseleave={() => (selectedLayerId = null)}
 									>
-										<td class="font-medium">{layer.id}</td>
+										<td class="font-medium">{layer.position}</td>
 										<td class="whitespace-nowrap">{layer.startDepth.toFixed(1)}</td>
 										<td class="whitespace-nowrap">{layer.endDepth.toFixed(1)}</td>
 										<td>
@@ -248,9 +253,14 @@
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- url comes from the API -->
 								<a href={doc.url} class="min-w-0 flex-1 truncate anchor">{doc.name}</a>
 								<span class="shrink-0 text-xs opacity-60">
-									{doc.type.toUpperCase()}{doc.pages ? ` · ${doc.pages} p.` : ''} · {doc.language} · {(
-										doc.sizeKb / 1024
-									).toFixed(1)} MB
+									{[
+										doc.type.toUpperCase(),
+										doc.pages ? `${doc.pages} p.` : null,
+										doc.language,
+										doc.sizeKb ? `${(doc.sizeKb / 1024).toFixed(1)} MB` : null
+									]
+										.filter(Boolean)
+										.join(' · ')}
 								</span>
 								<!-- Fixed-size slot so the row does not shift when the trigger appears. -->
 								<div class="size-8 shrink-0">

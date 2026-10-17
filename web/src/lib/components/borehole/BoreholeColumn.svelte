@@ -64,7 +64,7 @@
 				onmouseleave={() => onselect?.(null)}
 				onclick={() => onselect?.(selected ? null : layer.id)}
 			>
-				<title>{layer.id}: {lithologies[layer.petrography.lithology].label}</title>
+				<title>{layer.position}: {lithologies[layer.petrography.lithology].label}</title>
 				<rect x={axisWidth} {y} width={columnWidth} height={h} fill={layer.color.hex} />
 				<rect
 					x={axisWidth}

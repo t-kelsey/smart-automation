@@ -11,5 +11,6 @@ export const lithologies: Record<LithologyKey, { label: string; patternId: strin
 	sandstone: { label: 'Sandstone', patternId: 'lith-sandstone' },
 	claystone: { label: 'Claystone', patternId: 'lith-claystone' },
 	limestone: { label: 'Limestone', patternId: 'lith-limestone' },
-	marl: { label: 'Marl', patternId: 'lith-marl' }
+	marl: { label: 'Marl', patternId: 'lith-marl' },
+	unknown: { label: 'Unknown', patternId: 'lith-unknown' }
 };
