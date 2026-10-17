@@ -7,9 +7,12 @@ import shutil
 import sys
 import time
 
-from . import claude_cli, steps
+from .ai import PipelineError, StepReport, Timer, Usage, backend_names, get_ai, log
 from .naming import run_id, stamped
-from .claude_cli import PipelineError, StepReport, Timer, Usage, log
+from .steps.extract import extract_boreholes
+from .steps.filter import filter_pages
+from .steps.split import split_boreholes
+from .steps.translate import transform_boreholes
 
 DEFAULT_OUT = pathlib.Path(__file__).resolve().parent.parent / "out"
 
@@ -50,6 +53,7 @@ def main() -> int:
     parser.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUT, help="output root (default: claude_test/out)")
     parser.add_argument("--chunk-size", type=int, default=10, help="pages per classification call in step 1")
     parser.add_argument("--workers", type=int, default=4, help="parallel claude calls per step")
+    parser.add_argument("--ai", choices=backend_names(), help="AI backend (default: env BEM_AI or claude_cli)")
     args = parser.parse_args()
 
     if shutil.which("pdftoppm") is None:
@@ -60,7 +64,7 @@ def main() -> int:
     pdf = args.pdf.resolve()
     out_dir = (args.out / pdf.stem).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    claude_cli.DEBUG_DIR = out_dir / "debug"
+    get_ai(args.ai).debug_dir = out_dir / "debug"
     log(f"run id: {run_id()}")
     log(f"input: {pdf} ({pdf.stat().st_size / 1024:.0f} KiB) -> output: {out_dir}")
 
@@ -75,15 +79,15 @@ def main() -> int:
     t0 = time.monotonic()
     try:
         with Timer(r1):
-            filtered = steps.filter_pages(pdf, out_dir, r1, args.chunk_size, args.workers)
+            filtered = filter_pages(pdf, out_dir, r1, args.chunk_size, args.workers)
         if filtered is not None:
             pages_pdf, page_hints = filtered
             with Timer(r2):
-                files = steps.split_boreholes(pages_pdf, out_dir, r2, page_hints)
+                files = split_boreholes(pages_pdf, out_dir, r2, page_hints)
             with Timer(r3):
-                extracted = steps.extract_boreholes(files, out_dir, r3, args.workers)
+                extracted = extract_boreholes(files, out_dir, r3, args.workers)
             with Timer(r4):
-                results = steps.transform_boreholes(extracted, out_dir, r4, args.workers)
+                results = transform_boreholes(extracted, out_dir, r4, args.workers)
         else:
             log("no borehole log pages found, nothing to do")
     except PipelineError as e:
