@@ -9,8 +9,8 @@ import logging
 
 from langdetect import DetectorFactory, LangDetectException, detect
 
-from bem.translation_and_labeling.din4023 import translate_markdown
-from bem.translation_and_labeling.mt import MarianTranslator, Translator
+from .din4023 import translate_markdown
+from .mt import MarianTranslator, Translator
 
 # langdetect is random unless seeded, and the same document must always give the same language.
 DetectorFactory.seed = 0

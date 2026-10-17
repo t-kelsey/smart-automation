@@ -24,7 +24,7 @@ def _get_converter():
         options = PdfPipelineOptions(
             do_ocr=True,
             do_table_structure=True,
-            ocr_options=EasyOcrOptions(force_full_page_ocr=True),
+            ocr_options=EasyOcrOptions(force_full_page_ocr=True), # type: ignore
         )
         pdf_format = PdfFormatOption(pipeline_options=options)
         # Images go through the same pipeline as PDFs, so they get the same OCR settings.
@@ -34,11 +34,8 @@ def _get_converter():
     return _converter
 
 
-def ocr_file(path: Path, out_dir: Path) -> Path:
+def ocr_file(path: Path) -> str:
     """OCR one file to markdown and return the path of the markdown file."""
-    out_dir.mkdir(parents=True, exist_ok=True)
     # Prefix with the folder name: different inputs can share a file name (e.g. Report01.pdf).
-    out = out_dir / f"{path.parent.name}__{path.stem}.md"
     markdown = _get_converter().convert(path).document.export_to_markdown()
-    out.write_text(markdown, encoding="utf-8")
-    return out
+    return markdown
