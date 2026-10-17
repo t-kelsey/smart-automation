@@ -1,6 +1,235 @@
 <script lang="ts">
-	import { Alert } from '#lib/components/alert/index.ts';
+	import { Avatar, Carousel } from '@skeletonlabs/skeleton-svelte';
+	import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/svelte';
+	import Mermaid from '#lib/components/about/Mermaid.svelte';
+
+	let innerWidth = $state(1024);
+
+	/** First letters of the first and last word, or the first two letters of a single name. */
+	function initials(name: string): string {
+		const words = name.trim().split(/\s+/);
+		return (words.length > 1 ? words[0][0] + words.at(-1)![0] : name.slice(0, 2)).toUpperCase();
+	}
+
+	const challengeUrl =
+		'https://hackathon.badencampus.de/en/challenges/66f8c41f-b62a-4a84-a356-79546bc9c68b';
+
+	const team = [
+		{
+			name: 'Julia',
+			tags: ['API', 'Database', 'Elixir'],
+			task: 'Designed the PostGIS data model and built the Phoenix API that stores, georeferences and serves the boreholes.'
+		},
+		{
+			name: 'Tyler',
+			tags: ['BEM', 'Python', 'Data Processing'],
+			task: 'Sorts the incoming files and translates logs into DIN 4023 terms with a glossary and local translation models.'
+		},
+		{
+			name: 'Kai',
+			tags: ['BEM', 'Python', 'OCR'],
+			task: 'Turns scans and PDFs into markdown with table-aware OCR and a vision-language model for hard pages.'
+		},
+		{
+			name: 'Manuel',
+			tags: ['BEM', 'Python', 'Data Extraction'],
+			task: 'Extracts metadata, depth intervals, stratigraphy and lithology from the text into the borehole format.'
+		},
+		{
+			name: 'Kasimir',
+			tags: ['Architecture', 'UI', 'Svelte'],
+			task: 'Designed the system architecture and how the database, API, BEM pipeline and UI fit together, and built the UI.'
+		}
+	];
+
+	const infrastructure = [
+		{
+			name: 'Database',
+			text: 'PostgreSQL with PostGIS. Documents, boreholes and their layers are stored with a WGS84 point, so the map can query by bounding box. Coordinates are reprojected in the database, and the raw extraction is kept next to the standardised values.'
+		},
+		{
+			name: 'API',
+			text: 'A Phoenix (Elixir) JSON API. It receives the extracted boreholes from BEM, validates and georeferences them, and serves the map, search and profile views. It owns the data model.'
+		},
+		{
+			name: 'UI',
+			text: 'A SvelteKit app with a MapLibre map, a searchable table and borehole cross sections drawn after DIN 4023. It reads data through a service and repository layer.'
+		},
+		{
+			name: 'BEM',
+			text: 'The borehole extraction pipeline in Python. It turns raw files into structured borehole records and posts them to the API. This is the part of the project that does the hard work.'
+		}
+	];
+
+	const bemSteps = [
+		{
+			name: 'OCR',
+			text: 'Every file is converted to markdown, including digital PDFs. Docling runs locally with table recognition, because depth columns and layer boundaries only make sense with their table structure. A vision-language model supports pages that classic OCR reads badly, such as handwriting.'
+		},
+		{
+			name: 'Translation',
+			text: 'Logs come in English, French, Spanish, Danish and more. Lithology terms are mapped through a DIN 4023 glossary. When a term is missing, a local MarianMT model translates it, and the result is only accepted if it hits a glossary entry. Colour words are kept, since colour carries meaning.'
+		},
+		{
+			name: 'Extraction',
+			text: 'The translated markdown is mapped onto the borehole data format: metadata, elevation, depth intervals, stratigraphy and lithology. Results are validated and normalised.'
+		},
+		{
+			name: 'Split and output',
+			text: 'One log file can hold several boreholes, so the text is split into one JSON object per borehole and sent to the API, saved as files or printed.'
+		}
+	];
+
+	const diagram = `flowchart LR
+    files["Borehole logs<br/>PDF, scan, image, docx"]
+    subgraph bem["BEM (Python, runs locally)"]
+        direction LR
+        ocr["OCR<br/>Docling + VLM"] --> md[("Markdown")]
+        md --> translate["Translation<br/>DIN 4023 glossary<br/>+ local MarianMT"]
+        translate --> extract["Extraction<br/>validate + normalise"]
+        extract --> split["Split<br/>one JSON per borehole"]
+    end
+    api["Phoenix API<br/>georeferencing"]
+    db[("PostgreSQL<br/>+ PostGIS")]
+    ui["SvelteKit UI<br/>map, search, profiles"]
+    files --> ocr
+    split --> api --> db --> ui`;
 </script>
 
-<h1 class="mb-4 h1">About</h1>
-<Alert title="Not yet implemented" message="It's only a prototype." />
+<svelte:head>
+	<title>About · Borehole Atlas</title>
+</svelte:head>
+
+<svelte:window bind:innerWidth />
+
+<div class="mx-auto max-w-4xl space-y-12">
+	<header class="space-y-2">
+		<h1 class="h1">About</h1>
+		<p class="text-lg opacity-80">
+			A geodatabase that turns legacy borehole logs into structured, searchable data.
+		</p>
+	</header>
+
+	<section class="space-y-4">
+		<h2 class="h2">The hackathon and the challenge</h2>
+		<p>
+			This project was built at the Black Forest Hackathon 2026 for the
+			<a class="anchor" href={challengeUrl} target="_blank" rel="noreferrer">
+				Herrenknecht challenge
+			</a>
+			on smart automation of borehole data.
+		</p>
+		<p>
+			Boreholes are usually the only accurate description of the subsurface, and they drive the
+			design of tunnel boring machines (TBM). Many of them exist only as old logs: unstructured,
+			multilingual, formatted differently by every company and decade, and ranging from scanned
+			paper to native digital files. Much of the meaning sits in colours and hatch patterns.
+		</p>
+		<p>The challenge is to automate the whole path from a log to a searchable base:</p>
+		<ul class="list-inside list-disc space-y-1">
+			<li>read scans and PDFs (OCR),</li>
+			<li>extract elevation, depth intervals, stratigraphy and lithology,</li>
+			<li>collect metadata such as location and date,</li>
+			<li>show the boreholes on a map and as profiles,</li>
+			<li>make the right log quick to find,</li>
+		</ul>
+		<p>and to do it securely, since the source data is confidential.</p>
+	</section>
+
+	<section class="space-y-4">
+		<h2 class="h2">Team</h2>
+		<Carousel
+			slideCount={team.length}
+			slidesPerPage={innerWidth >= 1024 ? 3 : innerWidth >= 640 ? 2 : 1}
+			spacing="16px"
+			allowMouseDrag
+		>
+			<Carousel.Control class="flex items-center gap-3">
+				<Carousel.PrevTrigger
+					class="btn-icon shrink-0 preset-tonal"
+					aria-label="Previous team member"
+				>
+					<ChevronLeftIcon class="size-5" />
+				</Carousel.PrevTrigger>
+				<Carousel.ItemGroup class="min-w-0 flex-1 py-1">
+					{#each team as member, i (member.name)}
+						<Carousel.Item index={i}>
+							<div
+								class="flex h-full flex-col items-center gap-3 card border border-surface-200-800 preset-filled-surface-100-900 p-6 text-center shadow-md"
+							>
+								<Avatar class="size-24">
+									<Avatar.Fallback class="preset-filled-primary-500 text-3xl font-semibold">
+										{initials(member.name)}
+									</Avatar.Fallback>
+								</Avatar>
+								<p class="h5">{member.name}</p>
+								<ul class="flex flex-wrap justify-center gap-2" aria-label="Focus areas">
+									{#each member.tags as tag (tag)}
+										<li class="chip preset-tonal-primary">{tag}</li>
+									{/each}
+								</ul>
+								<p class="text-sm">{member.task}</p>
+							</div>
+						</Carousel.Item>
+					{/each}
+				</Carousel.ItemGroup>
+				<Carousel.NextTrigger class="btn-icon shrink-0 preset-tonal" aria-label="Next team member">
+					<ChevronRightIcon class="size-5" />
+				</Carousel.NextTrigger>
+			</Carousel.Control>
+			<Carousel.IndicatorGroup class="mt-4 flex justify-center gap-2">
+				{#each team as member, i (member.name)}
+					<Carousel.Indicator
+						index={i}
+						class="size-2.5 rounded-full bg-surface-300-700 transition-colors data-current:bg-primary-500"
+						aria-label="Show {member.name}"
+					/>
+				{/each}
+			</Carousel.IndicatorGroup>
+		</Carousel>
+	</section>
+
+	<section class="space-y-6">
+		<h2 class="h2">How it works</h2>
+
+		<div class="space-y-4">
+			<h3 class="h3">Infrastructure</h3>
+			<p>Four parts work together, from the raw file to the map.</p>
+			<dl class="grid gap-3 sm:grid-cols-2">
+				{#each infrastructure as part (part.name)}
+					<div class="card preset-tonal-surface p-4">
+						<dt class="h5">{part.name}</dt>
+						<dd class="mt-1 text-sm opacity-80">{part.text}</dd>
+					</div>
+				{/each}
+			</dl>
+		</div>
+
+		<div class="space-y-4">
+			<h3 class="h3">The pipeline</h3>
+			<div class="card preset-outlined-surface-200-800 p-4">
+				<Mermaid code={diagram} label="Pipeline from borehole files to the map" />
+			</div>
+		</div>
+
+		<div class="space-y-4">
+			<h3 class="h3">BEM in detail</h3>
+			<p>
+				BEM runs fully on local machines, so no confidential data leaves them. Each stage can be
+				built, tested and swapped on its own, and its output is cached so a failure does not repeat
+				the slow OCR step.
+			</p>
+			<ol class="space-y-3">
+				{#each bemSteps as step, i (step.name)}
+					<li class="flex gap-4 card preset-tonal-surface p-4">
+						<span class="h3 opacity-60">{i + 1}</span>
+						<div>
+							<p class="h5">{step.name}</p>
+							<p class="mt-1 text-sm opacity-80">{step.text}</p>
+						</div>
+					</li>
+				{/each}
+			</ol>
+		</div>
+	</section>
+</div>
