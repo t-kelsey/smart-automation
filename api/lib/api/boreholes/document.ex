@@ -9,9 +9,12 @@ defmodule Api.Boreholes.Document do
   schema "documents" do
     field :original_filename, :string
     field :storage_path, :string
+    field :mime_type, :string
     field :source_country, :string
     field :status, :string, default: "pending"
     field :raw_extraction, :map
+
+    many_to_many :boreholes, Api.Boreholes.Borehole, join_through: "borehole_documents"
 
     timestamps(type: :utc_datetime)
   end
@@ -22,6 +25,7 @@ defmodule Api.Boreholes.Document do
     |> cast(attrs, [
       :original_filename,
       :storage_path,
+      :mime_type,
       :source_country,
       :status,
       :raw_extraction

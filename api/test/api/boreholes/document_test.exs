@@ -40,4 +40,12 @@ defmodule Api.Boreholes.DocumentTest do
       assert changeset.valid?
     end
   end
+
+  test "changeset accepts mime_type" do
+    changeset =
+      Document.changeset(%Document{}, Map.put(@valid_attrs, :mime_type, "application/pdf"))
+
+    assert changeset.valid?
+    assert get_field(changeset, :mime_type) == "application/pdf"
+  end
 end

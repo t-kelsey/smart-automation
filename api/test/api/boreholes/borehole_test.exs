@@ -75,4 +75,12 @@ defmodule Api.Boreholes.BoreholeTest do
     refute changeset.valid?
     assert %{groundwater_level_m: ["must be greater than or equal to 0"]} = errors_on(changeset)
   end
+
+  test "changeset accepts an open metadata map" do
+    attrs = Map.put(@valid_attrs, :metadata, %{"rig_type" => "Hanjin D & B - 8D"})
+    changeset = Borehole.changeset(%Borehole{}, attrs)
+
+    assert changeset.valid?
+    assert get_field(changeset, :metadata) == %{"rig_type" => "Hanjin D & B - 8D"}
+  end
 end

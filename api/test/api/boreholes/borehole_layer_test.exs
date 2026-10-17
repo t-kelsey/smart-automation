@@ -40,4 +40,12 @@ defmodule Api.Boreholes.BoreholeLayerTest do
     refute changeset.valid?
     assert %{depth_from_m: ["must be greater than or equal to 0"]} = errors_on(changeset)
   end
+
+  test "changeset accepts an open metadata map" do
+    attrs = Map.put(@valid_attrs, :metadata, %{"rqd_percent" => 85})
+    changeset = BoreholeLayer.changeset(%BoreholeLayer{}, attrs)
+
+    assert changeset.valid?
+    assert get_field(changeset, :metadata) == %{"rqd_percent" => 85}
+  end
 end

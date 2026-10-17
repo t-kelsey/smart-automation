@@ -19,8 +19,9 @@ defmodule Api.Boreholes.Borehole do
     field :elevation_m, :decimal
     field :groundwater_level_m, :decimal
     field :verified, :boolean, default: false
+    field :metadata, :map, default: %{}
 
-    belongs_to :document, Api.Boreholes.Document
+    many_to_many :documents, Api.Boreholes.Document, join_through: "borehole_documents"
     has_many :borehole_layers, Api.Boreholes.BoreholeLayer
 
     timestamps(type: :utc_datetime)
@@ -43,7 +44,8 @@ defmodule Api.Boreholes.Borehole do
       :borehole_length_m,
       :elevation_m,
       :groundwater_level_m,
-      :verified
+      :verified,
+      :metadata
     ])
     |> validate_required([:name])
     |> validate_number(:total_depth_m, greater_than_or_equal_to: 0)

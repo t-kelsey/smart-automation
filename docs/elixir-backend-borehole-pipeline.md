@@ -24,12 +24,15 @@ Source file metadata (one row per uploaded PDF/scan/image).
 | `id` | `binary_id` | yes (PK) | |
 | `original_filename` | `string` | yes | |
 | `storage_path` | `string` | yes | path/URL to the stored file |
+| `mime_type` | `string` | no | e.g. "application/pdf", "image/jpeg" |
 | `source_country` | `string` | no | optional, if known |
 | `status` | `enum` | yes (default `pending`) | `pending`, `processing`, `extracted`, `failed`, `reviewed` |
 | `raw_extraction` | `map` (`jsonb`) | no | unmodified output from the OCR service |
 | `inserted_at` / `updated_at` | | yes (auto) | |
 
-> **Confidentiality**: source documents are confidential and must never be exposed to the `web/` frontend or any public endpoint, and must never be committed to git. `documents` (including `storage_path`) is backend/review-only — the map/search API only ever returns `boreholes`/`borehole_layers`. Store uploaded files under `api/priv/uploads/` (gitignored, outside `priv/static` so Phoenix never serves them publicly) — for the hackathon this is local disk; swap for an S3-compatible bucket if persistence across deploys is needed.
+> **Confidentiality**: source documents are confidential and must never be exposed to the `web/` frontend or any public endpoint, and must never be committed to git. `documents` (including `storage_path`) is backend/review-only — the map/search API only ever returns `boreholes`/`borehole_layers`. For the hackathon this is local disk; swap for an S3-compatible bucket if persistence across deploys is needed.
+
+> **Storage layout**: `api/priv/uploads/` is a staging inbox — files placed there are NOT yet tracked in `documents` (used for manually-dropped sample data; `mix documents.backfill` processes it). `api/priv/storage/` is the managed store: files live there as `<document_id><ext>` (flat, no subfolders), so a file's `documents` row can always be found from its filename. Both directories are gitignored, outside `priv/static` so Phoenix never serves them publicly. The real upload endpoint (Task 2) should write straight into `priv/storage/` and skip the inbox entirely.
 
 ### `boreholes`
 One row per borehole (`Stammdaten` in the screenshot).
@@ -37,7 +40,6 @@ One row per borehole (`Stammdaten` in the screenshot).
 | field | type | required? | notes |
 |---|---|---|---|
 | `id` | `binary_id` | yes (PK) | |
-| `document_id` | `references(:documents)` | yes | set programmatically, not user input |
 | `name` | `string` | yes | e.g. "B 1/59 Schönberg..." |
 | `external_id` | `string` | no | project/source-assigned ID (e.g. "HOLE NO: BH_AB01"), not unique — different projects can reuse IDs |
 | `purpose` | `string` | no | "Bohrzweck" |
@@ -52,6 +54,9 @@ One row per borehole (`Stammdaten` in the screenshot).
 | `elevation_m` | `decimal` | no | "Ansatzhöhe" |
 | `groundwater_level_m` | `decimal` | no | depth to groundwater below surface, in meters — one value per borehole, not per layer |
 | `verified` | `boolean` | yes (default `false`) | "LGRB geprüft" equivalent — reviewed by a human |
+| `metadata` | `map` (`jsonb`) | yes (default `{}`) | open key/value store for anything not covered by a fixed column (e.g. rig type, contractor, driller) |
+
+> **documents ↔ boreholes is many-to-many**, via the join table `borehole_documents` (`borehole_id`, `document_id`, unique on the pair). A single scanned report can cover several boreholes, and the same borehole can be documented across multiple files (e.g. a scan + a typed follow-up report). Use `many_to_many`/`put_assoc` on `Api.Boreholes.Borehole`/`Api.Boreholes.Document`, not a `document_id` column.
 
 ### `borehole_layers`
 Stratigraphy rows (the table in the screenshot: von/bis/Stratigraphie/Petrographie/Farbe).
@@ -67,6 +72,7 @@ Stratigraphy rows (the table in the screenshot: von/bis/Stratigraphie/Petrograph
 | `petrography` | `string` | no | free text, e.g. "Kies [gerundet] (steinig, ...)" |
 | `color` | `string` | no | |
 | `raw_text` | `string` | no | original OCR text for this row, for QA |
+| `metadata` | `map` (`jsonb`) | yes (default `{}`) | open key/value store for per-layer values not covered by a fixed column (e.g. RQD %, SPT) |
 
 Keep `raw_text` / `raw_extraction` fields everywhere plausible — given handwritten sources, this data will need to be re-verified, so never throw away the source text.
 

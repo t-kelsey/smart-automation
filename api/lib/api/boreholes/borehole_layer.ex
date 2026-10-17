@@ -12,6 +12,7 @@ defmodule Api.Boreholes.BoreholeLayer do
     field :petrography, :string
     field :color, :string
     field :raw_text, :string
+    field :metadata, :map, default: %{}
 
     belongs_to :borehole, Api.Boreholes.Borehole
 
@@ -28,7 +29,8 @@ defmodule Api.Boreholes.BoreholeLayer do
       :stratigraphy,
       :petrography,
       :color,
-      :raw_text
+      :raw_text,
+      :metadata
     ])
     |> validate_required([:position, :depth_from_m, :depth_to_m])
     |> validate_number(:depth_from_m, greater_than_or_equal_to: 0)

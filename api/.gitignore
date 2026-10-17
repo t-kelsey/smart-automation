@@ -29,3 +29,7 @@ api-*.tar
 /priv/uploads/*
 !/priv/uploads/.gitkeep
 
+# Managed storage for processed documents (named <document_id><ext>) - also confidential.
+/priv/storage/*
+!/priv/storage/.gitkeep
+
