@@ -54,7 +54,7 @@ uv run python -m pipeline.server   # settings from bem/.env (copy .env.example),
   `config` is optional and so is every step in it; omitted steps use their defaults ([config.py](pipeline/config.py)).
   One worker starts stage 1 (filter) by downloading the PDF with `GET /api/documents/:id/file` (a document that is
   missing or not a PDF ends `failed`), runs the pipeline and posts each borehole to `POST /api/boreholes` (linked to the
-  document). It finishes with `PUT /api/documents/:id/status` set to `extracted` or `failed`.
+  document).
 
 ```sh
 curl -X POST http://localhost:8000/execute \
