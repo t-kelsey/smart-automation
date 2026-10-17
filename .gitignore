@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 
 test_solvers/
+bem/output/ocr
+bem/output/translate/
+bem/output/triage/
 
 # C extensions
 *.so

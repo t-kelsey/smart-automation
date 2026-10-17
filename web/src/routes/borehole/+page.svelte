@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import { Pagination } from '@skeletonlabs/skeleton-svelte';
-	import { ArrowLeft, ArrowRight, CircleCheck, Circle } from '@lucide/svelte';
+	import { ArrowLeft, ArrowRight } from '@lucide/svelte';
+	import BoreholeTable from '#lib/components/borehole/BoreholeTable.svelte';
 	import { goto } from '$app/navigation';
 	import type { PageProps } from './$types';
 
@@ -24,44 +24,7 @@
 <div class="space-y-4">
 	<h1 class="h1">Boreholes</h1>
 
-	<div class="table-wrap">
-		<table class="table caption-bottom">
-			<thead>
-				<tr>
-					<th>Name</th>
-					<th>Place</th>
-					<th>Date</th>
-					<th class="text-right!">Elevation (m)</th>
-					<th class="text-right!">Depth (m)</th>
-					<th>Verified</th>
-				</tr>
-			</thead>
-			<tbody class="[&>tr]:hover:preset-tonal">
-				{#each result.items as borehole (borehole.id)}
-					<tr>
-						<td
-							><a class="anchor" href={resolve('/borehole/[id]', { id: borehole.id })}
-								>{borehole.name}</a
-							></td
-						>
-						<td>{borehole.location?.place ?? '–'}</td>
-						<td>{borehole.date ?? '–'}</td>
-						<td class="text-right">{borehole.elevation ?? '–'}</td>
-						<td class="text-right">{borehole.totalDepth}</td>
-						<td>
-							{#if borehole.verified}
-								<CircleCheck class="size-4 text-success-500" aria-label="Verified" />
-							{:else}
-								<Circle class="size-4 opacity-40" aria-label="Not verified" />
-							{/if}
-						</td>
-					</tr>
-				{:else}
-					<tr><td colspan="6" class="py-8 text-center opacity-60">No boreholes found.</td></tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
+	<BoreholeTable items={result.items} />
 
 	<footer class="flex flex-wrap items-center justify-between gap-4">
 		<div class="flex items-center gap-4 text-sm">
