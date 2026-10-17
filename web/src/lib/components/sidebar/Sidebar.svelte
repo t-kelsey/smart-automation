@@ -8,6 +8,7 @@
 		SettingsIcon,
 		UserIcon
 	} from '@lucide/svelte';
+	import { resolve } from '$app/paths';
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 
 	import SidebarNav from './SidebarNav.svelte';
@@ -55,11 +56,13 @@
 		: 'w-64'}"
 >
 	<Navigation.Header class="flex h-12 items-center {collapsed ? 'justify-center' : 'px-2'}">
-		<span
-			class="truncate font-bold {collapsed
+		<a
+			href={resolve('/')}
+			class="truncate rounded-xl font-bold {collapsed
 				? 'text-base tracking-tighter'
-				: 'text-xl tracking-wide'}"
-			{title}>{title}</span
+				: 'px-1 text-xl tracking-wide'}"
+			{title}
+			aria-label="{title} – Home">{title}</a
 		>
 	</Navigation.Header>
 
