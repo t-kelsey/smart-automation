@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Hackathon project (Herrenknecht challenge): automated extraction and standardisation of drilling/borehole data into a global geodatabase. Monorepo with two independent apps:
 
-- `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, Postgres, Bandit). Currently scaffold only: the `/api` scope in `api/lib/api_web/router.ex` has no routes yet.
+- `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, PostGIS, Bandit). Borehole list/search/detail endpoints are documented in `docs/api-reference.md`; `mix boreholes.mock --count N` (max 10000) generates mock data.
 - `web/` — SvelteKit 3 / Svelte 5 frontend (TypeScript, Tailwind 4, pnpm). Currently scaffold only (`src/routes/`).
 - `bem/` — Python extraction pipeline (triage → OCR → translation/extraction → POST to API); see ADR-0001.
 - `docs/` — Architecture Decision Records in `docs/adr/` (use `_template.md`).
@@ -47,7 +47,7 @@ Web (run in `web/`):
 ## Conventions
 
 - `api/AGENTS.md` holds the Phoenix/Elixir/Ecto rules; follow it. Notable: use `Req` for HTTP (not HTTPoison/Tesla/httpc); generate migrations with `mix ecto.gen.migration`; don't put programmatically-set fields like `user_id` in `cast`.
-- Web data access follows ADR-0009: UI → service (`web/src/lib/services`) → repository interface (`web/src/lib/repositories`, API or mock). UI code must not import repositories (ESLint enforces it). `PUBLIC_DATA_SOURCE=mock|api` selects the implementation (default `mock`); mock data lives in `repositories/mock/mock-data.ts` (faker).
+- Web data access follows ADR-0009: UI → service (`web/src/lib/services`) → repository interface (`web/src/lib/repositories`, API or mock). UI code must not import repositories (ESLint enforces it). `PUBLIC_DATA_SOURCE=mock|api` selects the implementation (default `mock`; `pnpm dev:api` runs against the API on localhost:4000 via the Vite proxy); mock data lives in `repositories/mock/mock-data.ts` (faker).
 - `web/AGENTS.md` expects the Svelte MCP tools (`list-sections`, `get-documentation`, `svelte-autofixer`) to be used when writing Svelte code; Svelte skills live in `web/.github/skills/`.
 
 ## Source of truth

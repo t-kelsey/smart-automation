@@ -7,6 +7,8 @@ title: Confidential document storage layout - uploads inbox and managed storage
 
 # ADR-0014 – Confidential document storage layout - uploads inbox and managed storage
 
+> Partly superseded by ADR-0026: documents may be shown in the application through the API. The storage layout below still applies.
+
 ## Context
 
 Source documents (borehole PDFs/scans/images) are confidential per the data-sharing terms and must never be committed to git or exposed via any public API/frontend endpoint. Some sample data was manually copied onto disk rather than going through an upload endpoint, which doesn't exist yet (see the Elixir backend task doc, Task 2).

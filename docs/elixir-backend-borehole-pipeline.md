@@ -30,7 +30,7 @@ Source file metadata (one row per uploaded PDF/scan/image).
 | `raw_extraction` | `map` (`jsonb`) | no | unmodified output from the OCR service |
 | `inserted_at` / `updated_at` | | yes (auto) | |
 
-> **Confidentiality**: source documents are confidential and must never be exposed to the `web/` frontend or any public endpoint, and must never be committed to git. `documents` (including `storage_path`) is backend/review-only — the map/search API only ever returns `boreholes`/`borehole_layers`. For the hackathon this is local disk; swap for an S3-compatible bucket if persistence across deploys is needed.
+> **Confidentiality**: source documents are confidential and must never be published, committed to git, or sent to external services. Inside the application they may be shown (ADR-0026): `GET /api/documents/:id/file` serves a stored file to the `web/` frontend. `storage_path` and `raw_extraction` never appear in any JSON response. For the hackathon this is local disk; swap for an S3-compatible bucket if persistence across deploys is needed.
 
 > **Storage layout**: `api/priv/uploads/` is a staging inbox — files placed there are NOT yet tracked in `documents` (used for manually-dropped sample data; `mix documents.backfill` processes it). `api/priv/storage/` is the managed store: files live there as `<document_id><ext>` (flat, no subfolders), so a file's `documents` row can always be found from its filename. Both directories are gitignored, outside `priv/static` so Phoenix never serves them publicly. The real upload endpoint (Task 2) should write straight into `priv/storage/` and skip the inbox entirely.
 

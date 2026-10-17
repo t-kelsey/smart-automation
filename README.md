@@ -43,13 +43,18 @@ mix phx.server       # Starts the dev server on localhost:4000
 `mix setup` runs `mix ecto.create` + `mix ecto.migrate` for you. If you ever need to run them
 individually (e.g. after pulling new migrations), that's `mix ecto.create` and `mix ecto.migrate`.
 
-`mix setup` also applies `priv/repo/seeds.exs`, which inserts a few mock boreholes/layers/a
-document so there's something to query right away. To re-apply the seeds on their own (e.g. after
-an `mix ecto.reset`, which drops and recreates the database), run:
+`mix setup` also applies `priv/repo/seeds.exs`, which inserts 10 hand-written example boreholes
+plus 1000 generated ones (`Api.MockData`), so there's something to query right away. Re-running
+the seeds replaces the seeded and generated rows instead of duplicating them; real data is kept.
 
 ```bash
-mix run priv/repo/seeds.exs
+mix run priv/repo/seeds.exs                        # 10 examples + 1000 generated boreholes
+MOCK_BOREHOLES=10000 mix run priv/repo/seeds.exs   # the prototype's maximum
+mix boreholes.mock --count 5000                    # only replace the generated boreholes
 ```
+
+Generated boreholes are marked with `metadata.source = "mock"`, their documents point at no real
+file (`storage_path` starts with `mock/`).
 
 Run `mix precommit` before considering any backend change done — it compiles with
 warnings-as-errors, checks for unused deps, formats, and runs the full test suite.
