@@ -11,6 +11,9 @@ config :api,
   ecto_repos: [Api.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# Enable PostGIS geometry columns for Api.Repo
+config :api, Api.Repo, types: Api.PostgresTypes
+
 # Configure the endpoint
 config :api, ApiWeb.Endpoint,
   url: [host: "localhost"],

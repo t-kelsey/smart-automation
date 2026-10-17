@@ -14,7 +14,7 @@ defmodule Api.Boreholes.Document do
     field :status, :string, default: "pending"
     field :raw_extraction, :map
 
-    many_to_many :boreholes, Api.Boreholes.Borehole, join_through: "borehole_documents"
+    many_to_many :boreholes, Api.Boreholes.Borehole, join_through: Api.Boreholes.BoreholeDocument
 
     timestamps(type: :utc_datetime)
   end

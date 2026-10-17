@@ -21,7 +21,8 @@ defmodule Api.Boreholes.Borehole do
     field :verified, :boolean, default: false
     field :metadata, :map, default: %{}
 
-    many_to_many :documents, Api.Boreholes.Document, join_through: "borehole_documents"
+    many_to_many :documents, Api.Boreholes.Document, join_through: Api.Boreholes.BoreholeDocument
+
     has_many :borehole_layers, Api.Boreholes.BoreholeLayer
 
     timestamps(type: :utc_datetime)

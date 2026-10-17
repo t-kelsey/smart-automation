@@ -11,26 +11,68 @@ Passwort: siehe email
 
 # Development Setup
 
-Postgres (with the PostGIS extension) is required. A `docker-compose.yml` is provided at the repo root so nobody needs PostGIS installed locally:
+## Prerequisites
+
+- Docker (for the local Postgres+PostGIS container)
+- Elixir/Erlang (see `api/mix.exs` for the required Elixir version)
+- Node.js + [pnpm](https://pnpm.io/)
+
+## 1. Database (Postgres + PostGIS)
+
+A `docker-compose.yml` is provided at the repo root so nobody needs PostGIS installed locally:
 
 ```bash
 docker compose up -d   # Starts Postgres+PostGIS on localhost:5432 (user/password: postgres)
 ```
 
+If you already have a local Postgres running on port 5432 (e.g. via Homebrew), stop it first,
+otherwise the app will silently connect to the wrong database:
+
 ```bash
-# Start api
-cd api
-mix ecto.create     # Create the database
-mix ecto.migrate    # Run database migrations
-mix phx.server      # Start development server
+brew services stop postgresql@14   # or whichever version you have running
 ```
 
+## 2. API (`api/`)
+
+```bash
+cd api
+mix setup           # Installs deps and creates/migrates/seeds the database
+mix phx.server       # Starts the dev server on localhost:4000
 ```
-# Start web
+
+`mix setup` runs `mix ecto.create` + `mix ecto.migrate` for you. If you ever need to run them
+individually (e.g. after pulling new migrations), that's `mix ecto.create` and `mix ecto.migrate`.
+
+Run `mix precommit` before considering any backend change done — it compiles with
+warnings-as-errors, checks for unused deps, formats, and runs the full test suite.
+
+### Loading sample borehole documents
+
+Confidential source documents (PDFs/scans/images) are never committed to git. To get sample data
+into the database and queryable via the API:
+
+1. Drop files (or whole folders — subfolders are flattened) into `api/priv/uploads/`. This
+   directory is a staging inbox; anything placed there is **not yet** tracked in the database.
+2. Run the backfill task from inside `api/`:
+   ```bash
+   mix documents.backfill
+   ```
+   For each file found in `priv/uploads/`, this creates a `documents` row and **moves** the file
+   into `api/priv/storage/`, renamed to `<document_id><ext>` (e.g. `3fa85f64-....pdf`). After a
+   successful run, `priv/uploads/` is empty again and the files live in `priv/storage/`, matched
+   to their `documents` row purely by filename.
+
+Both `priv/uploads/` and `priv/storage/` are gitignored (only `.gitkeep` is tracked) — this is
+expected, the actual files only ever live on your machine.
+
+## 3. Web (`web/`)
+
+```bash
 cd web
 pnpm install        # Install web dependencies
-pnpm run            # Start web development server
+pnpm dev            # Start web development server
 ```
+
 
 # Miscellaneous
 
