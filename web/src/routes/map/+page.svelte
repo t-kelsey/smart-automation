@@ -2,10 +2,6 @@
 	import { page } from '$app/state';
 	import BoreholeMap from '#lib/components/borehole/BoreholeMap.svelte';
 	import { takeMapSnapshot } from '#lib/map-handoff.ts';
-	import type { PageProps } from './$types';
-
-	let { data }: PageProps = $props();
-
 	// Picture of the dashboard map; covers the first frames, then fades out once the map is drawn.
 	const cover = takeMapSnapshot();
 	let ready = $state(false);
@@ -21,7 +17,6 @@
 <!-- Fill the whole viewport; the sidebar (z-10) floats above the map. -->
 <div class="fixed inset-0 z-0">
 	<BoreholeMap
-		boreholes={data.boreholes}
 		{initialView}
 		onReady={() => (ready = true)}
 		padding={{ top: 80, bottom: 80, left: 340, right: 80 }}

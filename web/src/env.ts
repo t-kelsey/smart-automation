@@ -10,6 +10,17 @@ export const variables = defineEnvVars({
 			return value;
 		}
 	},
+	PUBLIC_MOCK_BOREHOLES: {
+		public: true,
+		description:
+			'Number of generated boreholes in the mock data (default 300; 10000 to stress the map)',
+		schema: (value) => {
+			if (value === undefined || value === '') return 300;
+			const count = Number(value);
+			if (!Number.isInteger(count) || count < 0) throw new Error('must be a non-negative integer');
+			return count;
+		}
+	},
 	PUBLIC_API_URL: {
 		public: true,
 		description: 'Base URL of the Phoenix API. The default is proxied to localhost:4000 in dev.',

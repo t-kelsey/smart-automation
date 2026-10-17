@@ -6,6 +6,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	// maplibre-gl starts its GeoJSON worker via new URL(..., import.meta.url), which breaks when the
+	// dev server pre-bundles it ("Worker failed to load") and the circle layer then stays empty.
+	optimizeDeps: { exclude: ['maplibre-gl'] },
 	server: {
 		// ADR-0022: the DIN 4023 standard file lives outside web/
 		fs: { allow: ['..'] },

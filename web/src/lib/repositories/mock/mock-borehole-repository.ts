@@ -1,4 +1,10 @@
-import type { Borehole, BoreholeSummary, ListParams, Page } from '#lib/domain/borehole.ts';
+import type {
+	Borehole,
+	BoreholeSummary,
+	ListParams,
+	MapPoint,
+	Page
+} from '#lib/domain/borehole.ts';
 import type { BoreholeRepository } from '../borehole-repository';
 import { mockBoreholes } from './mock-data';
 
@@ -51,6 +57,12 @@ export class MockBoreholeRepository implements BoreholeRepository {
 		}
 		const end = limit === undefined ? undefined : offset + limit;
 		return { items: matches.slice(offset, end).map(toSummary), total: matches.length };
+	}
+
+	async listMapPoints(): Promise<MapPoint[]> {
+		return this.boreholes.flatMap(({ id, name, verified, location }) =>
+			location ? [{ id, name, verified, lon: location.lon, lat: location.lat }] : []
+		);
 	}
 
 	async getById(id: string): Promise<Borehole | null> {

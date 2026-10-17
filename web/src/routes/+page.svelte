@@ -181,7 +181,6 @@
 					<div bind:this={mapBox} class="absolute inset-0">
 						<BoreholeMap
 							bind:this={mapRef}
-							boreholes={data.boreholes}
 							initialView={initialMapView}
 							centerOnUser
 							cooperative
@@ -199,7 +198,7 @@
 		>
 			{@render cardHeader(ListIcon, 'Boreholes', 'Latest logs', listAction)}
 			<div class="relative min-h-0 flex-1 overflow-hidden">
-				<BoreholeTable items={data.boreholes.slice(0, 8)} />
+				<BoreholeTable items={data.boreholes} />
 				<div class="fade"></div>
 			</div>
 		</section>

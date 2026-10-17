@@ -1,4 +1,10 @@
-import type { Borehole, BoreholeSummary, ListParams, Page } from '#lib/domain/borehole.ts';
+import type {
+	Borehole,
+	BoreholeSummary,
+	ListParams,
+	MapPoint,
+	Page
+} from '#lib/domain/borehole.ts';
 import { RepositoryError, type BoreholeRepository } from '../borehole-repository';
 import type { ApiBorehole, ApiItemResponse, ApiListResponse } from './api-types';
 import { toBorehole, toSummary } from './mappers';
@@ -24,6 +30,30 @@ export class ApiBoreholeRepository implements BoreholeRepository {
 		const response = await this.get(`/boreholes${qs}`);
 		const body = (await response.json()) as ApiListResponse<ApiBorehole>;
 		return { items: body.data.map(toSummary), total: body.total };
+	}
+
+	async listMapPoints(): Promise<MapPoint[]> {
+		// GET /boreholes returns a GeoJSON FeatureCollection; keep only what the map needs.
+		const response = await this.get('/boreholes');
+		const body = (await response.json()) as {
+			features: {
+				geometry: { coordinates: [number, number] } | null;
+				properties: { id: string; name: string; verified: boolean };
+			}[];
+		};
+		return body.features.flatMap(({ geometry, properties }) =>
+			geometry
+				? [
+						{
+							id: properties.id,
+							name: properties.name,
+							verified: properties.verified,
+							lon: geometry.coordinates[0],
+							lat: geometry.coordinates[1]
+						}
+					]
+				: []
+		);
 	}
 
 	async getById(id: string): Promise<Borehole | null> {

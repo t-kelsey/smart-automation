@@ -64,6 +64,15 @@ export type BoreholeSummary = Pick<
 	'id' | 'name' | 'date' | 'elevation' | 'totalDepth' | 'location' | 'verified'
 >;
 
+/** Minimal data to place a borehole on the map; details are loaded on demand. */
+export interface MapPoint {
+	id: string;
+	name: string;
+	lon: number;
+	lat: number;
+	verified: boolean;
+}
+
 export interface BoreholeFilter {
 	/** Matches name, external id and place. */
 	search?: string;
