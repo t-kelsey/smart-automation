@@ -33,8 +33,8 @@ export interface BoreholeDocument {
 	language?: string;
 	pages?: number;
 	sizeKb?: number;
-	/** Link to the original file. */
-	url: string;
+	/** Link to the original file (shown inline; add `?download=1` to save it); absent if no file is stored. */
+	url?: string;
 }
 
 export interface Borehole {
@@ -48,7 +48,8 @@ export interface Borehole {
 	cause?: string;
 	/** Height of the borehole start in metres above sea level (m ü. NN). */
 	elevation: number | null;
-	totalDepth: number;
+	/** Depth of the borehole in metres; `null` if neither the log nor its layers state it. */
+	totalDepth: number | null;
 	groundwaterLevel?: number;
 	drillingMethod?: string;
 	client?: string;
@@ -63,6 +64,15 @@ export type BoreholeSummary = Pick<
 	Borehole,
 	'id' | 'name' | 'date' | 'elevation' | 'totalDepth' | 'location' | 'verified'
 >;
+
+/** Minimal data to place a borehole on the map; details are loaded on demand. */
+export interface MapPoint {
+	id: string;
+	name: string;
+	lon: number;
+	lat: number;
+	verified: boolean;
+}
 
 export interface BoreholeFilter {
 	/** Matches name, external id and place. */
@@ -102,8 +112,8 @@ export interface SearchQuery {
 
 export interface SearchHit {
 	borehole: BoreholeSummary;
-	/** Relevance, higher is better. */
-	score: number;
+	/** Relevance, higher is better; absent if the backend does not rank hits. */
+	score?: number;
 	/** Matching text excerpt, if the backend provides one. */
 	snippet?: string;
 }

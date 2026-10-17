@@ -30,7 +30,9 @@ export class MockSearchRepository implements SearchRepository {
 				snippet: perTerm[0][0]
 			});
 		}
-		hits.sort((a, b) => b.score - a.score || a.borehole.name.localeCompare(b.borehole.name));
+		hits.sort(
+			(a, b) => (b.score ?? 0) - (a.score ?? 0) || a.borehole.name.localeCompare(b.borehole.name)
+		);
 		const end = limit === undefined ? undefined : offset + limit;
 		return { items: hits.slice(offset, end), total: hits.length };
 	}

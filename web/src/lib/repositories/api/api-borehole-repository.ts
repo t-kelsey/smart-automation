@@ -1,50 +1,81 @@
-import type { Borehole, BoreholeSummary, ListParams, Page } from '#lib/domain/borehole.ts';
-import { RepositoryError, type BoreholeRepository } from '../borehole-repository';
-import type { ApiBorehole, ApiItemResponse, ApiListResponse } from './api-types';
-import { toBorehole, toSummary } from './mappers';
+import type {
+	Borehole,
+	BoreholeSortField,
+	BoreholeSummary,
+	ListParams,
+	MapPoint,
+	Page
+} from '#lib/domain/borehole.ts';
+import type { BoreholeRepository } from '../borehole-repository';
+import { ApiClient, type ApiClientOptions } from './api-client';
+import type {
+	ApiBoreholeDetail,
+	ApiFeatureCollection,
+	ApiItemResponse,
+	ApiPointFeature
+} from './api-types';
+import { featureToMapPoint, featureToSummary, toBorehole } from './mappers';
 
-interface Options {
-	baseUrl: string;
-	fetch: typeof fetch;
+const sortFields: Record<BoreholeSortField, string> = {
+	name: 'name',
+	date: 'drilled_at',
+	totalDepth: 'total_depth_m'
+};
+
+/** Query string for the list endpoints; empty values are left out. */
+export function listQuery(params: Record<string, string | number | boolean | undefined>): string {
+	const query = new URLSearchParams();
+	for (const [key, value] of Object.entries(params)) {
+		if (value !== undefined && value !== '') query.set(key, String(value));
+	}
+	return query.size ? `?${query}` : '';
 }
 
-/** Repository backed by the Phoenix JSON API. */
+/** Repository backed by the Phoenix JSON API; filtering, sorting and paging happen server-side. */
 export class ApiBoreholeRepository implements BoreholeRepository {
-	constructor(private readonly options: Options) {}
+	private readonly client: ApiClient;
 
-	async list(params: ListParams = {}): Promise<Page<BoreholeSummary>> {
-		const { sort, ...rest } = params;
-		const query = new URLSearchParams();
-		for (const [key, value] of Object.entries(rest)) {
-			if (value !== undefined && value !== '') query.set(key, String(value));
-		}
-		if (sort) query.set('sort', `${sort.direction === 'desc' ? '-' : ''}${sort.field}`);
-		const qs = query.size ? `?${query}` : '';
+	constructor(private readonly options: ApiClientOptions) {
+		this.client = new ApiClient(options);
+	}
 
-		const response = await this.get(`/boreholes${qs}`);
-		const body = (await response.json()) as ApiListResponse<ApiBorehole>;
-		return { items: body.data.map(toSummary), total: body.total };
+	async list({
+		search,
+		verified,
+		drilledFrom,
+		drilledTo,
+		minDepth,
+		maxDepth,
+		sort,
+		limit,
+		offset
+	}: ListParams = {}): Promise<Page<BoreholeSummary>> {
+		const qs = listQuery({
+			q: search?.trim(),
+			verified,
+			drilled_from: drilledFrom,
+			drilled_to: drilledTo,
+			min_depth: minDepth,
+			max_depth: maxDepth,
+			sort: sort && `${sort.direction === 'desc' ? '-' : ''}${sortFields[sort.field]}`,
+			limit,
+			offset
+		});
+		const collection = (await this.client.getJson<ApiFeatureCollection>(`/boreholes${qs}`))!;
+		return { items: collection.features.map(featureToSummary), total: collection.total };
+	}
+
+	async listMapPoints(): Promise<MapPoint[]> {
+		const collection =
+			(await this.client.getJson<ApiFeatureCollection<ApiPointFeature>>('/boreholes?view=points'))!;
+		return collection.features.flatMap(featureToMapPoint);
 	}
 
 	async getById(id: string): Promise<Borehole | null> {
-		const response = await this.get(`/boreholes/${encodeURIComponent(id)}`, [404]);
-		if (response.status === 404) return null;
-		const body = (await response.json()) as ApiItemResponse<ApiBorehole>;
-		return toBorehole(body.data);
-	}
-
-	private async get(path: string, allowedStatuses: number[] = []): Promise<Response> {
-		let response: Response;
-		try {
-			response = await this.options.fetch(`${this.options.baseUrl}${path}`, {
-				headers: { accept: 'application/json' }
-			});
-		} catch (cause) {
-			throw new RepositoryError(`API request failed: ${path}`, undefined, { cause });
-		}
-		if (!response.ok && !allowedStatuses.includes(response.status)) {
-			throw new RepositoryError(`API ${path} returned ${response.status}`, response.status);
-		}
-		return response;
+		const body = await this.client.getJson<ApiItemResponse<ApiBoreholeDetail>>(
+			`/boreholes/${encodeURIComponent(id)}`,
+			[404]
+		);
+		return body ? toBorehole(body.data, this.options.baseUrl) : null;
 	}
 }

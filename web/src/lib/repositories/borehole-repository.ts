@@ -1,4 +1,10 @@
-import type { Borehole, BoreholeSummary, ListParams, Page } from '#lib/domain/borehole.ts';
+import type {
+	Borehole,
+	BoreholeSummary,
+	ListParams,
+	MapPoint,
+	Page
+} from '#lib/domain/borehole.ts';
 
 /** Thrown by repositories on transport or server errors (not for "not found"). */
 export class RepositoryError extends Error {
@@ -18,6 +24,8 @@ export class RepositoryError extends Error {
  */
 export interface BoreholeRepository {
 	list(params?: ListParams): Promise<Page<BoreholeSummary>>;
+	/** Positions of all boreholes with a location, without any further details. */
+	listMapPoints(): Promise<MapPoint[]>;
 	/** Returns the borehole including layers and documents, or `null` if it does not exist. */
 	getById(id: string): Promise<Borehole | null>;
 }

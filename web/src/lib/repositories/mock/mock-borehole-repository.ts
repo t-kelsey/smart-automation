@@ -1,4 +1,10 @@
-import type { Borehole, BoreholeSummary, ListParams, Page } from '#lib/domain/borehole.ts';
+import type {
+	Borehole,
+	BoreholeSummary,
+	ListParams,
+	MapPoint,
+	Page
+} from '#lib/domain/borehole.ts';
 import type { BoreholeRepository } from '../borehole-repository';
 import { mockBoreholes } from './mock-data';
 
@@ -35,8 +41,8 @@ export class MockBoreholeRepository implements BoreholeRepository {
 				(verified === undefined || b.verified === verified) &&
 				(!drilledFrom || (b.date !== undefined && b.date >= drilledFrom)) &&
 				(!drilledTo || (b.date !== undefined && b.date <= drilledTo)) &&
-				(minDepth === undefined || b.totalDepth >= minDepth) &&
-				(maxDepth === undefined || b.totalDepth <= maxDepth)
+				(minDepth === undefined || (b.totalDepth !== null && b.totalDepth >= minDepth)) &&
+				(maxDepth === undefined || (b.totalDepth !== null && b.totalDepth <= maxDepth))
 		);
 		if (sort) {
 			const dir = sort.direction === 'asc' ? 1 : -1;
@@ -44,13 +50,18 @@ export class MockBoreholeRepository implements BoreholeRepository {
 				const x = a[sort.field];
 				const y = b[sort.field];
 				// Missing values always sort last.
-				if (x === undefined || y === undefined)
-					return Number(x === undefined) - Number(y === undefined);
+				if (x == null || y == null) return Number(x == null) - Number(y == null);
 				return (x < y ? -1 : x > y ? 1 : 0) * dir;
 			});
 		}
 		const end = limit === undefined ? undefined : offset + limit;
 		return { items: matches.slice(offset, end).map(toSummary), total: matches.length };
+	}
+
+	async listMapPoints(): Promise<MapPoint[]> {
+		return this.boreholes.flatMap(({ id, name, verified, location }) =>
+			location ? [{ id, name, verified, lon: location.lon, lat: location.lat }] : []
+		);
 	}
 
 	async getById(id: string): Promise<Borehole | null> {

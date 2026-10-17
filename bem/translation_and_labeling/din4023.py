@@ -1,10 +1,12 @@
-"""DIN 4023 glossary and translation of the whole OCR markdown (ADR-0017 to ADR-0020).
+"""DIN 4023 glossary and translation of the whole OCR markdown (ADR-0009 to ADR-0012).
 
 Every label and value in the markdown becomes a target:
 - labels (table headers, "label: value" lines) resolve to a backend target path (format_keys.py),
 - soil and rock values resolve to DIN 4023 designations (Tables 1-3), with colour words added,
 - long text is machine-translated (mt.py) without a glossary check,
 - numbers and units pass through unchanged,
+- single OCR digits inside words are corrected to the letter they replace (ADR-0024),
+- comma-separated segments with a token of two or more digits are kept unchanged, as codes; the other segments are translated,
 - anything that cannot be translated is kept as translate_error:<original text>.
 
 Keys are lowercase. Main terms give the name and short form of the soil or rock; qualifiers
@@ -17,10 +19,10 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from format_keys import FORMAT_TARGETS, VALUE_KIND, resolve_label
+from bem.translation_and_labeling.format_keys import FORMAT_TARGETS, VALUE_KIND, resolve_label
 
 if TYPE_CHECKING:
-    from mt import Translator
+    from translation_and_labeling.mt import Translator
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +45,9 @@ PASS_THROUGH_KINDS = {"identifier", "name", "date", "coordinate", "crs", "number
 
 # "Label: value" lines outside tables, e.g. "**Borehole No.:** T01".
 KEY_VALUE_RE = re.compile(r"^\**(?P<label>[^:*]{2,60}?)\**\s*:\s*\**(?P<value>.+)$")
+
+# Letters that OCR most often reads as a digit inside a word (ADR-0024).
+DIGIT_TO_LETTER = {"0": "o", "1": "l", "2": "z", "3": "e", "4": "a", "5": "s", "6": "g", "8": "b"}
 
 
 @dataclass(frozen=True)
@@ -341,31 +346,77 @@ def _record(result: str, errors: list[str]) -> str:
     return result
 
 
-def _translate_free(text: str, src: str, translator: "Translator | None", errors: list[str]) -> str:
+def _translate_free(
+    text: str, src: str, translator: "Translator | None", errors: list[str], original: str | None = None
+) -> str:
     """Machine-translate long text to English. English text is already in the target language."""
     if src == "en":
         return text
     english = translator.translate(text, src) if translator is not None else None
-    return _record(english or f"translate_error:{text}", errors)
+    return _record(english or f"translate_error:{original or text}", errors)
+
+
+def _has_code(text: str) -> bool:
+    """True if a token has two or more digits. Such tokens are codes or measurements, not words."""
+    return any(sum(char.isdigit() for char in token) >= 2 for token in text.split())
+
+
+def _fix_ocr_digits(text: str) -> str:
+    """Replace a single digit inside a word with the letter OCR probably misread (ADR-0024).
+
+    Tokens with two or more digits, and tokens with one digit and fewer than three letters,
+    are kept unchanged.
+    """
+
+    def fix(match: re.Match) -> str:
+        token = match.group(0)
+        digits = sum(char.isdigit() for char in token)
+        letters = sum(char.isalpha() for char in token)
+        if digits == 1 and letters >= 3:
+            return "".join(DIGIT_TO_LETTER.get(char, char) for char in token) # type: ignore
+        return token
+
+    return re.sub(r"\S+", fix, text)
+
+
+def _translate_plain(text: str, kind: str, src: str, translator: "Translator | None", errors: list[str]) -> str:
+    """Translate a value that has no codes in it, after correcting OCR digits in its words."""
+    fixed = _fix_ocr_digits(text)
+    if kind == "colour":
+        return _record(translate_colour(fixed) or f"translate_error:{text}", errors)
+    if kind == "text" or len(fixed.split()) > MAX_CELL_WORDS:
+        return _translate_free(fixed, src, translator, errors, original=text)
+    result = resolve_cell(fixed, src, translator)
+    if result.startswith("translate_error:"):
+        result = f"translate_error:{text}"
+    return _record(result, errors)
 
 
 def _translate_value(text: str, kind: str, src: str, translator: "Translator | None", errors: list[str]) -> str:
-    """Translate one value by the kind of its target (format_keys.VALUE_KIND)."""
+    """Translate one value by the kind of its target (format_keys.VALUE_KIND).
+
+    In a comma-separated value, segments with a code ("10-12 m") are kept as written and the
+    other segments are translated, so "Sand, 10-12 m" becomes "Sand, 10-12 m" with Sand translated.
+    """
     stripped = text.strip()
     if not stripped or kind in PASS_THROUGH_KINDS or VALUE_RE.fullmatch(stripped) or DATE_RE.fullmatch(stripped):
         return stripped
-    if kind == "colour":
-        return _record(translate_colour(stripped) or f"translate_error:{stripped}", errors)
-    if kind == "text" or len(stripped.split()) > MAX_CELL_WORDS:
-        return _translate_free(stripped, src, translator, errors)
-    return _record(resolve_cell(stripped, src, translator), errors)
+    if not _has_code(stripped):
+        return _translate_plain(stripped, kind, src, translator, errors)
+    parts = [part.strip() for part in stripped.split(",") if part.strip()]
+    return ", ".join(
+        part if _has_code(part) else _translate_plain(part, kind, src, translator, errors) for part in parts
+    )
 
 
 def _translate_header(text: str, src: str, translator: "Translator | None", errors: list[str]) -> tuple[str, str | None]:
     """Target path for a header, and its format key. A header that finds no key is an error."""
-    key = resolve_label(text, src, translator)
+    stripped = text.strip()
+    if _has_code(stripped):
+        return stripped, None
+    key = resolve_label(_fix_ocr_digits(stripped), src, translator)
     if key is None:
-        return _record(f"translate_error:{text.strip()}", errors), None
+        return _record(f"translate_error:{stripped}", errors), None
     return FORMAT_TARGETS[key], key
 
 
@@ -428,7 +479,12 @@ def _translate_table(block: list[str], src: str, translator: "Translator | None"
 
 def _translate_line(line: str, src: str, translator: "Translator | None", errors: list[str]) -> str:
     stripped = line.strip()
-    if not stripped or stripped.startswith("#") or VALUE_RE.fullmatch(stripped):
+    if (
+        not stripped
+        or stripped.startswith("#")
+        or VALUE_RE.fullmatch(stripped)
+        or any(char.isdigit() for char in stripped)
+    ):
         return line
 
     match = KEY_VALUE_RE.match(stripped)

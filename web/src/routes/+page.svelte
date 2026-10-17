@@ -1,9 +1,3 @@
-<script module lang="ts">
-	// Survives navigating away and back, so the small map stays where the user left it
-	// instead of zooming to their location again.
-	let lastMapView: { lat: number; lon: number; zoom: number } | undefined;
-</script>
-
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
@@ -18,14 +12,15 @@
 	} from '@lucide/svelte';
 	import BoreholeTable from '#lib/components/borehole/BoreholeTable.svelte';
 	import BoreholeMap from '#lib/components/borehole/BoreholeMap.svelte';
-	import { setMapSnapshot } from '#lib/map-handoff.ts';
+	import { getLastMapView, setLastMapView, setMapSnapshot } from '#lib/map-handoff.ts';
 	import type { Snippet } from 'svelte';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 
-	// Read once: later moves are saved but must not re-centre the map.
-	const initialMapView = lastMapView;
+	// Continues where the user left a map (this one or /map). Read once: later moves are saved but
+	// must not re-centre the map.
+	const initialMapView = getLastMapView();
 
 	const features = [
 		{ icon: ScanTextIcon, label: 'OCR and extraction of multilingual logs' },
@@ -181,12 +176,11 @@
 					<div bind:this={mapBox} class="absolute inset-0">
 						<BoreholeMap
 							bind:this={mapRef}
-							boreholes={data.boreholes}
 							initialView={initialMapView}
 							centerOnUser
 							cooperative
 							onMapClick={openMap}
-							onViewChange={(view) => (lastMapView = view)}
+							onViewChange={setLastMapView}
 						/>
 					</div>
 				</div>
@@ -199,7 +193,7 @@
 		>
 			{@render cardHeader(ListIcon, 'Boreholes', 'Latest logs', listAction)}
 			<div class="relative min-h-0 flex-1 overflow-hidden">
-				<BoreholeTable items={data.boreholes.slice(0, 8)} />
+				<BoreholeTable items={data.boreholes} />
 				<div class="fade"></div>
 			</div>
 		</section>

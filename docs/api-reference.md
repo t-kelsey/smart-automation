@@ -1,28 +1,41 @@
 # API Reference: Boreholes (Map/Search API)
 
-Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Type: application/json`). No authentication is currently implemented.
+Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Type: application/json`). No authentication is currently implemented. Errors always have the shape `{ "errors": { "detail": "..." } }`.
 
 This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md). Ingestion/upload endpoints (Task 2) don't exist yet.
 
-> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint (see ADR-0014). Only `id`, `original_filename`, `mime_type`, `source_country`, `status` are exposed for a document.
+> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0026). Never publish or commit these files.
+
+> **Prototype scale**: the dataset is capped at 10 000 boreholes. Without `limit` every match is returned in one response; `limit` may be at most 10 000.
 
 ---
 
 ## `GET /api/boreholes`
 
-List boreholes as a GeoJSON `FeatureCollection`, optionally filtered to a bounding box. This is the endpoint the map view uses to render markers for the current viewport.
+List boreholes as a GeoJSON `FeatureCollection`, with optional filters, sorting and paging. The map uses it with `view=points`, lists use `limit`/`offset`.
 
-### Query parameters
+### Query parameters (all optional)
 
-| Param | Required | Format | Description |
-|---|---|---|---|
-| `bbox` | no | `minLon,minLat,maxLon,maxLat` (4 comma-separated floats) | Only return boreholes whose `location` intersects this envelope. Omit to get every borehole. |
+| Param | Format | Description |
+|---|---|---|
+| `bbox` | `minLon,minLat,maxLon,maxLat` | Only boreholes whose `location` intersects this envelope. |
+| `q` | text | Text search, same as [`/search`](#get-apiboreholessearch); adds `score`/`snippet` and sorts by score. |
+| `verified` | `true` / `false` | Only verified / unverified boreholes. |
+| `drilled_from`, `drilled_to` | `YYYY-MM-DD` | Inclusive range on `drilled_at`. |
+| `min_depth`, `max_depth` | number (m) | Inclusive range on `total_depth_m`. |
+| `sort` | `name`, `drilled_at`, `total_depth_m`, `inserted_at`, `score`; prefix `-` for descending | Default: `name` (or `-score` when `q` is given). Missing values sort last. |
+| `limit` | 1–10000 | Page size. Omit to get every match. |
+| `offset` | ≥ 0 | Number of matches to skip. |
+| `view` | `points` | Return only `id`, `name`, `verified` in `properties` (small response for the map). |
 
 ### Response `200 OK`
 
 ```json
 {
   "type": "FeatureCollection",
+  "total": 259,
+  "limit": 20,
+  "offset": 0,
   "features": [
     {
       "type": "Feature",
@@ -32,6 +45,8 @@ List boreholes as a GeoJSON `FeatureCollection`, optionally filtered to a boundi
         "name": "B 1/59 Schönberg",
         "external_id": "BH_AB01",
         "purpose": "Hydrogeologische Untersuchung",
+        "place": "Stuttgart",
+        "client": "Stadtwerke",
         "drilling_method": "Rotary core drilling",
         "drilled_at": "1959-06-12",
         "end_date": null,
@@ -51,35 +66,32 @@ List boreholes as a GeoJSON `FeatureCollection`, optionally filtered to a boundi
 }
 ```
 
-`geometry` is `null` if the borehole has no `location` set yet (e.g. not yet georeferenced).
-
-Each item in `properties` is every `boreholes` column except `location` (promoted to `geometry`), `borehole_layers`, and `documents` (omitted entirely from the list endpoint — fetch a single borehole's detail for those).
+- `total` is the number of matches across all pages; `limit` is `null` when not given. `total`, `limit` and `offset` are GeoJSON foreign members, so the response is still valid GeoJSON.
+- `geometry` is `null` if the borehole has no `location` yet (e.g. not yet georeferenced).
+- `properties` holds every `boreholes` column except `location` (promoted to `geometry`); layers and documents are only in the detail endpoint.
+- With `q`, each feature also has `score` and `snippet` (see below).
 
 ### Response `400 Bad Request`
 
-Returned if `bbox` is present but malformed (wrong number of parts, or a part isn't a valid float):
+Returned for an invalid parameter, naming the first one:
 
 ```json
-{ "errors": { "detail": "invalid bbox, expected minLon,minLat,maxLon,maxLat" } }
+{ "errors": { "detail": "invalid bbox" } }
 ```
 
-### Example
+### Examples
 
 ```bash
 curl "http://localhost:4000/api/boreholes?bbox=9.0,48.0,10.0,49.0"
+curl "http://localhost:4000/api/boreholes?verified=true&min_depth=20&sort=-total_depth_m&limit=20&offset=40"
+curl "http://localhost:4000/api/boreholes?view=points"
 ```
 
 ---
 
 ## `GET /api/boreholes/:id`
 
-Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + associated (confidentiality-filtered) documents. This is what the borehole detail panel/page uses.
-
-### Path parameters
-
-| Param | Format | Description |
-|---|---|---|
-| `id` | UUID | The borehole's `id`. |
+Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + associated (confidentiality-filtered) documents. This is what the borehole detail page uses.
 
 ### Response `200 OK`
 
@@ -88,21 +100,7 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
   "data": {
     "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "name": "B 1/59 Schönberg",
-    "external_id": "BH_AB01",
-    "purpose": "Hydrogeologische Untersuchung",
-    "drilling_method": "Rotary core drilling",
-    "drilled_at": "1959-06-12",
-    "end_date": null,
-    "source_coordinate_system": "32U UTM",
-    "source_coordinate_raw": "412559.379, 5315392.271",
-    "total_depth_m": "18.3",
-    "borehole_length_m": null,
-    "elevation_m": "262.0",
-    "groundwater_level_m": null,
-    "verified": false,
-    "metadata": {},
-    "inserted_at": "2026-10-17T09:06:00Z",
-    "updated_at": "2026-10-17T09:06:00Z",
+    "...": "all properties as in the list",
     "location": { "type": "Point", "coordinates": [9.177, 48.776] },
     "layers": [
       {
@@ -122,52 +120,59 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
         "id": "c7a2...",
         "original_filename": "B1-59_Schichtenverzeichnis.pdf",
         "mime_type": "application/pdf",
-        "source_country": null,
-        "status": "pending"
+        "source_country": "Germany",
+        "status": "pending",
+        "page_count": 3,
+        "size_bytes": 1269760,
+        "has_file": true
       }
     ]
   }
 }
 ```
 
-`layers` is always ordered by `position` ascending. `documents` reflects the many-to-many `documents` ↔ `boreholes` relationship (see ADR-0012) — zero, one, or many entries.
+`layers` is always ordered by `position` ascending. `documents` reflects the many-to-many `documents` ↔ `boreholes` relationship (see ADR-0013) — zero, one, or many entries.
 
 ### Response `404 Not Found`
 
-Returned if no borehole with that `id` exists (standard Phoenix error shape via `ApiWeb.ErrorJSON`):
+Returned if no borehole with that `id` exists, including ids that are not valid UUIDs:
 
 ```json
 { "errors": { "detail": "Not Found" } }
-```
-
-### Example
-
-```bash
-curl "http://localhost:4000/api/boreholes/3fa85f64-5717-4562-b3fc-2c963f66afa6"
 ```
 
 ---
 
 ## `GET /api/boreholes/search`
 
-Free-text search across borehole name, external ID, and stratigraphy of any of its layers. Returns the same GeoJSON `FeatureCollection` shape as `GET /api/boreholes` (not the detail shape) — intended to feed search results straight back onto the map.
+Ranked free-text search. Takes the same parameters as `GET /api/boreholes` (with `q` defaulting to the empty string, matching everything) and returns the same shape, plus on each feature:
 
-### Query parameters
+| Field | Description |
+|---|---|
+| `score` | Relevance, higher is better: name 10, external id 8, place 5, purpose 3, client 3, plus 1 per matching layer. |
+| `snippet` | Description of the first matching layer (petrography, else raw text, else stratigraphy), or `null` if only borehole fields matched. |
 
-| Param | Required | Description |
-|---|---|---|
-| `q` | no (defaults to empty string, matching everything) | Case-insensitive substring match against `name`, `external_id`, or any layer's `stratigraphy`. |
-
-A borehole matching through more than one of its layers (e.g. two layers with the same `stratigraphy`) is still only returned once.
-
-### Response `200 OK`
-
-Same shape as [`GET /api/boreholes`](#get-apiboreholes).
-
-### Example
+`q` is a case-insensitive substring match (`%` and `_` are taken literally) against `name`, `external_id`, `place`, `purpose`, `client`, and each layer's `stratigraphy`, `petrography`, `color` and `raw_text`. A borehole matching through several layers is returned once.
 
 ```bash
-curl "http://localhost:4000/api/boreholes/search?q=sch%C3%B6nberg"
+curl "http://localhost:4000/api/boreholes/search?q=gipskeuper&limit=10"
+```
+
+---
+
+## `GET /api/documents/:id/file`
+
+The stored source file of a document, for viewing in the application (ADR-0026).
+
+| Param | Description |
+|---|---|
+| `download` | `1` or `true`: `Content-Disposition: attachment` (save) instead of `inline` (show in the browser). |
+
+- `200` with the file, `Content-Type` from the document's `mime_type`, `Cache-Control: private, no-store`.
+- `404` (`{ "errors": { "detail": "Not Found" } }`) if the document does not exist, the id is not a UUID, or no file is stored for it (`has_file: false`, e.g. generated mock documents).
+
+```bash
+curl -OJ "http://localhost:4000/api/documents/c7a2.../file?download=1"
 ```
 
 ---

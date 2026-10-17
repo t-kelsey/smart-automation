@@ -3,25 +3,42 @@ import type {
 	BoreholeDocument,
 	BoreholeLayer,
 	BoreholeSummary,
-	DocumentType
+	DocumentType,
+	MapPoint
 } from '#lib/domain/borehole.ts';
-import { parseComposition } from '#lib/din4023/index.ts';
-import type { ApiBorehole, ApiBoreholeLayer, ApiDocument } from './api-types';
+import { colorKeyByName, dinColors, parseComposition } from '#lib/din4023/index.ts';
+import type {
+	ApiBorehole,
+	ApiBoreholeDetail,
+	ApiBoreholeLayer,
+	ApiDocument,
+	ApiFeature,
+	ApiGeoPoint,
+	ApiPointFeature
+} from './api-types';
 
 const num = (value: string | number | null | undefined): number | null =>
 	value === null || value === undefined ? null : Number(value);
 
-/** The API stores stratigraphy as one string, e.g. "km1" or "km1 Gipskeuper". */
-function toStratigraphy(value: string | null): BoreholeLayer['stratigraphy'] {
-	const [code = '', ...name] = (value ?? '').trim().split(/\s+/);
-	return { code, name: name.join(' ') };
+/**
+ * The API stores stratigraphy as one free-text string: an abbreviation ("km1"), a name
+ * ("Neuenburg-Formation") or both ("km1 Gipskeuper"). Short tokens are treated as codes.
+ */
+export function toStratigraphy(value: string | null): BoreholeLayer['stratigraphy'] {
+	const text = (value ?? '').trim();
+	if (!text) return { code: '', name: '' };
+	const [first, ...rest] = text.split(/\s+/);
+	if (first.length <= 5 && !first.includes('-')) return { code: first, name: rest.join(' ') };
+	return { code: '', name: text };
 }
 
-function toColor(value: string | null): BoreholeLayer['color'] {
+/** Colour as written on the log: hex, or a German DIN 4023 colour name such as "grau". */
+export function toColor(value: string | null): BoreholeLayer['color'] {
 	const raw = (value ?? '').trim();
-	return /^#[0-9a-f]{3,8}$/i.test(raw)
-		? { hex: raw, name: raw }
-		: { hex: '#9ca3af', name: raw || 'Unknown' };
+	if (/^#[0-9a-f]{3,8}$/i.test(raw)) return { hex: raw, name: raw };
+	const key = colorKeyByName[raw.toLowerCase()];
+	if (key) return { hex: dinColors[key].hex, name: dinColors[key].name.en };
+	return { hex: '#9ca3af', name: raw || 'Unknown' };
 }
 
 export function toLayer(layer: ApiBoreholeLayer): BoreholeLayer {
@@ -39,53 +56,70 @@ export function toLayer(layer: ApiBoreholeLayer): BoreholeLayer {
 	};
 }
 
-function toDocumentType(filename: string): DocumentType {
+function toDocumentType(mimeType: string | null, filename: string): DocumentType {
+	if (mimeType === 'application/pdf') return 'pdf';
+	if (mimeType?.startsWith('image/')) return 'image';
+	if (mimeType?.includes('wordprocessingml') || mimeType === 'application/msword') return 'docx';
 	const ext = filename.split('.').pop()?.toLowerCase();
 	if (ext === 'pdf') return 'pdf';
 	if (ext === 'docx' || ext === 'doc') return 'docx';
 	return 'image';
 }
 
-export function toDocument(doc: ApiDocument): BoreholeDocument {
+export function toDocument(doc: ApiDocument, baseUrl: string): BoreholeDocument {
 	return {
 		id: doc.id,
 		name: doc.original_filename,
-		type: toDocumentType(doc.original_filename),
+		type: toDocumentType(doc.mime_type, doc.original_filename),
 		status: doc.status,
 		language: doc.source_country ?? undefined,
-		// TODO: replace with a download endpoint once the API exposes one.
-		url: doc.storage_path
+		pages: doc.page_count ?? undefined,
+		sizeKb: doc.size_bytes === null ? undefined : Math.round(doc.size_bytes / 1024),
+		url: doc.has_file ? `${baseUrl}/documents/${encodeURIComponent(doc.id)}/file` : undefined
 	};
 }
 
-function toLocation(location: ApiBorehole['location']): Borehole['location'] {
-	return location ? { lon: location.coordinates[0], lat: location.coordinates[1] } : null;
+function toLocation(geometry: ApiGeoPoint | null, place: string | null): Borehole['location'] {
+	if (!geometry) return null;
+	return { lon: geometry.coordinates[0], lat: geometry.coordinates[1], place: place ?? undefined };
 }
 
-export function toSummary(b: ApiBorehole): BoreholeSummary {
+export function toSummary(b: ApiBorehole, geometry: ApiGeoPoint | null): BoreholeSummary {
 	return {
 		id: b.id,
 		name: b.name,
 		date: b.drilled_at ?? undefined,
 		elevation: num(b.elevation_m),
-		totalDepth: num(b.total_depth_m) ?? 0,
-		location: toLocation(b.location),
+		totalDepth: num(b.total_depth_m),
+		location: toLocation(geometry, b.place),
 		verified: b.verified
 	};
 }
 
-export function toBorehole(b: ApiBorehole): Borehole {
-	const layers = (b.borehole_layers ?? []).map(toLayer);
+export const featureToSummary = ({ properties, geometry }: ApiFeature): BoreholeSummary =>
+	toSummary(properties, geometry);
+
+export function featureToMapPoint({ properties, geometry }: ApiPointFeature): MapPoint[] {
+	if (!geometry) return [];
+	const [lon, lat] = geometry.coordinates;
+	return [{ id: properties.id, name: properties.name, verified: properties.verified, lon, lat }];
+}
+
+/** `baseUrl` is the API base, used for links to document files. */
+export function toBorehole(b: ApiBoreholeDetail, baseUrl: string): Borehole {
+	const layers = b.layers.map(toLayer);
+	const deepestLayer = layers.length ? Math.max(...layers.map((l) => l.endDepth)) : null;
 	return {
-		...toSummary(b),
+		...toSummary(b, b.location),
 		// Fall back to the deepest layer when the total depth was not extracted.
-		totalDepth: num(b.total_depth_m) ?? Math.max(0, ...layers.map((l) => l.endDepth)),
+		totalDepth: num(b.total_depth_m) ?? deepestLayer,
 		externalId: b.external_id ?? undefined,
 		endDate: b.end_date ?? undefined,
 		cause: b.purpose ?? undefined,
+		client: b.client ?? undefined,
 		groundwaterLevel: num(b.groundwater_level_m) ?? undefined,
 		drillingMethod: b.drilling_method ?? undefined,
 		layers,
-		documents: b.document ? [toDocument(b.document)] : []
+		documents: b.documents.map((doc) => toDocument(doc, baseUrl))
 	};
 }

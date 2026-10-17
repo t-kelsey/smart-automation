@@ -2,7 +2,8 @@ import type {
 	Borehole,
 	BoreholeFilter,
 	BoreholeSort,
-	BoreholeSummary
+	BoreholeSummary,
+	MapPoint
 } from '#lib/domain/borehole.ts';
 import type { BoreholeRepository } from '#lib/repositories/borehole-repository.ts';
 
@@ -68,6 +69,17 @@ export class BoreholeService {
 			hasPrevious: current > 1,
 			hasNext: current < pageCount
 		};
+	}
+
+	/** Positions of all boreholes for the map; one light request instead of paging through the list. */
+	listMapPoints(): Promise<MapPoint[]> {
+		return this.repository.listMapPoints();
+	}
+
+	/** Summary of one borehole, e.g. for a map tooltip. Throws `BoreholeNotFoundError` if it does not exist. */
+	async getSummary(id: string): Promise<BoreholeSummary> {
+		const { name, date, elevation, totalDepth, location, verified } = await this.getById(id);
+		return { id, name, date, elevation, totalDepth, location, verified };
 	}
 
 	/** Borehole with layers ordered by depth. Throws `BoreholeNotFoundError` if it does not exist. */

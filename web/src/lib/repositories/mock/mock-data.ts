@@ -1,3 +1,4 @@
+import { config } from '#lib/config.ts';
 import { Faker, de, en, es, fr } from '@faker-js/faker';
 import type {
 	Borehole,
@@ -908,8 +909,8 @@ const bk1042: Borehole = {
 	]
 };
 
-/** 261 boreholes worldwide with layers and documents; deterministic across runs. */
+/** BK 1042 plus `PUBLIC_MOCK_BOREHOLES` generated boreholes worldwide with layers and documents; deterministic across runs. */
 export const mockBoreholes: Borehole[] = [
 	bk1042,
-	...Array.from({ length: 10000 }, (_, i) => makeBorehole(i + 1))
+	...Array.from({ length: config.mockBoreholeCount }, (_, i) => makeBorehole(i + 1))
 ];
