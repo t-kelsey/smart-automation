@@ -1,0 +1,15 @@
+# Confidential sample data must never end up in an image or build context
+data
+lgrb-sample
+.git
+.env
+**/.env
+**/node_modules
+**/.svelte-kit
+web/build
+api/_build
+api/deps
+api/priv/storage/*
+api/priv/uploads/*
+bem
+docs

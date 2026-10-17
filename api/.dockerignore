@@ -1,0 +1,5 @@
+_build
+deps
+priv/storage/*
+priv/uploads/*
+.env
