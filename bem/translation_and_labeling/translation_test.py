@@ -5,11 +5,11 @@ from pathlib import Path
 from translation_and_extraction import translate
 
 BEM_DIR = Path(__file__).resolve().parents[1]
-FAKE_OCR_DIR = BEM_DIR / "output" / "fake_ocr"
+OCR_DIR = BEM_DIR / "output" / "ocr"
 TRANSLATE_DIR = BEM_DIR / "output" / "translate"
 
 TRANSLATE_DIR.mkdir(parents=True, exist_ok=True)
-for path in sorted(FAKE_OCR_DIR.glob("*.md")):
+for path in sorted(OCR_DIR.glob("*.md")):
     translated, errors = translate(path.read_text(encoding="utf-8"))
     out_path = TRANSLATE_DIR / path.name
     out_path.write_text(translated, encoding="utf-8")
