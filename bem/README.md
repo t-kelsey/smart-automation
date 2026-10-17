@@ -7,6 +7,9 @@ writes files under `output/`, so you can run and inspect them one at a time:
 data/…/report.pdf ──ocr──▶ output/ocr/*.md ──translate──▶ output/translate/*.md ──qwen──▶ output/extraction/*.json
 ```
 
+Once these stages work end to end, see [`API_INTEGRATION.md`](API_INTEGRATION.md) for how to
+report OCR/translation/triage/extraction results and the final boreholes to `api/`.
+
 All commands run from this folder (`bem/`) with [uv](https://docs.astral.sh/uv/). The first
 `uv run` creates `.venv` and installs the dependencies from `uv.lock`.
 
