@@ -54,3 +54,16 @@ class Borehole(BaseModel):
     # Values in this borehole's section that could not be translated (translate_error:...).
     # The API should keep the record unverified until these are resolved (ADR-0020).
     translate_errors: list[str] = Field(default_factory=list)
+
+    def to_api_dict(self) -> dict[str, Any]:
+        """The JSON-serialisable record sent to the API, written to disk or printed.
+
+        This is the one place that decides the payload shape. Pipeline-only provenance is
+        folded into `metadata` (ADR-0005, ADR-0020): `source_file`, and `translate_errors`
+        if there are any. `raw_markdown` is left out, it is too large to repeat on every record.
+        """
+        data = self.model_dump(mode="json", exclude={"source_file", "raw_markdown", "translate_errors"})
+        data["metadata"]["source_file"] = self.source_file
+        if self.translate_errors:
+            data["metadata"]["translate_errors"] = self.translate_errors
+        return data

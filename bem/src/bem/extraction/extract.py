@@ -7,11 +7,17 @@ Any server that supports `response_format={"type": "json_schema"}` works
 """
 from __future__ import annotations
 
+import logging
+
 from openai import OpenAI
 from pydantic import ValidationError
 
+from ..schema import Borehole as PipelineBorehole
 from .config import load_prompt, load_settings
 from .schema import Borehole
+from .validate import check_all, status
+
+log = logging.getLogger("bem")
 
 
 def make_client(base_url: str | None = None, api_key: str | None = None) -> OpenAI:
@@ -20,7 +26,7 @@ def make_client(base_url: str | None = None, api_key: str | None = None) -> Open
     return OpenAI(base_url=base_url or cfg["base_url"], api_key=api_key or cfg["api_key"])
 
 
-def extract(
+def extract_record(
     text: str,
     client: OpenAI,
     model: str | None = None,
@@ -60,3 +66,22 @@ def extract(
                 {"role": "user", "content": f"The JSON was invalid: {e}\nReturn a corrected JSON object."},
             ]
     raise RuntimeError(f"Extraction failed after retries: {last_error}")
+
+
+def extract(section: PipelineBorehole, client: OpenAI | None = None) -> PipelineBorehole:
+    """Pipeline step: fill a triaged Borehole (name, source_file, raw_markdown) from its text.
+
+    Returns a new pipeline Borehole shaped for the API sink. Triage provenance
+    (source_file, raw_markdown, translate_errors) is carried over. The record stays
+    `verified=False`; validation issues are logged, not raised, so that one doubtful
+    record does not stop the run.
+    """
+    text = section.raw_markdown
+    record = extract_record(text, client or make_client())
+    record.layers.sort(key=lambda l: l.depth_from_m)  # the consistency checks expect depth order
+    issues = check_all(record, text)
+    for issue in issues:
+        log.warning("%s: [%s] %s: %s", section.name, issue.level, issue.field, issue.message)
+    log.info("%s: extracted %d layer(s), status %s", section.name, len(record.layers), status(issues))
+
+    return record.to_pipeline(section)

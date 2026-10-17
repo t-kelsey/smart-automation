@@ -2,8 +2,8 @@
 
 import json
 import logging
+import re
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import asdict
 from pathlib import Path
 
 import requests
@@ -13,6 +13,12 @@ from .schema import Borehole
 log = logging.getLogger("bem")
 
 
+def _file_stem(borehole: Borehole) -> str:
+    """<source file stem>__<borehole id>, safe to use as a file name."""
+    ident = borehole.external_id or borehole.name
+    return re.sub(r"[^\w.-]+", "_", f"{Path(borehole.source_file).stem}__{ident}")
+
+
 class ApiSink:
     """POST each borehole as JSON to the Elixir API, which writes it to PostGIS."""
 
@@ -20,7 +26,7 @@ class ApiSink:
         self.url = url
 
     def __call__(self, borehole: Borehole) -> None:
-        requests.post(self.url, json=asdict(borehole), timeout=30).raise_for_status()
+        requests.post(self.url, json=borehole.to_api_dict(), timeout=30).raise_for_status()
 
 
 class JsonFileSink:
@@ -31,9 +37,8 @@ class JsonFileSink:
         out_dir.mkdir(parents=True, exist_ok=True)
 
     def __call__(self, borehole: Borehole) -> None:
-        record = asdict(borehole)
-        path = self.out_dir / f"{Path(record['source']).stem}__{record['borehole_id']}.json"
-        path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
+        path = self.out_dir / f"{_file_stem(borehole)}.json"
+        path.write_text(json.dumps(borehole.to_api_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
         log.info("saved %s", path)
 
 
@@ -41,7 +46,7 @@ class PrintSink:
     """Print each borehole as indented JSON to the terminal."""
 
     def __call__(self, borehole: Borehole) -> None:
-        print(json.dumps(asdict(borehole), indent=2, ensure_ascii=False))
+        print(json.dumps(borehole.to_api_dict(), indent=2, ensure_ascii=False))
 
 
 def make_sink(to: str, api_url: str, out_dir: Path) -> AbstractContextManager:

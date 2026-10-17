@@ -1,7 +1,8 @@
 """Schema of the Qwen output: one borehole with its layers, shaped like the backend.
 
 Field names match `boreholes` / `borehole_layers` (docs/elixir-backend-borehole-pipeline.md,
-ADR-0012, ADR-0023), so `Borehole.to_api_dict()` can be sent to the API as it is.
+ADR-0012, ADR-0023), so `Borehole.to_pipeline()` can turn it into the pipeline record (bem/schema.py), which
+builds the API payload.
 
 All fields are required-but-nullable on purpose: with constrained decoding the model
 must emit every key, and has to say "null" instead of silently leaving a field out.
@@ -17,6 +18,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .. import schema as pipeline
+
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")  # -> additionalProperties: false
@@ -24,7 +27,7 @@ class _Strict(BaseModel):
 
 class MetadataItem(_Strict):
     # A list of key/value pairs instead of a free dict, because strict constrained decoding
-    # does not allow open objects. `to_api_dict()` turns the list into the jsonb map.
+    # does not allow open objects. `to_pipeline()` turns the list into the jsonb map.
     key: str = Field(description="Short English label, e.g. 'contractor', 'rig', 'driller', 'rqd_percent'")
     value: str = Field(description="Value exactly as written in the text")
 
@@ -55,15 +58,28 @@ class Borehole(_Strict):
     metadata: List[MetadataItem] = Field(description="Other borehole values with no own field (contractor, rig, driller, ...); [] if none")
     layers: List[Layer] = Field(description="All layers, one entry each, in depth order")
 
-    def to_api_dict(self) -> dict:
-        """The record in the backend's shape: metadata as maps, layers numbered by position."""
+    def to_pipeline(self, section: pipeline.Borehole) -> pipeline.Borehole:
+        """The pipeline record: metadata as maps, layers numbered by position (sorted by depth).
+
+        `section` is the triaged borehole this was extracted from. Its provenance is carried
+        over, and its name and ID are the fallback when the model returned none.
+        """
         data = self.model_dump(mode="json", exclude={"layers", "metadata"})
-        data["metadata"] = {m.key: m.value for m in self.metadata}
-        data["verified"] = False
-        data["layers"] = []
-        for position, layer in enumerate(self.layers, 1):
-            item = layer.model_dump(mode="json", exclude={"metadata"})
-            item["position"] = position
-            item["metadata"] = {m.key: m.value for m in layer.metadata}
-            data["layers"].append(item)
-        return data
+        data["name"] = self.name.strip() or section.name
+        data["external_id"] = self.external_id or section.external_id
+        layers = sorted(self.layers, key=lambda l: l.depth_from_m)
+        return pipeline.Borehole(
+            **data,
+            metadata={m.key: m.value for m in self.metadata},
+            borehole_layers=[
+                pipeline.BoreholeLayer(
+                    **layer.model_dump(mode="json", exclude={"metadata"}),
+                    position=position,
+                    metadata={m.key: m.value for m in layer.metadata},
+                )
+                for position, layer in enumerate(layers, 1)
+            ],
+            source_file=section.source_file,
+            raw_markdown=section.raw_markdown,
+            translate_errors=section.translate_errors,
+        )
