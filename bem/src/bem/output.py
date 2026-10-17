@@ -6,8 +6,7 @@ import re
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
-import requests
-
+from .api import ApiClient
 from .schema import Borehole
 
 log = logging.getLogger("bem")
@@ -20,13 +19,14 @@ def _file_stem(borehole: Borehole) -> str:
 
 
 class ApiSink:
-    """POST each borehole as JSON to the Elixir API, which writes it to PostGIS."""
+    """POST each borehole to the Elixir API (linked to its document if known), which writes it to PostGIS."""
 
-    def __init__(self, url: str) -> None:
-        self.url = url
+    def __init__(self, client: ApiClient) -> None:
+        self.client = client
 
-    def __call__(self, borehole: Borehole) -> None:
-        requests.post(self.url, json=borehole.to_api_dict(), timeout=30).raise_for_status()
+    def __call__(self, borehole: Borehole, document_id: str | None = None) -> str | None:
+        """Returns the id of the created borehole. Raises requests.HTTPError if the API refuses it."""
+        return self.client.post_borehole(borehole, document_id)["data"]["id"]
 
 
 class JsonFileSink:
@@ -36,7 +36,7 @@ class JsonFileSink:
         self.out_dir = out_dir
         out_dir.mkdir(parents=True, exist_ok=True)
 
-    def __call__(self, borehole: Borehole) -> None:
+    def __call__(self, borehole: Borehole, document_id: str | None = None) -> None:
         path = self.out_dir / f"{_file_stem(borehole)}.json"
         path.write_text(json.dumps(borehole.to_api_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
         log.info("saved %s", path)
@@ -45,14 +45,14 @@ class JsonFileSink:
 class PrintSink:
     """Print each borehole as indented JSON to the terminal."""
 
-    def __call__(self, borehole: Borehole) -> None:
+    def __call__(self, borehole: Borehole, document_id: str | None = None) -> None:
         print(json.dumps(borehole.to_api_dict(), indent=2, ensure_ascii=False))
 
 
-def make_sink(to: str, api_url: str, out_dir: Path) -> AbstractContextManager:
+def make_sink(to: str, client: ApiClient, out_dir: Path) -> AbstractContextManager:
     """Return a context manager that yields the sink selected by `to` (api, json or print)."""
     if to == "api":
-        sink = ApiSink(api_url)
+        sink = ApiSink(client)
     elif to == "json":
         sink = JsonFileSink(out_dir)
     elif to == "print":

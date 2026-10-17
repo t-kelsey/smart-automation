@@ -44,13 +44,17 @@ uv run bem ../data/BoreholeData/<folder> --to json --debug   # → out/<file>__<
 | `inputs` | files (`.pdf`, `.png`, `.jpg`, `.tif`, `.docx`) or folders, searched recursively |
 | `--to` | `print` (default) to the terminal, `json` to one file per borehole, `api` to POST to the API |
 | `--out-dir DIR` | where `--to json` writes (default `out/`) |
-| `--api-url URL` | default `http://localhost:4000/api/boreholes` |
+| `--api-url URL` | API base URL for `--to api`, default `http://localhost:4000/api` |
 | `--debug` | save the intermediate stage results under `output/` |
 
 - A file that fails is logged and skipped; the run exits with an error listing the failed files.
-- `--to api` does not work yet: the API has no `POST /api/boreholes` endpoint.
-- The payload (`Borehole.to_api_dict()` in `src/bem/schema.py`) puts `source_file` and
-  `translate_errors` into `metadata`, and leaves out the raw markdown.
+- `--to api` (ADR-0032, `src/bem/api.py`): each borehole is created with `POST /api/boreholes`. If the
+  input file is named `<document_id>.<ext>` (what `mix documents.backfill` produces, ADR-0014), the
+  borehole is linked to that document and every stage result is reported with the `PUT` endpoints
+  (see [`API_INTEGRATION.md`](API_INTEGRATION.md)). Other file names only create the borehole, with a warning.
+- The borehole payload (`Borehole.to_api_dict()` in `src/bem/schema.py`) puts `source_file` and
+  `translate_errors` into `metadata`, and leaves out the raw markdown. `--to api` wraps it as
+  `{"borehole", "layers", "document_id"}`.
 
 ## 1. OCR (Docling): document → markdown
 

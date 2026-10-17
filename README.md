@@ -106,5 +106,5 @@ vi .env
 # Start application
 docker compose up --build
 
-# open localhost:3000 in browser
+# open localhost:3001 in browser
 ```

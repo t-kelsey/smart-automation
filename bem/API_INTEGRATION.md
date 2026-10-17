@@ -1,7 +1,7 @@
 # API Integration: reporting pipeline results to `api/`
 
-This is for whoever wires up `bem/`'s output once OCR → translation → triage → extraction work
-end to end. It describes the HTTP contract `api/` exposes for exactly that — not a design
+`uv run bem <files> --to api` (`src/bem/api.py`, ADR-0032) already follows this contract.
+This is the reference for it. It describes the HTTP contract `api/` exposes for exactly that — not a design
 proposal, these endpoints exist and are tested today. Design background: `docs/elixir-backend-borehole-pipeline.md`
 ("Proposed Extension: Pipeline Stage Tracking") and ADR-0002/0012/0013/0014.
 
