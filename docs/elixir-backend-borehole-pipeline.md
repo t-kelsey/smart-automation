@@ -19,50 +19,54 @@ Add `PostGIS` support (`geo`, `geo_postgis` deps) for coordinate storage and spa
 ### `documents`
 Source file metadata (one row per uploaded PDF/scan/image).
 
-| field | type | notes |
-|---|---|---|
-| `id` | `binary_id` | |
-| `original_filename` | `string` | |
-| `storage_path` | `string` | path/URL to the stored file |
-| `source_country` | `string` | optional, if known |
-| `status` | `enum` | `pending`, `processing`, `extracted`, `failed`, `reviewed` |
-| `raw_extraction` | `map` (`jsonb`) | unmodified output from the OCR service |
-| `inserted_at` / `updated_at` | | |
+| field | type | required? | notes |
+|---|---|---|---|
+| `id` | `binary_id` | yes (PK) | |
+| `original_filename` | `string` | yes | |
+| `storage_path` | `string` | yes | path/URL to the stored file |
+| `source_country` | `string` | no | optional, if known |
+| `status` | `enum` | yes (default `pending`) | `pending`, `processing`, `extracted`, `failed`, `reviewed` |
+| `raw_extraction` | `map` (`jsonb`) | no | unmodified output from the OCR service |
+| `inserted_at` / `updated_at` | | yes (auto) | |
 
 > **Confidentiality**: source documents are confidential and must never be exposed to the `web/` frontend or any public endpoint, and must never be committed to git. `documents` (including `storage_path`) is backend/review-only — the map/search API only ever returns `boreholes`/`borehole_layers`. Store uploaded files under `api/priv/uploads/` (gitignored, outside `priv/static` so Phoenix never serves them publicly) — for the hackathon this is local disk; swap for an S3-compatible bucket if persistence across deploys is needed.
 
 ### `boreholes`
 One row per borehole (`Stammdaten` in the screenshot).
 
-| field | type | notes |
-|---|---|---|
-| `id` | `binary_id` | |
-| `document_id` | `references(:documents)` | |
-| `name` | `string` | e.g. "B 1/59 Schönberg..." |
-| `purpose` | `string` | "Bohrzweck" |
-| `drilling_method` | `string` | "Bohrart" |
-| `drilled_at` | `date` | "Bohrdatum" |
-| `location` | `geometry(Point, 4326)` | WGS84 lon/lat for the map |
-| `source_coordinate_system` | `string` | e.g. "32U UTM", kept for traceability |
-| `source_coordinate_raw` | `string` | original coordinate string before conversion |
-| `total_depth_m` | `decimal` | "Endteufe" |
-| `elevation_m` | `decimal` | "Ansatzhöhe" |
-| `verified` | `boolean` | "LGRB geprüft" equivalent — reviewed by a human |
+| field | type | required? | notes |
+|---|---|---|---|
+| `id` | `binary_id` | yes (PK) | |
+| `document_id` | `references(:documents)` | yes | set programmatically, not user input |
+| `name` | `string` | yes | e.g. "B 1/59 Schönberg..." |
+| `external_id` | `string` | no | project/source-assigned ID (e.g. "HOLE NO: BH_AB01"), not unique — different projects can reuse IDs |
+| `purpose` | `string` | no | "Bohrzweck" |
+| `drilling_method` | `string` | no | "Bohrart" |
+| `drilled_at` | `date` | no | "Bohrdatum" / "DATE STARTED" |
+| `end_date` | `date` | no | "DATE COMPLETED" — a borehole can span multiple days |
+| `location` | `geometry(Point, 4326)` | no | WGS84 lon/lat for the map |
+| `source_coordinate_system` | `string` | no | e.g. "32U UTM", kept for traceability |
+| `source_coordinate_raw` | `string` | no | original coordinate string before conversion |
+| `total_depth_m` | `decimal` | no | "Endteufe", vertical depth |
+| `borehole_length_m` | `decimal` | no | length along the hole axis; differs from `total_depth_m` for angled/directional boreholes |
+| `elevation_m` | `decimal` | no | "Ansatzhöhe" |
+| `groundwater_level_m` | `decimal` | no | depth to groundwater below surface, in meters — one value per borehole, not per layer |
+| `verified` | `boolean` | yes (default `false`) | "LGRB geprüft" equivalent — reviewed by a human |
 
 ### `borehole_layers`
 Stratigraphy rows (the table in the screenshot: von/bis/Stratigraphie/Petrographie/Farbe).
 
-| field | type | notes |
-|---|---|---|
-| `id` | `binary_id` | |
-| `borehole_id` | `references(:boreholes)` | |
-| `position` | `integer` | ordering (1, 2, 3, ...) |
-| `depth_from_m` | `decimal` | |
-| `depth_to_m` | `decimal` | |
-| `stratigraphy` | `string` | geological formation |
-| `petrography` | `string` | free text, e.g. "Kies [gerundet] (steinig, ...)" |
-| `color` | `string` | |
-| `raw_text` | `string` | original OCR text for this row, for QA |
+| field | type | required? | notes |
+|---|---|---|---|
+| `id` | `binary_id` | yes (PK) | |
+| `borehole_id` | `references(:boreholes)` | yes | set programmatically, not user input |
+| `position` | `integer` | yes | ordering (1, 2, 3, ...) |
+| `depth_from_m` | `decimal` | yes | |
+| `depth_to_m` | `decimal` | yes | must be greater than `depth_from_m` |
+| `stratigraphy` | `string` | no | geological formation |
+| `petrography` | `string` | no | free text, e.g. "Kies [gerundet] (steinig, ...)" |
+| `color` | `string` | no | |
+| `raw_text` | `string` | no | original OCR text for this row, for QA |
 
 Keep `raw_text` / `raw_extraction` fields everywhere plausible — given handwritten sources, this data will need to be re-verified, so never throw away the source text.
 
