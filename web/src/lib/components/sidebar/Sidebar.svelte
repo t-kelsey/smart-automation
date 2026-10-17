@@ -110,7 +110,7 @@
 				{/if}
 			</Menu.Trigger>
 			<Portal>
-				<Menu.Positioner>
+				<Menu.Positioner class="z-50!">
 					<Menu.Content class="w-56 card rounded-2xl bg-surface-100-900 p-2 shadow-xl">
 						{#each userMenu as action (action.label)}
 							<Menu.Item value={action.label} onclick={action.onSelect}>
