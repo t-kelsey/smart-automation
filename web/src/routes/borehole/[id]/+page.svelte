@@ -38,7 +38,10 @@
 			label: 'Height o. NN',
 			value: borehole.elevation === null ? '–' : `${borehole.elevation.toFixed(2)} m`
 		},
-		{ label: 'Total depth', value: `${borehole.totalDepth.toFixed(1)} m` },
+		{
+			label: 'Total depth',
+			value: borehole.totalDepth === null ? '–' : `${borehole.totalDepth.toFixed(1)} m`
+		},
 		{ label: 'Drilling method', value: borehole.drillingMethod ?? '–' },
 		{ label: 'Client', value: borehole.client ?? '–' },
 		{ label: 'Location', value: borehole.location?.place ?? '–' }
@@ -50,13 +53,18 @@
 		docx: FileTypeIcon
 	};
 
-	// TODO: wire these up once the API exists.
+	// TODO: wire up New Version, Rename and Delete once the API supports them.
 	const documentActions = [
 		{ label: 'Download', icon: Download },
 		{ label: 'New Version', icon: UploadIcon },
 		{ label: 'Rename', icon: PencilIcon },
 		{ label: 'Delete', icon: TrashIcon, danger: true }
 	];
+
+	function onDocumentAction(doc: BoreholeDocument, action: string) {
+		// The API sends the file as an attachment with ?download=1 (ADR-0026).
+		if (action === 'Download' && doc.url) window.location.assign(`${doc.url}?download=1`);
+	}
 </script>
 
 {#snippet petrography(layer: BoreholeLayer)}
@@ -103,7 +111,7 @@
 				</div>
 				<BoreholeColumn
 					layers={borehole.layers}
-					totalDepth={borehole.totalDepth}
+					totalDepth={borehole.totalDepth ?? 0}
 					{colored}
 					selectedId={selectedLayerId}
 					onselect={(id) => (selectedLayerId = id)}
@@ -261,8 +269,18 @@
 							{@const Icon = documentIcons[doc.type]}
 							<li class="group flex items-center gap-3 py-2 text-sm">
 								<Icon class="size-5 shrink-0 opacity-70" />
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- url comes from the API -->
-								<a href={doc.url} class="min-w-0 flex-1 truncate anchor">{doc.name}</a>
+								{#if doc.url}
+									<!-- eslint-disable svelte/no-navigation-without-resolve -- url comes from the API -->
+									<a
+										href={doc.url}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="min-w-0 flex-1 truncate anchor">{doc.name}</a
+									>
+									<!-- eslint-enable svelte/no-navigation-without-resolve -->
+								{:else}
+									<span class="min-w-0 flex-1 truncate">{doc.name}</span>
+								{/if}
 								<span class="shrink-0 text-xs opacity-60">
 									{[
 										doc.type.toUpperCase(),
@@ -275,7 +293,10 @@
 								</span>
 								<!-- Fixed-size slot so the row does not shift when the trigger appears. -->
 								<div class="size-8 shrink-0">
-									<Menu positioning={{ placement: 'bottom-end' }}>
+									<Menu
+										positioning={{ placement: 'bottom-end' }}
+										onSelect={(details) => onDocumentAction(doc, details.value)}
+									>
 										<Menu.Trigger
 											class="btn-icon size-8 opacity-0 group-hover:opacity-100 hover:preset-tonal focus-visible:opacity-100 data-[state=open]:opacity-100"
 											aria-label="Actions for {doc.name}"
@@ -290,6 +311,7 @@
 													{#each documentActions as action (action.label)}
 														<Menu.Item
 															value={action.label}
+															disabled={action.label === 'Download' && !doc.url}
 															class="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm hover:preset-tonal {action.danger
 																? 'text-error-500'
 																: ''}"

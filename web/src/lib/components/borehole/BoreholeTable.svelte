@@ -39,7 +39,7 @@
 					<td>{borehole.location?.place ?? '–'}</td>
 					<td>{borehole.date ?? '–'}</td>
 					<td class="text-right">{borehole.elevation ?? '–'}</td>
-					<td class="text-right">{borehole.totalDepth}</td>
+					<td class="text-right">{borehole.totalDepth ?? '–'}</td>
 					<td>
 						{#if borehole.verified}
 							<CircleCheck class="size-4 text-success-500" aria-label="Verified" />
