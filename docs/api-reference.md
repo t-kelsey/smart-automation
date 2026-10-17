@@ -336,7 +336,7 @@ file bytes. The pipeline fetches the document's file itself via
 ```json
 {
   "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "config": { "extract": "sonnet", "transform": "opus" }
+  "config": { "extract": { "model": "sonnet", "effort": "high" }, "transform": { "model": "opus", "effort": "high" } }
 }
 ```
 
@@ -356,7 +356,7 @@ Submission happens synchronously in this request: the response's `status` reflec
     "id": "6b1e...",
     "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "status": "running",
-    "config": { "extract": "sonnet", "transform": "opus" },
+    "config": { "extract": { "model": "sonnet", "effort": "high" }, "transform": { "model": "opus", "effort": "high" } },
     "inserted_at": "2026-10-17T18:00:00Z",
     "updated_at": "2026-10-17T18:00:00Z"
   }
@@ -368,7 +368,7 @@ Submission happens synchronously in this request: the response's `status` reflec
 ```bash
 curl -X POST "http://localhost:4000/api/pipeline_runs" \
   -H "Content-Type: application/json" \
-  -d '{"document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "config": {"extract": "sonnet"}}'
+  -d '{"document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "config": {"extract": {"model": "sonnet", "effort": "high"}}}'
 ```
 
 ### `GET /api/pipeline_runs/:id`

@@ -5,6 +5,8 @@ author: claude
 title: Pipeline list and detail pages with placeholder data
 ---
 
+> **Superseded by ADR-0039**: the pages now read `pipeline_runs`; the mock repository was removed.
+
 # ADR-0036 – Pipeline list and detail pages with placeholder data
 
 ## Context
