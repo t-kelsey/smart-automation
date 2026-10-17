@@ -328,15 +328,19 @@ defmodule Api.Boreholes do
   # (ADR-0030), reruns add new rows instead of replacing previous ones.
 
   @doc """
-  Records one pipeline step execution (`attrs` with `"type"`, `"run_id"`, `"position"`, `"data"`),
-  linked to every document id in `attrs["document_ids"]` (at least one required).
+  Records one pipeline step execution (`attrs` with `"type"`, `"run_id"`, `"position"` and
+  optionally `"status"` (default `"new"`), `"data"`, `"error"`, `"model"`, `"effort"`, `"usage"`),
+  linked to every document id in `attrs["document_ids"]` (at least one required). A stage created
+  as `"running"` becomes its run's `current_stage`.
   """
   def create_exec_stage(attrs) do
     document_ids = attrs["document_ids"] || attrs[:document_ids] || []
 
     Repo.transaction(fn ->
-      with {:ok, exec_stage} <- %ExecStage{} |> ExecStage.changeset(attrs) |> Repo.insert(),
+      with :ok <- require_document_ids(document_ids),
+           {:ok, exec_stage} <- %ExecStage{} |> ExecStage.changeset(attrs) |> Repo.insert(),
            {:ok, _links} <- link_documents(exec_stage, document_ids) do
+        track_current_stage(exec_stage)
         Repo.preload(exec_stage, :documents)
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -344,9 +348,58 @@ defmodule Api.Boreholes do
     end)
   end
 
-  defp link_documents(_exec_stage, []) do
-    {:error, "document_ids must have at least one entry"}
+  @doc """
+  Reports progress on a stage (ADR-0040): `attrs` with `"status"` (required) and optionally
+  `"data"`, `"error"`, `"model"`, `"effort"`, `"usage"`, `"started_at"`, `"finished_at"`.
+  `"document_ids"` (optional) are linked in addition to the stage's existing documents. A finished
+  stage cannot change any more (422).
+  """
+  def update_exec_stage(%ExecStage{} = exec_stage, attrs) do
+    document_ids = attrs["document_ids"] || attrs[:document_ids] || []
+    exec_stage = Repo.preload(exec_stage, :documents)
+
+    Repo.transaction(fn ->
+      with :ok <- validate_id_list(document_ids, "document_ids"),
+           {:ok, updated} <-
+             exec_stage |> ExecStage.update_changeset(attrs) |> Repo.update(),
+           {:ok, _links} <- link_documents(updated, unlinked(exec_stage, document_ids)) do
+        track_current_stage(updated)
+        updated |> Repo.preload(:documents, force: true)
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
+
+  defp unlinked(exec_stage, document_ids) do
+    linked = MapSet.new(exec_stage.documents, & &1.id)
+    document_ids |> Enum.uniq() |> Enum.reject(&MapSet.member?(linked, &1))
+  end
+
+  defp require_document_ids([_ | _] = ids), do: validate_id_list(ids, "document_ids")
+  defp require_document_ids(_), do: {:error, "document_ids must have at least one entry"}
+
+  defp validate_id_list(ids, name) do
+    if is_list(ids) and Enum.all?(ids, &is_binary/1),
+      do: :ok,
+      else: {:error, "#{name} must be a list of document ids"}
+  end
+
+  # a stage that starts running becomes its pipeline run's current_stage (run_id is the run's id)
+  defp track_current_stage(%ExecStage{status: "running", type: type, run_id: run_id}) do
+    case Ecto.UUID.cast(run_id) do
+      {:ok, uuid} ->
+        from(pr in PipelineRun, where: pr.id == ^uuid and pr.status in ["new", "running"])
+        |> Repo.update_all(set: [current_stage: type, updated_at: DateTime.utc_now(:second)])
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp track_current_stage(_exec_stage), do: :ok
+
+  defp link_documents(_exec_stage, []), do: {:ok, []}
 
   defp link_documents(exec_stage, document_ids) do
     Enum.reduce_while(document_ids, {:ok, []}, fn document_id, {:ok, acc} ->
@@ -485,9 +538,64 @@ defmodule Api.Boreholes do
   defp maybe_filter_pipeline_run(query, :document_id, document_id),
     do: where(query, [pr], pr.document_id == ^document_id)
 
-  @doc "Sets the status of a pipeline run."
-  def update_pipeline_run_status(%PipelineRun{} = pipeline_run, status) do
-    pipeline_run |> PipelineRun.changeset(%{status: status}) |> Repo.update()
+  @doc """
+  Sets the status of a pipeline run, optionally with an `"error"` (and `"current_stage"`) in
+  `attrs`. Once a run has finished (`completed`/`failed`/`stopped`) its status cannot change any
+  more: `{:error, {:conflict, message}}`, unless it is set to the same status again. Finishing a
+  run marks its stages that are still `new`/`running` as `stopped` (ADR-0040).
+  """
+  def update_pipeline_run_status(%PipelineRun{} = pipeline_run, status, attrs \\ %{}) do
+    terminal = PipelineRun.terminal_statuses()
+
+    cond do
+      pipeline_run.status in terminal and pipeline_run.status == status ->
+        {:ok, pipeline_run}
+
+      pipeline_run.status in terminal ->
+        {:error,
+         {:conflict, "pipeline run is already #{pipeline_run.status} and cannot become #{status}"}}
+
+      true ->
+        attrs =
+          attrs
+          |> Map.new(fn {k, v} -> {to_string(k), v} end)
+          |> Map.take(["error", "current_stage"])
+          |> Map.put("status", status)
+
+        Repo.transaction(fn ->
+          case pipeline_run |> PipelineRun.changeset(attrs) |> Repo.update() do
+            {:ok, %PipelineRun{status: s} = updated} ->
+              if s in terminal, do: stop_open_stages(updated)
+              updated
+
+            {:error, changeset} ->
+              Repo.rollback(changeset)
+          end
+        end)
+    end
+  end
+
+  @doc """
+  Stops a pipeline run that is still `new`/`running`: sets it to `stopped` (its open stages too)
+  and asks the pipeline to cancel it (`Api.Pipeline.stop_pipeline_run/1`, best effort).
+  `{:error, {:conflict, message}}` if the run has already finished.
+  """
+  def stop_pipeline_run(%PipelineRun{} = pipeline_run) do
+    with {:ok, stopped} <-
+           update_pipeline_run_status(pipeline_run, "stopped", %{"error" => "stopped by user"}) do
+      if pipeline_run.status == "running", do: Api.Pipeline.stop_pipeline_run(stopped)
+      {:ok, stopped}
+    end
+  end
+
+  # stages that never finished end with their run
+  defp stop_open_stages(%PipelineRun{id: id}) do
+    now = DateTime.utc_now()
+
+    from(e in ExecStage, where: e.run_id == ^id and e.status in ["new", "running"])
+    |> Repo.update_all(
+      set: [status: "stopped", finished_at: now, updated_at: DateTime.truncate(now, :second)]
+    )
   end
 
   @doc """

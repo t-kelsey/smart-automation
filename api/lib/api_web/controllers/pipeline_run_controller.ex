@@ -54,44 +54,45 @@ defmodule ApiWeb.PipelineRunController do
         {:error, :not_found}
 
       pipeline_run ->
-        exec_stages =
-          Boreholes.list_document_exec_stages(pipeline_run.document_id, %{
-            "run_id" => pipeline_run.id
-          })
-
-        report = Boreholes.get_report(pipeline_run.id)
-
-        render(conn, :show,
-          pipeline_run: pipeline_run,
-          exec_stages: exec_stages,
-          report: report
-        )
+        render_run(conn, pipeline_run)
     end
   end
 
   @doc """
   Updates a pipeline run's status, reported by the pipeline when the whole run finishes:
-  `"completed"` or `"failed"`.
+  `"completed"`, `"failed"` (optional `"error"` with the reason) or `"stopped"`. 409 if the run has
+  already finished with another status (e.g. it was stopped meanwhile).
   """
-  def update_status(conn, %{"id" => id, "status" => status}) do
-    with %PipelineRun{} = pipeline_run <- Boreholes.get_pipeline_run(id),
-         {:ok, pipeline_run} <- Boreholes.update_pipeline_run_status(pipeline_run, status) do
-      exec_stages =
-        Boreholes.list_document_exec_stages(pipeline_run.document_id, %{
-          "run_id" => pipeline_run.id
-        })
-
-      report = Boreholes.get_report(pipeline_run.id)
-
-      render(conn, :show,
-        pipeline_run: pipeline_run,
-        exec_stages: exec_stages,
-        report: report
-      )
-    else
-      nil -> {:error, :not_found}
-      {:error, changeset} -> {:error, changeset}
+  def update_status(conn, %{"id" => id, "status" => status} = params) do
+    with %PipelineRun{} = pipeline_run <- Boreholes.get_pipeline_run(id) || {:error, :not_found},
+         {:ok, pipeline_run} <-
+           Boreholes.update_pipeline_run_status(pipeline_run, status, Map.take(params, ["error"])) do
+      render_run(conn, pipeline_run)
     end
+  end
+
+  @doc """
+  Stops a run that is still `new`/`running` (ADR-0040): the run and its unfinished stages become
+  `stopped` and the pipeline is asked to cancel it. 409 if the run has already finished.
+  """
+  def stop(conn, %{"id" => id}) do
+    with %PipelineRun{} = pipeline_run <- Boreholes.get_pipeline_run(id) || {:error, :not_found},
+         {:ok, pipeline_run} <- Boreholes.stop_pipeline_run(pipeline_run) do
+      render_run(conn, pipeline_run)
+    end
+  end
+
+  defp render_run(conn, pipeline_run) do
+    exec_stages =
+      Boreholes.list_document_exec_stages(pipeline_run.document_id, %{
+        "run_id" => pipeline_run.id
+      })
+
+    render(conn, :show,
+      pipeline_run: pipeline_run,
+      exec_stages: exec_stages,
+      report: Boreholes.get_report(pipeline_run.id)
+    )
   end
 
   defp put_filter(filters, _key, nil), do: filters

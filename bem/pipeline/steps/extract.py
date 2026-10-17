@@ -47,21 +47,23 @@ def extract_boreholes(
 
     def extract(item: tuple[int, pathlib.Path]):
         position, f = item
+        part = report.child(f"#{position}")  # this borehole's share of the step's usage
         try:
+            recorder.start("extract", part, position=position)
             n = pdfutil.page_count(f)
             data = get_ai().run(
                 EXTRACT_PROMPT.format(path=f, n=n, max_pages=MAX_READ_PAGES),
                 model=report.model,
                 effort=report.effort,
                 schema=schemas.EXTRACT_BOREHOLE,
-                report=report,
+                report=part,
                 add_dirs=[out_dir],
                 max_turns=8 + n // MAX_READ_PAGES * 2,
             )
         except Exception as e:
-            recorder.record_failure("extract", e, position=position)
+            recorder.record_failure("extract", e, report=part, position=position)
             raise
-        recorder.record("extract", data, position=position, path=stamped(step_dir / f"{base(f.stem)}.json"))
+        recorder.record("extract", data, report=part, position=position, path=stamped(step_dir / f"{base(f.stem)}.json"))
         if not data["is_single_borehole"]:
             log(f"step 3: WARNING {f.name} holds {data['borehole_count_in_file']} boreholes")
         return f, data

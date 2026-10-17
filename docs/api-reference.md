@@ -359,6 +359,11 @@ Submission happens synchronously in this request: the response's `status` reflec
     "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "status": "running",
     "config": { "extract": { "model": "sonnet", "effort": "high" }, "transform": { "model": "opus", "effort": "high" } },
+    "current_stage": null,
+    "error": null,
+    "started_at": "2026-10-17T18:00:00.123456Z",
+    "finished_at": null,
+    "duration_ms": 12,
     "inserted_at": "2026-10-17T18:00:00Z",
     "updated_at": "2026-10-17T18:00:00Z"
   }
@@ -375,7 +380,9 @@ curl -X POST "http://localhost:4000/api/pipeline_runs" \
 
 ### `GET /api/pipeline_runs/:id`
 
-The run plus its `exec_stages` (newest first) and `report` (`null` until the pipeline has posted one). Poll this to show live progress.
+The run plus its `exec_stages` (newest first), `stage_counts` and `report` (`null` until the pipeline has posted one). Poll this to show live progress.
+
+Run fields (ADR-0040): `status` is `new` → `running` → `completed` / `failed` / `stopped`; `started_at` is stamped when it becomes `running`, `finished_at` when it ends; `duration_ms` runs from `started_at` to `finished_at` (or to now while running); `current_stage` is the type of the stage that last started; `error` says why it failed or was stopped. `stage_counts` counts the run's stages per status.
 
 ```json
 {
@@ -384,16 +391,31 @@ The run plus its `exec_stages` (newest first) and `report` (`null` until the pip
     "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "status": "running",
     "config": { "extract": "sonnet" },
+    "current_stage": "extract",
+    "error": null,
+    "started_at": "2026-10-17T18:00:00.123456Z",
+    "finished_at": null,
+    "duration_ms": 41230,
     "inserted_at": "2026-10-17T18:00:00Z",
     "updated_at": "2026-10-17T18:00:05Z",
+    "stage_counts": { "new": 3, "running": 1, "success": 2, "failed": 0, "stopped": 0 },
     "exec_stages": [
       {
         "id": "...",
         "type": "extract",
         "position": 1,
-        "data": { "...": "the step's JSON file as-is" },
-        "document_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"],
-        "inserted_at": "..."
+        "status": "running",
+        "data": null,
+        "error": null,
+        "model": "sonnet",
+        "effort": "high",
+        "usage": null,
+        "started_at": "2026-10-17T18:00:31.002113Z",
+        "finished_at": null,
+        "duration_ms": 10228,
+        "document_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6", "9d2c..."],
+        "inserted_at": "...",
+        "updated_at": "..."
       }
     ],
     "report": { "id": "...", "run_id": "6b1e...", "data": { "...": "report.json as-is" }, "inserted_at": "..." }
@@ -409,27 +431,37 @@ curl "http://localhost:4000/api/pipeline_runs/6b1e..."
 
 ### `PUT /api/pipeline_runs/:id/status`
 
-Called by the pipeline itself when the whole run finishes. Body `{ "status": "completed" }` or `{ "status": "failed" }`. Returns the same shape as `GET /api/pipeline_runs/:id` (run + `exec_stages` + `report`).
+Called by the pipeline itself when the whole run finishes. Body `{ "status": "completed" }`, `{ "status": "failed", "error": "why" }` or `{ "status": "stopped" }`. Ending a run sets `finished_at` and marks every stage of the run that is still `new`/`running` as `stopped`. A finished run keeps its status: setting the same status again is a no-op, another one is refused with `409` (e.g. the pipeline reports `failed` after the user stopped the run). Returns the same shape as `GET /api/pipeline_runs/:id` (run + `exec_stages` + `report`).
 
-`200` with `{ "data": <pipeline_run, with exec_stages and report> }`. `422` if `status` is not one of `new`/`running`/`completed`/`failed`. `404` if the run does not exist.
+`200` with `{ "data": <pipeline_run, with exec_stages and report> }`. `422` if `status` is not one of `new`/`running`/`completed`/`failed`/`stopped`. `409` if the run has already ended with another status. `404` if the run does not exist.
 
 ```bash
 curl -X PUT "http://localhost:4000/api/pipeline_runs/6b1e.../status" \
   -H "Content-Type: application/json" \
-  -d '{"status": "completed"}'
+  -d '{"status": "failed", "error": "step 2 could not group the pages into boreholes"}'
+```
+
+### `POST /api/pipeline_runs/:id/stop`
+
+Stops a run that is still `new`/`running` (ADR-0040): the run becomes `stopped` (`error: "stopped by user"`), its unfinished stages too, and a `running` run is cancelled in the pipeline via `POST <pipeline>/runs/:id/stop` (next to `PIPELINE_URL`; best effort, an unreachable pipeline is only logged). The pipeline ends the run at its next stage, borehole or model call. Stopping a stopped run again is a no-op.
+
+`200` with the same shape as `GET /api/pipeline_runs/:id`. `409` if the run has already completed or failed. `404` if the run does not exist.
+
+```bash
+curl -X POST "http://localhost:4000/api/pipeline_runs/6b1e.../stop"
 ```
 
 ### `POST /api/exec_stages`
 
-Records one step execution. Append-only — rerunning a step adds a new row rather than replacing the previous one, so every attempt stays comparable.
+Records one step execution. Rerunning a step adds a new row rather than replacing the previous one, so every attempt stays comparable. The pipeline creates a stage as soon as it knows it will run it (`new`; filter/split at the start of a run, extract/transform per borehole once split has found them) and reports its progress with [`PUT /api/exec_stages/:id`](#put-apiexec_stagesid) (ADR-0040).
 
 ```json
 {
   "type": "extract",
-  "run_id": "20261017-180433",
+  "run_id": "6b1e...",
   "position": 1,
-  "data": { "...": "the step's JSON file as-is, e.g. the raw 03_extract output" },
-  "document_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"]
+  "status": "new",
+  "document_ids": ["3fa85f64-5717-4562-b3fc-2c963f66afa6", "9d2c..."]
 }
 ```
 
@@ -438,14 +470,26 @@ Records one step execution. Append-only — rerunning a step adds a new row rath
 | `type` | `filter`, `split`, `extract` or `transform`. |
 | `run_id` | Shared id string grouping every stage (and the `report`) of one pipeline run — this is the `pipeline_runs` row's `id` when the run was started via `POST /api/pipeline_runs`. |
 | `position` | Borehole index within the run (1, 2, …) for `extract`/`transform`; omit/`null` for the whole-document `filter`/`split` steps. |
-| `data` | Free-form JSON, the step's output file as-is. |
+| `status` | Optional, default `new`. `new` (planned), `running`, `success`, `failed` or `stopped` (the run ended before the stage could finish). `running` stamps `started_at` and makes the stage its run's `current_stage`; `success`/`failed`/`stopped` stamp `finished_at`. |
+| `data` | Optional free-form JSON, the step's output as-is; `null` until the stage has a result. |
+| `error`, `model`, `effort`, `usage` | Optional: why the stage failed or stopped; the model and effort it ran with; its usage (`calls`, `input_tokens`, `output_tokens`, `total_tokens`, `cost_usd`, `api_seconds`, `models`, … as the pipeline reports them). |
 | `document_ids` | At least one document UUID this stage's output belongs to — the original source document, and/or (for `extract`/`transform`) the split-out per-borehole PDF once that is itself a tracked document. Creates the `stage_document_links` rows. |
 
-`201` with `{ "data": <exec_stage, plus "document_ids"> }`. `422` if `type`, `run_id` or `data` is missing/invalid (changeset validation). `400` if `document_ids` is missing/empty, or any entry doesn't reference an existing document.
+`201` with `{ "data": <exec_stage, plus "document_ids"> }`. `422` if `type` or `run_id` is missing or `type`/`status` is invalid (changeset validation). `400` if `document_ids` is missing/empty, or any entry doesn't reference an existing document.
+
+### `PUT /api/exec_stages/:id`
+
+Reports progress on a stage (ADR-0040). Body `{ "status": "running" | "success" | "failed" | "stopped" | "new" }` plus optional `data`, `error`, `model`, `effort`, `usage`, `started_at`, `finished_at` (the API stamps the times itself if they are not given) and `document_ids` (linked in addition to the stage's documents, e.g. the split-out PDFs once split has uploaded them).
+
+```json
+{ "status": "success", "data": { "boreholes": [ { "label": "B 1", "pages": [1, 2] } ] }, "usage": { "calls": 1, "total_tokens": 21034, "cost_usd": 0.0123 }, "document_ids": ["9d2c..."] }
+```
+
+`200` with the stage. `422` if `status` is invalid, or the stage has already finished (`success`/`failed`/`stopped` stages do not change any more). `400` if a `document_ids` entry is unknown. `404` if the stage does not exist.
 
 ### `GET /api/exec_stages/:id`
 
-One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "data", "document_ids", "inserted_at" } }`. `404` if it does not exist or the id is not a UUID.
+One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "status", "data", "error", "model", "effort", "usage", "started_at", "finished_at", "duration_ms", "document_ids", "inserted_at", "updated_at" } }`. `404` if it does not exist or the id is not a UUID.
 
 ### `GET /api/documents/:document_id/exec_stages`
 

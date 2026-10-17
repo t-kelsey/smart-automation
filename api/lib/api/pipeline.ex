@@ -41,10 +41,44 @@ defmodule Api.Pipeline do
             "pipeline run submit failed for run #{pipeline_run.id}: #{inspect(reason)}"
           )
 
-          Boreholes.update_pipeline_run_status(pipeline_run, "failed")
+          Boreholes.update_pipeline_run_status(pipeline_run, "failed", %{
+            "error" => "pipeline could not be reached: #{inspect(reason)}"
+          })
       end
     else
       {:ok, pipeline_run}
+    end
+  end
+
+  @doc """
+  Asks the pipeline to cancel a run (ADR-0040): `POST /runs/:pipeline_id/stop` next to
+  `PIPELINE_URL` (e.g. `http://bem:8000/execute` → `http://bem:8000/runs/<id>/stop`). Best effort:
+  the run is already `stopped` in the database, so a pipeline that cannot be reached is only
+  logged. Returns `:ok` or `{:error, reason}`; `:ok` if no pipeline is configured.
+  """
+  @spec stop_pipeline_run(PipelineRun.t()) :: :ok | {:error, term()}
+  def stop_pipeline_run(%PipelineRun{} = pipeline_run) do
+    if url() do
+      options =
+        [
+          url: url() |> URI.merge("runs/#{pipeline_run.id}/stop") |> URI.to_string(),
+          retry: false,
+          receive_timeout: 10_000
+        ] ++ Application.get_env(:api, :pipeline_req_options, [])
+
+      case Req.post(options) do
+        {:ok, %Req.Response{status: status}} when status in 200..299 ->
+          :ok
+
+        other ->
+          Logger.warning(
+            "pipeline run stop not delivered for run #{pipeline_run.id}: #{inspect(other)}"
+          )
+
+          {:error, other}
+      end
+    else
+      :ok
     end
   end
 

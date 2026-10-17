@@ -96,7 +96,60 @@ defmodule Api.PipelineTest do
 
       Req.Test.stub(Api.Pipeline, &Plug.Conn.send_resp(&1, 500, "boom"))
 
-      assert {:ok, %{status: "failed"}} = Api.Pipeline.submit_pipeline_run(pipeline_run)
+      assert {:ok, %{status: "failed", error: "pipeline could not be reached" <> _}} =
+               Api.Pipeline.submit_pipeline_run(pipeline_run)
+    end
+  end
+
+  describe "Boreholes.stop_pipeline_run/1" do
+    test "stops a running run, its open stages and tells the pipeline" do
+      Application.put_env(:api, :pipeline_url, "http://pipeline.test/execute")
+      {:ok, document} = Boreholes.create_uploaded_document(upload("a.pdf"))
+      {:ok, run} = Boreholes.create_pipeline_run(%{"document_id" => document.id})
+      {:ok, run} = Boreholes.update_pipeline_run_status(run, "running")
+
+      stage = fn type, status ->
+        {:ok, s} =
+          Boreholes.create_exec_stage(%{
+            "type" => type,
+            "run_id" => run.id,
+            "status" => status,
+            "document_ids" => [document.id]
+          })
+
+        s
+      end
+
+      done = stage.("filter", "success")
+      running = stage.("split", "running")
+      planned = stage.("extract", "new")
+
+      test_pid = self()
+
+      Req.Test.stub(Api.Pipeline, fn conn ->
+        send(test_pid, {:stop_request, conn.method, conn.request_path})
+        Plug.Conn.send_resp(conn, 202, "")
+      end)
+
+      assert {:ok, %{status: "stopped", error: "stopped by user", finished_at: %DateTime{}}} =
+               Boreholes.stop_pipeline_run(run)
+
+      assert_received {:stop_request, "POST", path}
+      assert path == "/runs/#{run.id}/stop"
+
+      assert Boreholes.get_exec_stage(done.id).status == "success"
+      assert Boreholes.get_exec_stage(running.id).status == "stopped"
+      assert %{status: "stopped", finished_at: %DateTime{}} = Boreholes.get_exec_stage(planned.id)
+
+      # stopped wins over the pipeline's late report
+      assert {:error, {:conflict, _}} =
+               Boreholes.update_pipeline_run_status(Boreholes.get_pipeline_run(run.id), "failed")
+
+      # stopping again is a no-op that does not bother the pipeline
+      assert {:ok, %{status: "stopped"}} =
+               Boreholes.stop_pipeline_run(Boreholes.get_pipeline_run(run.id))
+
+      refute_received {:stop_request, _, _}
     end
   end
 end

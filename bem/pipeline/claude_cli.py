@@ -70,6 +70,7 @@ def _run_claude(ai, prompt, model, effort, schema, report, tools, add_dirs, max_
 
     last_error = ""
     for attempt in range(1, ATTEMPTS + 1):
+        report.raise_if_stopped()
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:

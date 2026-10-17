@@ -65,7 +65,9 @@ def transform_boreholes(
 
     def transform(item: tuple[int, tuple[pathlib.Path, dict]]):
         position, (f, data) = item
+        part = report.child(f"#{position}")  # this borehole's share of the step's usage
         try:
+            recorder.start("transform", part, position=position)
             payload = get_ai().run(
                 TRANSFORM_PROMPT.format(
                     data=json.dumps(data, ensure_ascii=False, indent=1), din4023=din4023.vocabulary_hint()
@@ -73,13 +75,13 @@ def transform_boreholes(
                 model=report.model,
                 effort=report.effort,
                 schema=schemas.DB_PAYLOAD,
-                report=report,
+                report=part,
                 tools="",
                 max_turns=2,
             )
             payload, din_issues = din4023.conform(payload)
         except Exception as e:
-            recorder.record_failure("transform", e, position=position)
+            recorder.record_failure("transform", e, report=part, position=position)
             raise
         issues = validate_payload(payload) + din_issues
         for i in issues:
@@ -87,6 +89,7 @@ def transform_boreholes(
         recorder.record(
             "transform",
             {"payload": payload, "validation_issues": issues},
+            report=part,
             position=position,
             path=stamped(step_dir / f"{base(f.stem)}.json"),
         )

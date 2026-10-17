@@ -19,6 +19,7 @@
 	/** Top level attributes of the result, or the whole value if it is not an object. */
 	let attributes = $derived.by(() => {
 		const value = job.data;
+		if (value === null || value === undefined) return [];
 		if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
 			return Object.entries(value as Record<string, unknown>);
 		}
@@ -68,6 +69,14 @@
 				<tr><th class="w-48">Job ID</th><td class="font-mono text-sm">{job.id}</td></tr>
 				<tr><th>Stage</th><td>{stageLabel} <span class="opacity-60">({job.type})</span></td></tr>
 				<tr><th>Borehole position</th><td>{job.position ?? '–'}</td></tr>
+				<tr><th>Status</th><td>{job.status}</td></tr>
+				{#if job.error}
+					<tr><th>Error</th><td class="font-mono text-sm whitespace-pre-wrap">{job.error}</td></tr>
+				{/if}
+				<tr>
+					<th>Model</th>
+					<td>{job.model ?? '–'}{job.effort ? ` · ${job.effort}` : ''}</td>
+				</tr>
 				<tr>
 					<th>Pipeline run</th>
 					<td class="font-mono text-sm">
@@ -89,7 +98,29 @@
 						{/each}
 					</td>
 				</tr>
-				<tr><th>Executed</th><td>{formatter.format(job.createdAt)}</td></tr>
+				<tr>
+					<th>Started</th>
+					<td>{job.startedAt ? formatter.format(job.startedAt) : '–'}</td>
+				</tr>
+				<tr>
+					<th>Finished</th>
+					<td>
+						{job.finishedAt ? formatter.format(job.finishedAt) : '–'}
+						{#if job.durationSeconds !== undefined}
+							<span class="opacity-60">({job.durationSeconds.toFixed(1)} s)</span>
+						{/if}
+					</td>
+				</tr>
+				{#if job.usage}
+					<tr>
+						<th>Usage</th>
+						<td class="text-sm">
+							{job.usage.calls ?? '–'} calls · {job.usage.total_tokens ?? '–'} tokens · ${Number(
+								job.usage.cost_usd ?? 0
+							).toFixed(4)}
+						</td>
+					</tr>
+				{/if}
 			</tbody>
 		</table>
 	</div>

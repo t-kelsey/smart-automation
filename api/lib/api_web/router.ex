@@ -20,6 +20,7 @@ defmodule ApiWeb.Router do
 
     post "/exec_stages", ExecStageController, :create
     get "/exec_stages/:id", ExecStageController, :show
+    put "/exec_stages/:id", ExecStageController, :update
     get "/documents/:document_id/exec_stages", ExecStageController, :index
 
     post "/reports", ReportController, :create
@@ -28,5 +29,6 @@ defmodule ApiWeb.Router do
     get "/pipeline_runs", PipelineRunController, :index
     get "/pipeline_runs/:id", PipelineRunController, :show
     put "/pipeline_runs/:id/status", PipelineRunController, :update_status
+    post "/pipeline_runs/:id/stop", PipelineRunController, :stop
   end
 end

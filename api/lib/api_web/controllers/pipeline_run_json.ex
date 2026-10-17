@@ -32,6 +32,11 @@ defmodule ApiWeb.PipelineRunJSON do
       document_id: pipeline_run.document_id,
       status: pipeline_run.status,
       config: pipeline_run.config,
+      current_stage: pipeline_run.current_stage,
+      error: pipeline_run.error,
+      started_at: pipeline_run.started_at,
+      finished_at: pipeline_run.finished_at,
+      duration_ms: ApiWeb.ExecStageJSON.duration_ms(pipeline_run),
       inserted_at: pipeline_run.inserted_at,
       updated_at: pipeline_run.updated_at
     }
@@ -40,7 +45,9 @@ defmodule ApiWeb.PipelineRunJSON do
   end
 
   defp maybe_put_exec_stages(data, %{exec_stages: exec_stages}) do
-    Map.put(data, :exec_stages, Enum.map(exec_stages, &exec_stage_data/1))
+    data
+    |> Map.put(:exec_stages, Enum.map(exec_stages, &exec_stage_data/1))
+    |> Map.put(:stage_counts, stage_counts(exec_stages))
   end
 
   defp maybe_put_exec_stages(data, _assigns), do: data
@@ -50,10 +57,27 @@ defmodule ApiWeb.PipelineRunJSON do
       id: exec_stage.id,
       type: exec_stage.type,
       position: exec_stage.position,
+      status: exec_stage.status,
       data: exec_stage.data,
+      error: exec_stage.error,
+      model: exec_stage.model,
+      effort: exec_stage.effort,
+      usage: exec_stage.usage,
+      started_at: exec_stage.started_at,
+      finished_at: exec_stage.finished_at,
+      duration_ms: ApiWeb.ExecStageJSON.duration_ms(exec_stage),
       document_ids: exec_stage_document_ids(exec_stage),
-      inserted_at: exec_stage.inserted_at
+      inserted_at: exec_stage.inserted_at,
+      updated_at: exec_stage.updated_at
     }
+  end
+
+  # how many stages of the run are in each status, every status present (0 if none)
+  defp stage_counts(exec_stages) do
+    Map.merge(
+      Map.new(Api.Boreholes.ExecStage.statuses(), &{&1, 0}),
+      Enum.frequencies_by(exec_stages, & &1.status)
+    )
   end
 
   defp exec_stage_document_ids(%{documents: documents}) when is_list(documents) do

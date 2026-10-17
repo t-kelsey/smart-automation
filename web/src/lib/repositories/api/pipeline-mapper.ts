@@ -9,13 +9,21 @@ import {
 } from '#lib/domain/pipelines.ts';
 
 /** `pipeline_runs.status` as the API sends it. */
-export type ApiRunStatus = 'new' | 'running' | 'completed' | 'failed';
+export type ApiRunStatus = 'new' | 'running' | 'completed' | 'failed' | 'stopped';
+
+/** `exec_stages.status` as the API sends it (ADR-0040). */
+export type ApiStageStatus = 'new' | 'running' | 'success' | 'failed' | 'stopped';
 
 export interface ApiExecStage {
 	id: string;
 	type: string;
 	position: number | null;
+	/** Absent only on rows recorded before stages had a status. */
+	status?: ApiStageStatus;
 	data: Record<string, unknown> | null;
+	error?: string | null;
+	model?: string | null;
+	duration_ms?: number | null;
 }
 
 export interface ApiReportStep {
@@ -32,6 +40,10 @@ export interface ApiPipelineRun {
 	document_id: string;
 	status: ApiRunStatus;
 	config: Partial<PipelineConfig> | null;
+	current_stage?: string | null;
+	error?: string | null;
+	started_at?: string | null;
+	finished_at?: string | null;
 	inserted_at: string;
 	updated_at: string;
 	exec_stages?: ApiExecStage[];
@@ -46,16 +58,30 @@ export function toPipelineStatus(status: ApiRunStatus): PipelineStatus {
 			return 'success';
 		case 'failed':
 			return 'failed';
+		case 'stopped':
+			return 'skipped';
 		default:
 			return 'pending';
 	}
 }
 
+export function toJobStatus(status: ApiStageStatus): JobStatus {
+	switch (status) {
+		case 'new':
+			return 'pending';
+		case 'stopped':
+			return 'skipped';
+		default:
+			return status;
+	}
+}
+
 /**
- * Builds the stages and jobs of a run. The pipeline only reports a stage once it has finished
- * (`exec_stages`), so what is still missing is derived from the run's status: while the run is
- * going, everything of the first unfinished stage is running and the rest is pending; once it has
- * failed, the unfinished jobs of that stage failed and the later stages never ran.
+ * Builds the stages and jobs of a run. A job with an `exec_stages` row takes the row's status
+ * (ADR-0040). Jobs without one (extract/transform before the split result, rows from before
+ * stages had a status) are derived from the run's status: while the run is going, everything of
+ * the first unfinished stage is running and the rest is pending; once it has failed, the
+ * unfinished jobs of that stage failed and the later stages never ran.
  */
 export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 	const rows = run.exec_stages ?? [];
@@ -67,8 +93,14 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 	}[];
 	const rowOf = (type: string, position: number | null) =>
 		rows.find((r) => r.type === type && (r.position ?? null) === position);
+	/** A row without a status was only recorded once its stage had finished. */
 	const finished = (type: string, position: number | null) =>
-		rows.some((r) => r.type === type && (r.position ?? null) === position);
+		rows.some(
+			(r) =>
+				r.type === type &&
+				(r.position ?? null) === position &&
+				(r.status === undefined || r.status === 'success')
+		);
 
 	/** The borehole id the pipeline recorded in the stage's result, if it did. */
 	function boreholeIdOf(type: string, position: number): string | undefined {
@@ -87,7 +119,7 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 			return [{ name: 'Split boreholes', done: finished('split', null), position: null }];
 		const verb = type === 'extract' ? 'Extract' : 'Transform';
 		// Until the split result is there, the number of boreholes is unknown.
-		if (!rows.some((r) => r.type === 'split')) return [{ name: verb, done: false, position: null }];
+		if (!finished('split', null)) return [{ name: verb, done: false, position: null }];
 		return boreholes.map((b, i) => ({
 			name: `${verb} ${b.label ?? `borehole ${i + 1}`}`,
 			done: finished(type, i + 1),
@@ -110,8 +142,10 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 			effort: report?.effort ?? configured?.effort,
 			durationSeconds: report?.wall_seconds,
 			jobs: jobs.map((job, i): PipelineJob => {
+				const row = rowOf(stage.key, job.position);
 				let status: JobStatus;
-				if (job.done) status = 'success';
+				if (row?.status) status = toJobStatus(row.status);
+				else if (job.done) status = 'success';
 				else if (run.status === 'new') status = 'pending';
 				else if (run.status === 'completed') status = 'skipped';
 				else if (active === -1 || index < active) status = 'skipped';
@@ -119,12 +153,18 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 				else status = run.status === 'failed' ? 'failed' : 'running';
 				return {
 					id: `${stage.key}-${i + 1}`,
-					execStageId: job.done ? rowOf(stage.key, job.position)?.id : undefined,
+					execStageId: row?.id,
 					name: job.name,
 					status,
-					model: report?.model_requested ?? configured?.model,
+					model: row?.model ?? report?.model_requested ?? configured?.model,
+					error: row?.error ?? undefined,
 					boreholeId: job.done ? job.boreholeId : undefined,
-					durationSeconds: single ? report?.wall_seconds : undefined
+					durationSeconds:
+						row?.duration_ms != null
+							? row.duration_ms / 1000
+							: single
+								? report?.wall_seconds
+								: undefined
 				};
 			})
 		};

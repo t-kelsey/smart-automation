@@ -134,6 +134,16 @@ export interface JobDetail {
 	runId: string;
 	documentIds: string[];
 	createdAt: Date;
-	/** The step's JSON output as stored. */
+	status: JobStatus;
+	/** Why the job failed or was stopped. */
+	error?: string;
+	model?: string;
+	effort?: string;
+	startedAt?: Date;
+	finishedAt?: Date;
+	durationSeconds?: number;
+	/** Tokens, cost and calls of the job's model requests, as the pipeline reported them. */
+	usage?: Record<string, unknown>;
+	/** The step's JSON output as stored; `null` until the job has one. */
 	data: unknown;
 }

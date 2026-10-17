@@ -1,4 +1,4 @@
-"""Client for the Elixir API: document download, stage tracking, report and borehole upload (ADR-0034, ADR-0031).
+"""Client for the Elixir API: document download, stage tracking, report and borehole upload (ADR-0034, ADR-0040).
 
 The base URL comes from `BEM_API_URL` (environment or `bem/.env`, see pipeline/__init__.py; default
 http://localhost:4000); `/api` is appended if missing.
@@ -40,15 +40,26 @@ class ApiService:
         return r.json() if r.content else {}
 
     def create_exec_stage(
-        self, stage: str, run_id: str, data: dict, document_ids: list[str], position: int | None = None
+        self,
+        stage: str,
+        run_id: str,
+        document_ids: list[str],
+        position: int | None = None,
+        *,
+        status: str = "new",
+        **fields,
     ) -> dict:
         """`POST /exec_stages`: `stage` is filter|split|extract|transform; `position` is the 1-based
-        borehole index for extract/transform."""
-        return self._send(
-            "POST",
-            "/exec_stages",
-            {"type": stage, "run_id": run_id, "position": position, "data": data, "document_ids": document_ids},
-        )
+        borehole index for extract/transform; `status` new|running|success|failed|stopped (ADR-0040).
+        `fields`: optional `data`, `error`, `model`, `effort`, `usage`. Returns the created stage."""
+        body = {"type": stage, "run_id": run_id, "position": position, "status": status, "document_ids": document_ids}
+        return self._send("POST", "/exec_stages", body | _present(fields))["data"]
+
+    def update_exec_stage(self, stage_id: str, status: str, **fields) -> dict:
+        """`PUT /exec_stages/:id`: report progress (`running`, then `success`/`failed`/`stopped`).
+        `fields`: optional `data`, `error`, `model`, `effort`, `usage`, `document_ids` (linked in
+        addition). The API stamps `started_at`/`finished_at`. Returns the updated stage."""
+        return self._send("PUT", f"/exec_stages/{stage_id}", {"status": status} | _present(fields))["data"]
 
     def upload_report(self, document_id: str, run_id: str, steps: list[dict]) -> dict:
         """`POST /reports`: the run's per-step model/time/token/cost stats (`data` must be an object)."""
@@ -106,7 +117,12 @@ class ApiService:
             raise ApiError(f"POST /documents failed: {e}") from e
         return r.json()["data"]["id"]
 
-    def set_pipeline_run_status(self, pipeline_id: str, status: str) -> dict:
-        """`PUT /pipeline_runs/:id/status`: `completed` or `failed` (ADR-0035). `pipeline_id` is the
-        `pipeline_runs.id` the API gave `/execute` back as `pipeline_id`."""
-        return self._send("PUT", f"/pipeline_runs/{pipeline_id}/status", {"status": status})
+    def set_pipeline_run_status(self, pipeline_id: str, status: str, error: str | None = None) -> dict:
+        """`PUT /pipeline_runs/:id/status`: `completed`, `failed` (with `error`) or `stopped`
+        (ADR-0035, ADR-0040). `pipeline_id` is the `pipeline_runs.id` the API gave `/execute`. The API
+        answers 409 if the run already ended otherwise (e.g. it was stopped meanwhile)."""
+        return self._send("PUT", f"/pipeline_runs/{pipeline_id}/status", {"status": status} | _present({"error": error}))
+
+
+def _present(fields: dict) -> dict:
+    return {k: v for k, v in fields.items() if v is not None}
