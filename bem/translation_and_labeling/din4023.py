@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from bem.translation_and_labeling.format_keys import FORMAT_TARGETS, VALUE_KIND, resolve_label
 
 if TYPE_CHECKING:
-    from bem.translation_and_labeling.mt import Translator
+    from translation_and_labeling.mt import Translator
 
 log = logging.getLogger(__name__)
 
@@ -373,7 +373,7 @@ def _fix_ocr_digits(text: str) -> str:
         digits = sum(char.isdigit() for char in token)
         letters = sum(char.isalpha() for char in token)
         if digits == 1 and letters >= 3:
-            return "".join(DIGIT_TO_LETTER.get(char, char) for char in token)
+            return "".join(DIGIT_TO_LETTER.get(char, char) for char in token) # type: ignore
         return token
 
     return re.sub(r"\S+", fix, text)

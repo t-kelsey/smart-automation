@@ -32,7 +32,8 @@ Values that are already numbers, dates or dashes are kept before this check runs
 
 - The digit-to-letter map is a guess. "1" can stand for "i" or "l", and "0" for "o" or "O". Only one candidate is tried per digit.
 - A real word with a digit and three or more letters is altered (for example "A4Pap" becomes "AaPap"), and a corrected word can match a glossary entry by accident.
-- One code-like token in a cell, such as "12 m", makes the whole cell pass through, so the rest of the cell is not translated.
+- Segments are split on commas only. A code without a comma, such as "Sand 10-12 m", keeps the whole value unchanged, so "Sand" is not translated there.
+- Translating comma segments one at a time can lose qualifiers that span segments (for example "sandig, kiesig" in one cell with a code).
 - Labels in `"label: value"` lines are not corrected. Only headers and values are.
 
 ## Alternatives
@@ -43,7 +44,7 @@ Values that are already numbers, dates or dashes are kept before this check runs
 ## Consequences
 
 - Refines the error handling in ADR-0020: the `translate_error:` rule now applies only after the digit check.
-- Values that contain a multi-digit token are not translated at all, so a mixed cell such as "Sand, 10–12 m" is kept as written.
+- Values with a multi-digit token are split on commas, and only the segments without such tokens are translated.
 
 ## References
 
