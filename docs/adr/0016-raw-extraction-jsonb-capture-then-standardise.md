@@ -2,44 +2,51 @@
 id: ADR-0016
 date: 2026-10-17
 author: jl
-title: raw_extraction stores the unmodified extraction-service response as jsonb
+title: raw_extraction is a tracking side-artifact, not a separate pipeline phase
 ---
 
-# ADR-0016 – raw_extraction stores the unmodified extraction-service response as jsonb
+# ADR-0016 – raw_extraction is a tracking side-artifact, not a separate pipeline phase
 
 ## Context
 
-Borehole profiles reach `api/` via an external OCR/extraction service (a classic OCR engine, or more likely an LLM-vision service given the handwritten sources — not yet chosen, see the Elixir backend task doc's "Open Questions"). Its response format is unknown and will vary by provider. `documents` and the eventual `boreholes`/`borehole_layers` rows need to exist in a fixed, typed schema regardless.
+Borehole profiles reach `api/` via an external OCR/extraction service (a classic OCR engine, or more likely an LLM-vision service given the handwritten sources — not yet chosen, see the Elixir backend task doc's "Open Questions"). Its response format is unknown and will vary by provider.
+
+An earlier version of this ADR described `raw_extraction` capture and standardisation as two deliberately decoupled phases (store the raw response first, map it to `boreholes`/`borehole_layers` in a separate later step). That is **not** the intended design — this revision corrects it.
 
 ## Decision
 
-Split ingestion into two phases:
+Ingestion is a **single pass**, done in one job/step:
 
-1. **Capture**: whatever JSON the extraction service returns is decoded into an Elixir map and stored verbatim in `documents.raw_extraction` (Ecto `:map`, Postgres `jsonb`) — no parsing, no field mapping, nothing discarded.
-2. **Standardisation** (Task 3, not yet built): a separate step reads `raw_extraction` back out and maps the relevant parts into the typed `boreholes`/`borehole_layers` columns, doing unit conversion, coordinate reprojection and vocabulary normalisation along the way.
+1. Call the extraction service, get its response back.
+2. Immediately figure out which fields are relevant and map them directly into `boreholes`/`borehole_layers` structs (unit conversion, coordinate reprojection, vocabulary normalisation happen right here), then insert them.
+3. Along the way, also store the raw, unmodified response in `documents.raw_extraction` (Ecto `:map`, Postgres `jsonb`) — not as a required input to some later processing step, just as a side artifact for tracking/debugging.
+
+`raw_extraction` exists purely so that if the mapping in step 2 produced something wrong or incomplete, a human can look at what the extraction service actually returned. It is not read by any other part of the pipeline.
 
 ## Pros
 
-- Decouples "which extraction service we use" from "what our DB schema looks like" — the service can be chosen/changed without needing the final schema decided first, and vice versa.
-- Standardisation logic can be re-run against already-captured raw data if it improves later, without repeating the (likely slow/costly) extraction call.
-- Fields the service returns but that don't (yet) map to a column are preserved rather than silently dropped during mapping.
-- A reviewer can compare `raw_extraction` against the standardised fields to check the mapping was done correctly.
+- One pass, one mental model: a document's extraction either fully succeeds (borehole + layers exist, `raw_extraction` stored alongside) or fails (`status: "failed"`, nothing half-done in `boreholes`).
+- Fields the service returns but that aren't mapped to a column aren't silently lost — they're still visible in `raw_extraction` for debugging, even though nothing automatically re-reads them later.
+- A reviewer can compare `raw_extraction` against the standardised fields to spot-check the mapping was done correctly.
 
 ## Cons
 
-- `raw_extraction` has no schema of its own, so code reading it must handle missing/differently-shaped keys defensively until the service and its response format are finalised.
-- Two-phase processing means a borehole isn't immediately queryable right after the extraction call — it only exists in `boreholes`/`borehole_layers` once standardisation has run.
+- `raw_extraction` has no schema of its own, so if someone *does* want to reprocess it later, that code must handle missing/differently-shaped keys defensively.
+- If the mapping logic improves later, there's no built-in "replay" mechanism — reprocessing historical documents would mean writing one-off code to read `raw_extraction` back out, not a standing pipeline stage.
 
 ## Alternatives
 
-- Map the extraction service's response directly into `boreholes`/`borehole_layers` at capture time — rejected: couples the schema to a specific service's response shape, and any field the service provides but the schema doesn't yet have a column for would be lost instead of preserved.
+- Treat capture and standardisation as two separate, independently-schedulable phases (the previous version of this ADR) — rejected: this is not simpler for the hackathon scope, and `raw_extraction` is only meant as a debugging aid, not a durable intermediate representation to be replayed against.
 
 ## Consequences
 
-- Task 3 (Standardisation) is the only place that reads `raw_extraction` to populate `boreholes`/`borehole_layers`; nothing else should depend on its internal shape, since it isn't fixed.
+- The ingestion job (Task 2) is responsible for calling the extraction service, mapping its response into `boreholes`/`borehole_layers`, and storing the raw response in `documents.raw_extraction` — all in the same job, ideally the same DB transaction.
+- Nothing should depend on `raw_extraction`'s shape for anything other than manual inspection/debugging.
 
 ## References
 
 - docs/elixir-backend-borehole-pipeline.md
-- ADR-0005 (same raw-provenance pattern on the `bem/` pipeline side)
+- ADR-0005 (same raw-provenance idea on the `bem/` pipeline side, also just for traceability, not a separate stage)
+- ADR-0011
 - ADR-0012
+
