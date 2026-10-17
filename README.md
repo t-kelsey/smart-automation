@@ -108,3 +108,7 @@ docker compose up --build
 
 # open localhost:3001 in browser
 ```
+
+# Licence
+
+Proprietary, all rights reserved (see [LICENSE](LICENSE) and [ADR-0041](docs/adr/0041-proprietary-all-rights-reserved-licence.md)). The data in `data/` and all dependencies are owned by third parties and are not covered.

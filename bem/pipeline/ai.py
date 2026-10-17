@@ -25,6 +25,10 @@ class PipelineError(RuntimeError):
     pass
 
 
+class PipelineStopped(PipelineError):
+    """The run was cancelled (`POST /runs/:id/stop`); raised at the next stage, borehole or AI call."""
+
+
 @dataclass
 class Usage:
     calls: int = 0
@@ -71,11 +75,25 @@ class StepReport:
     effort: str
     wall_seconds: float = 0.0
     usage: Usage = field(default_factory=Usage)
+    # set to cancel the run; checked before every stage, borehole and AI call
+    stop: threading.Event | None = field(default=None, repr=False)
+    # a per-borehole report forwards its usage to the whole step's report
+    parent: "StepReport | None" = field(default=None, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def add(self, usage: Usage) -> None:
         with self._lock:  # steps may run their calls in parallel threads
             self.usage.add(usage)
+        if self.parent is not None:
+            self.parent.add(usage)
+
+    def child(self, suffix: str) -> "StepReport":
+        """A report for one part of the step (e.g. one borehole) that also counts towards this one."""
+        return StepReport(f"{self.name} {suffix}", self.model, self.effort, stop=self.stop, parent=self)
+
+    def raise_if_stopped(self) -> None:
+        if self.stop is not None and self.stop.is_set():
+            raise PipelineStopped("run stopped")
 
     def to_dict(self) -> dict:
         return {
@@ -101,7 +119,8 @@ class Timer:
 
 
 class AI(ABC):
-    """One structured-output model call. Implementations add their usage to `report`."""
+    """One structured-output model call. Implementations add their usage to `report` and call
+    `report.raise_if_stopped()` before every model request so a stopped run ends quickly."""
 
     # Failed raw responses are saved here for debugging (set by the entry point).
     debug_dir: pathlib.Path | None = None

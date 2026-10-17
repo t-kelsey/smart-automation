@@ -112,13 +112,18 @@ defmodule Api.MockPipelineData do
       end)
       |> Map.put("mock", true)
 
+    finished_at = DateTime.add(started, 90, :second)
+
     Repo.insert!(%PipelineRun{
       id: run_id,
       document_id: document_id,
       status: status,
       config: config,
+      started_at: if(status != "new", do: usec(started)),
+      finished_at: if(status in ["completed", "failed"], do: usec(finished_at)),
+      error: if(status == "failed", do: "mock: extraction failed"),
       inserted_at: started,
-      updated_at: DateTime.add(started, 90, :second)
+      updated_at: finished_at
     })
 
     positions = Enum.with_index(boreholes, 1)
@@ -146,26 +151,61 @@ defmodule Api.MockPipelineData do
         end)
 
     # How many of the stage rows (jobs) have a result; a prefix, so partial extract/transform
-    # stages show some sub jobs finished and the rest pending/running/failed.
+    # stages show some sub jobs finished. The stage after the prefix is running (or failed) and
+    # the rest is new (or stopped), as the pipeline reports them (ADR-0040).
     total = length(all_stages)
 
-    stages =
+    done =
       case status do
-        "completed" -> all_stages
-        "failed" -> Enum.take(all_stages, Enum.random(1..(total - 1)))
-        "running" -> Enum.take(all_stages, Enum.random(0..(total - 1)))
-        "new" -> []
+        "completed" -> total
+        "failed" -> Enum.random(1..(total - 1))
+        "running" -> Enum.random(0..(total - 1))
+        "new" -> 0
       end
 
-    finished_stages = stages |> Enum.map(&elem(&1, 0)) |> Enum.uniq() |> length()
+    stages =
+      if status == "new",
+        do: [],
+        else:
+          all_stages
+          |> Enum.with_index()
+          |> Enum.map(fn {stage, i} -> {stage, mock_stage_status(status, i, done)} end)
 
-    Enum.each(stages, fn {type, position, data} ->
+    finished_stages =
+      stages
+      |> Enum.filter(fn {_, s} -> s == "success" end)
+      |> Enum.map(fn {{type, _, _}, _} -> type end)
+      |> Enum.uniq()
+      |> length()
+
+    current = Enum.find(stages, fn {_, s} -> s in ["running", "failed"] end)
+
+    if current do
+      {{type, _, _}, _} = current
+
+      Repo.update_all(from(pr in PipelineRun, where: pr.id == ^run_id),
+        set: [current_stage: type]
+      )
+    end
+
+    Enum.each(stages, fn {{type, position, data}, stage_status} ->
+      began = DateTime.add(started, 1, :second)
+
       stage =
         Repo.insert!(%ExecStage{
           type: type,
           run_id: run_id,
           position: position,
-          data: data,
+          status: stage_status,
+          data: if(stage_status == "success", do: data),
+          error: if(stage_status == "failed", do: "mock: #{type} failed"),
+          model: config[type]["model"],
+          effort: config[type]["effort"],
+          started_at: if(stage_status in ~w(success failed running), do: usec(began)),
+          finished_at:
+            if(stage_status in ~w(success failed stopped),
+              do: usec(DateTime.add(began, 1 + :rand.uniform(40), :second))
+            ),
           inserted_at: started,
           updated_at: started
         })
@@ -210,6 +250,14 @@ defmodule Api.MockPipelineData do
       updated_at: at
     })
   end
+
+  defp mock_stage_status(_run_status, i, done) when i < done, do: "success"
+  defp mock_stage_status("running", i, done) when i == done, do: "running"
+  defp mock_stage_status("running", _i, _done), do: "new"
+  defp mock_stage_status("failed", i, done) when i == done, do: "failed"
+  defp mock_stage_status("failed", _i, _done), do: "stopped"
+
+  defp usec(%DateTime{} = dt), do: %{dt | microsecond: {0, 6}}
 
   defp classify_pages(count), do: Enum.map(1..count, &%{"page" => &1, "borehole_log" => true})
 

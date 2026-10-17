@@ -7,17 +7,19 @@ import pathlib
 import shutil
 import sys
 import tempfile
+import threading
 import time
 
 from .ai import PipelineError, StepReport, Timer, Usage, backend_names, get_ai, log
 from .config import PipelineConfig
 from .naming import run_id, stamped
-from .output import OnStage, Recorder, dump_json, persist_enabled
+from .output import Recorder, Tracker, dump_json, persist_enabled
 from .steps.extract import extract_boreholes
 from .steps.filter import filter_pages
 from .steps.split import split_boreholes
 from .steps.translate import transform_boreholes
 
+STAGES = ("filter", "split", "extract", "transform")
 DEFAULT_OUT = pathlib.Path(__file__).resolve().parent.parent / "out"
 
 
@@ -57,9 +59,12 @@ def run_pipeline(
     chunk_size: int = 10,
     workers: int = 4,
     config: PipelineConfig | None = None,
-    on_stage: OnStage | None = None,
+    tracker: Tracker | None = None,
+    stop: threading.Event | None = None,
 ) -> tuple[list[dict], list[StepReport], float]:
-    """Run all four steps on one PDF; every step hands its output to `on_stage(stage, position, data, files)`.
+    """Run all four steps on one PDF; every stage (and borehole) reports its start, result or failure
+    to `tracker`. Setting `stop` cancels the run with PipelineStopped at the next stage, borehole or
+    AI call.
 
     The intermediate PDFs the model reads live in `out_dir`. With BEM_ENV=prod (or no `out_dir`)
     that is a temporary directory that is removed afterwards, and no JSON is written locally.
@@ -68,17 +73,23 @@ def run_pipeline(
     with contextlib.ExitStack() as stack:
         if out_dir is None or not persist_enabled():
             out_dir = pathlib.Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="bem-")))
-        return _run(pdf, out_dir, chunk_size, workers, config or PipelineConfig(), Recorder(on_stage))
+        return _run(pdf, out_dir, chunk_size, workers, config or PipelineConfig(), Recorder(tracker), stop)
 
 
 def _run(
-    pdf: pathlib.Path, out_dir: pathlib.Path, chunk_size: int, workers: int, c: PipelineConfig, recorder: Recorder
+    pdf: pathlib.Path,
+    out_dir: pathlib.Path,
+    chunk_size: int,
+    workers: int,
+    c: PipelineConfig,
+    recorder: Recorder,
+    stop: threading.Event | None,
 ) -> tuple[list[dict], list[StepReport], float]:
     reports = [
-        StepReport("1 filter pages", c.filter.model, c.filter.effort),
-        StepReport("2 split boreholes", c.split.model, c.split.effort),
-        StepReport("3 extract", c.extract.model, c.extract.effort),
-        StepReport("4 transform to db", c.transform.model, c.transform.effort),
+        StepReport("1 filter pages", c.filter.model, c.filter.effort, stop=stop),
+        StepReport("2 split boreholes", c.split.model, c.split.effort, stop=stop),
+        StepReport("3 extract", c.extract.model, c.extract.effort, stop=stop),
+        StepReport("4 transform to db", c.transform.model, c.transform.effort, stop=stop),
     ]
     r1, r2, r3, r4 = reports
     results: list[dict] = []
@@ -95,12 +106,13 @@ def _run(
             stage = "extract"
             with Timer(r3):
                 extracted = extract_boreholes(files, out_dir, r3, workers, recorder)
+            stage = "transform"
             with Timer(r4):
                 results = transform_boreholes(extracted, out_dir, r4, workers, recorder)
         else:
             log("no borehole log pages found, nothing to do")
     except Exception as e:  # extract/transform record their own failures per borehole
-        recorder.record_failure(stage, e)
+        recorder.record_failure(stage, e, report=dict(zip(STAGES, reports))[stage])
         raise
     finally:
         wall = time.monotonic() - t0

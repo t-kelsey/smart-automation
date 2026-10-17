@@ -9,6 +9,12 @@ defmodule ApiWeb.FallbackController do
     |> render(:"404")
   end
 
+  def call(conn, {:error, {:conflict, message}}) when is_binary(message) do
+    conn
+    |> put_status(:conflict)
+    |> json(%{errors: %{detail: message}})
+  end
+
   def call(conn, {:error, message}) when is_binary(message) do
     conn
     |> put_status(:bad_request)

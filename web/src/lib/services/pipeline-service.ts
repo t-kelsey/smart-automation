@@ -36,6 +36,11 @@ export class PipelineService {
 		return job;
 	}
 
+	/** Deletes a pipeline run, e.g. a stuck one. */
+	delete(id: string): Promise<void> {
+		return this.repository.delete(id);
+	}
+
 	/** Submits an uploaded document to the pipeline with the chosen per step config. */
 	start(documentId: string, config: PipelineConfig): Promise<StartedPipeline> {
 		return this.repository.start(documentId, config);

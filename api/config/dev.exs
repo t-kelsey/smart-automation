@@ -52,6 +52,11 @@ config :api, ApiWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :api, dev_routes: true
 
+# The local bem pipeline server (`uv run python -m pipeline.server` in bem/). The PIPELINE_URL env
+# var overrides it (config/runtime.exs); set it to an empty string to store uploads without
+# processing them.
+config :api, :pipeline_url, "http://localhost:8000/execute"
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

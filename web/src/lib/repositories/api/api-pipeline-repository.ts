@@ -3,7 +3,13 @@ import type { JobDetail, Pipeline } from '#lib/domain/pipelines.ts';
 import { RepositoryError } from '../borehole-repository';
 import type { PipelineRepository, StartedPipeline } from '../pipeline-repository';
 import { ApiClient, type ApiClientOptions } from './api-client';
-import { mapPipeline, toPipelineStatus, type ApiPipelineRun } from './pipeline-mapper';
+import {
+	mapPipeline,
+	toJobStatus,
+	toPipelineStatus,
+	type ApiPipelineRun,
+	type ApiStageStatus
+} from './pipeline-mapper';
 
 /** One entry of `GET /pipeline_runs`: no stages or report, but the document's filename. */
 interface ApiPipelineRunListItem {
@@ -17,10 +23,20 @@ interface ApiExecStageDetail {
 	type: string;
 	run_id: string;
 	position: number | null;
+	status?: ApiStageStatus;
 	data: unknown;
+	error?: string | null;
+	model?: string | null;
+	effort?: string | null;
+	usage?: Record<string, unknown> | null;
+	started_at?: string | null;
+	finished_at?: string | null;
+	duration_ms?: number | null;
 	document_ids: string[];
 	inserted_at: string;
 }
+
+const dateOf = (value?: string | null) => (value ? new Date(value) : undefined);
 
 /**
  * Pipeline runs from the API (ADR-0035 `pipeline_runs`): `GET /pipeline_runs` lists them,
@@ -80,8 +96,30 @@ export class ApiPipelineRepository implements PipelineRepository {
 			runId: data.run_id,
 			documentIds: data.document_ids,
 			createdAt: new Date(data.inserted_at),
+			// rows from before stages had a status were only recorded once finished
+			status: data.status ? toJobStatus(data.status) : 'success',
+			error: data.error ?? undefined,
+			model: data.model ?? undefined,
+			effort: data.effort ?? undefined,
+			startedAt: dateOf(data.started_at),
+			finishedAt: dateOf(data.finished_at),
+			durationSeconds: data.duration_ms != null ? data.duration_ms / 1000 : undefined,
+			usage: data.usage ?? undefined,
 			data: data.data
 		};
+	}
+
+	async delete(id: string): Promise<void> {
+		const path = `/pipeline_runs/${encodeURIComponent(id)}`;
+		let response: Response;
+		try {
+			response = await this.options.fetch(`${this.options.baseUrl}${path}`, { method: 'DELETE' });
+		} catch (cause) {
+			throw new RepositoryError(`API request failed: ${path}`, undefined, { cause });
+		}
+		if (!response.ok) {
+			throw new RepositoryError(`API ${path} returned ${response.status}`, response.status);
+		}
 	}
 
 	async start(documentId: string, config: PipelineConfig): Promise<StartedPipeline> {

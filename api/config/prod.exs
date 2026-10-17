@@ -14,6 +14,10 @@ if System.get_env("FORCE_SSL") != "false" do
     ]
 end
 
+# Production database. config/runtime.exs takes the connection from DATABASE_URL (the compose file
+# builds it from POSTGRES_USER/PASSWORD/DB), which overrides this default name.
+config :api, Api.Repo, database: "api_prod"
+
 config :logger, level: :info
 
 # Runtime production configuration, including reading

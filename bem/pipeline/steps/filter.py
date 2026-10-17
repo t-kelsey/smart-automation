@@ -45,6 +45,7 @@ def filter_pages(
     recorder: Recorder = Recorder(),
 ) -> tuple[pathlib.Path, list[str]] | None:
     """Returns (PDF with only borehole log pages, one hint per kept page), or None if there are none."""
+    recorder.start("filter", report)
     step_dir = out_dir / "01_filter"
     total = pdfutil.page_count(pdf)
     log(f"step 1: {total} pages, classifying in chunks of {chunk_size}")
@@ -88,6 +89,7 @@ def filter_pages(
     recorder.record(
         "filter",
         {"source": pdf.name, "total_pages": total, "kept_pages": kept, "pages": pages},
+        report=report,
         path=stamped(step_dir / "classification.json"),
     )
     log(f"step 1: keeping {len(kept)} of {total} pages")

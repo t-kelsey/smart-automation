@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-api_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-api_prod}
     # Kept for local development (mix phx.server on the host); not needed by the other services.
     ports:
       - "5432:5432"
@@ -25,17 +25,17 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: ecto://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db/${POSTGRES_DB:-api_dev}
+      DATABASE_URL: ecto://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db/${POSTGRES_DB:-api_prod}
       SECRET_KEY_BASE: ${SECRET_KEY_BASE:?Set SECRET_KEY_BASE in .env (see .env.example)}
       PHX_HOST: ${PHX_HOST:-localhost}
-      PHX_PUBLIC_PORT: ${API_PORT:-4000}
+      PHX_PUBLIC_PORT: ${API_PORT:-4001}
       PHX_PUBLIC_SCHEME: http
       SEED_MOCK_DATA: ${SEED_MOCK_DATA:-false}
       MOCK_BOREHOLES: ${MOCK_BOREHOLES:-1000}
       # Where uploaded documents are sent for extraction. Empty: uploads are stored but not processed.
       PIPELINE_URL: ${PIPELINE_URL-http://pipeline:8000/execute}
     ports:
-      - "${API_PORT:-4000}:4000"
+      - "${API_PORT:-4001}:4000"
     volumes:
       # Source documents of the boreholes (confidential, never baked into the image)
       - document_storage:/data/storage
@@ -50,7 +50,7 @@ services:
     environment:
       API_INTERNAL_URL: http://api:4000
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${WEB_PORT:-3001}:3000"
 
   pipeline:
     # BEM extraction pipeline (FastAPI, POST /execute); the API sends uploaded documents here.

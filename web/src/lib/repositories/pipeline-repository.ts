@@ -17,6 +17,8 @@ export interface PipelineRepository {
 	get(id: string): Promise<Pipeline | null>;
 	/** Returns the executed job (`exec_stages` row), or `null` if there is none. */
 	getJob(id: string): Promise<JobDetail | null>;
+	/** Deletes the pipeline run with its jobs and report; boreholes it created are kept. */
+	delete(id: string): Promise<void>;
 	/** Submits an uploaded document to the pipeline with the given per step config. */
 	start(documentId: string, config: PipelineConfig): Promise<StartedPipeline>;
 }

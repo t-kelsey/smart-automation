@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { invalidate } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { Tabs } from '@skeletonlabs/skeleton-svelte';
 	import {
@@ -8,9 +8,11 @@
 		ListIcon,
 		MapPinIcon,
 		RefreshCwIcon,
+		Trash2Icon,
 		WorkflowIcon
 	} from '@lucide/svelte';
 	import { PipelineGraph, StatusBadge, StatusIcon } from '#lib/components/pipeline/index.ts';
+	import { notify } from '#lib/components/toast/index.ts';
 	import { retryPipeline } from '#lib/components/pipeline/retry.ts';
 	import {
 		formatDuration,
@@ -31,6 +33,18 @@
 		const timer = setInterval(() => invalidate('app:pipelines'), 3000);
 		return () => clearInterval(timer);
 	});
+
+	async function deletePipeline() {
+		const warning = isActive(pipeline) ? ' It is still running and will be cancelled.' : '';
+		if (!confirm(`Delete this pipeline run and its jobs?${warning}`)) return;
+		try {
+			await data.service.delete(pipeline.id);
+			notify.success('Pipeline deleted.');
+			await goto(resolve('/pipeline'), { invalidateAll: true });
+		} catch (e) {
+			notify.fromError(e, 'Could not delete the pipeline');
+		}
+	}
 
 	const formatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 	const jobs = $derived(
@@ -61,6 +75,9 @@
 		onclick={() => retryPipeline(data.service, pipeline)}
 	>
 		<RefreshCwIcon class="size-4" /> Retry
+	</button>
+	<button type="button" class="btn preset-tonal-error" onclick={deletePipeline}>
+		<Trash2Icon class="size-4" /> Delete
 	</button>
 </header>
 

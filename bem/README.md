@@ -54,8 +54,10 @@ uv run python -m pipeline.server   # settings from bem/.env (copy .env.example),
   `config` is optional and so is every step in it; omitted steps use their defaults ([config.py](pipeline/config.py)).
   One worker starts stage 1 (filter) by downloading the PDF with `GET /api/documents/:id/file` (a document that is
   missing or not a PDF ends `failed`), runs the pipeline and posts each borehole to `POST /api/boreholes` (linked to the
-  document). It finishes with `PUT /api/pipeline_runs/:id/status` set to `completed` or `failed` (ADR-0035) — not a
-  document status, `pipeline_runs` is the source of truth for a run's outcome.
+  document). It finishes with `PUT /api/pipeline_runs/:id/status` set to `completed`, `failed` (with `error`) or
+  `stopped` (ADR-0035, ADR-0040) — not a document status, `pipeline_runs` is the source of truth for a run's outcome.
+- `POST /runs/{pipeline_id}/stop`: cancels a queued or running run (`202`, `404` if unknown); the API calls it from
+  `POST /api/pipeline_runs/:id/stop`. A running run ends at its next stage, borehole or model call with `stopped`.
 
 ```sh
 curl -X POST http://localhost:8000/execute \
@@ -73,16 +75,20 @@ curl -X POST http://localhost:8000/execute \
 # -> 202 {"document_id": "...", "pipeline_id": "my-pipeline", "status": "queued", "config": {...}}
 ```
 
-- After every step the server uploads its output: `POST /api/exec_stages` (`type` filter|split|extract|transform, `position` = 1-based
-  borehole index for extract/transform, `data` = the step's JSON), then `POST /api/reports` (`{"steps": [...]}`) and
-  `POST /api/boreholes` per borehole. Boreholes must satisfy DIN 4023 ([din4023.py](pipeline/din4023.py), checked against
-  `standards/din-4023/din-4023.json`): petrography is normalised to the standard's terms and a borehole with an unmappable
-  layer is not uploaded (the document ends `failed`). Client: [api_service.py](pipeline/api_service.py), URL from `BEM_API_URL`
+- Every stage is tracked as an exec_stage (ADR-0040): `filter`/`split` are created `new` when the run starts,
+  `extract`/`transform` per borehole (`position` = 1-based) once split has found them. Each turns `running` when it starts
+  (`PUT /api/exec_stages/:id`, with model and effort) and `success`/`failed`/`stopped` when it ends, with its JSON
+  `data`, `error` and `usage` (tokens, cost, calls; per borehole for extract/transform). Split uploads each borehole's
+  PDF as a document of its own. A transform stage stores its borehole with `POST /api/boreholes` before it counts as
+  `success` (`data.borehole_id`). Then `POST /api/reports` (`{"steps": [...]}`). Boreholes must satisfy DIN 4023
+  ([din4023.py](pipeline/din4023.py), checked against `standards/din-4023/din-4023.json`): petrography is normalised
+  to the standard's terms and a borehole with an unmappable layer is not uploaded (its transform stage and the run end
+  `failed`). Client: [api_service.py](pipeline/api_service.py), URL from `BEM_API_URL`
   (`.env`, default `http://localhost:4000`).
 - `BEM_ENV=dev` (default) also writes results, report and debug files under `out/`; `BEM_ENV=prod` writes nothing locally
   (intermediate PDFs go to a temp dir that is deleted, as is the uploaded file).
 - Tests: `uv run python -m unittest discover tests`.
-- `GET /health`: `{"status": "ok", "queued": n}`.
+- `GET /health`: `{"status": "ok", "queued": n, "active_runs": [pipeline ids]}`.
 - Env: `BEM_API_URL`, `BEM_PORT`, `BEM_WORKDIR` (default `out/server`), `BEM_CHUNK_SIZE`, `BEM_WORKERS`, `BEM_AI`.
 - The queue is in memory: a restart loses queued files.
 

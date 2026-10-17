@@ -24,6 +24,24 @@ defmodule ApiWeb.PipelineRunControllerTest do
     )
   end
 
+  test "delete removes the run and its stages", %{conn: conn} do
+    File.mkdir_p!(Boreholes.storage_dir())
+    {:ok, document} = Boreholes.create_uploaded_document(upload("a.pdf"))
+    {:ok, run} = Boreholes.create_pipeline_run(%{"document_id" => document.id})
+
+    {:ok, _} =
+      Boreholes.create_exec_stage(%{
+        "type" => "filter",
+        "run_id" => run.id,
+        "document_ids" => [document.id]
+      })
+
+    assert conn |> delete(~p"/api/pipeline_runs/#{run.id}") |> response(204)
+    assert Boreholes.get_pipeline_run(run.id) == nil
+    assert Boreholes.list_document_exec_stages(document.id, %{"run_id" => run.id}) == []
+    assert conn |> delete(~p"/api/pipeline_runs/#{run.id}") |> json_response(404)
+  end
+
   test "create -> show -> update_status round trip", %{conn: conn} do
     File.mkdir_p!(Boreholes.storage_dir())
     {:ok, document} = Boreholes.create_uploaded_document(upload("a.pdf"))
