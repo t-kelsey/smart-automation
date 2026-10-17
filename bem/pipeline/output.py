@@ -12,7 +12,8 @@ from collections.abc import Callable
 
 from .ai import log
 
-OnStage = Callable[[str, int | None, dict], None]
+# on_stage(stage, position, data, files): `files` are local PDFs the stage produced (split: one per borehole)
+OnStage = Callable[[str, int | None, dict, list[pathlib.Path]], None]
 
 
 def persist_enabled() -> bool:
@@ -33,12 +34,20 @@ class Recorder:
     def __init__(self, on_stage: OnStage | None = None):
         self.on_stage = on_stage
 
-    def record(self, stage: str, data: dict, *, position: int | None = None, path: pathlib.Path | None = None) -> None:
+    def record(
+        self,
+        stage: str,
+        data: dict,
+        *,
+        position: int | None = None,
+        path: pathlib.Path | None = None,
+        files: list[pathlib.Path] | None = None,
+    ) -> None:
         """`position` is the 1-based borehole index for extract/transform, None for filter/split."""
         if path is not None:
             dump_json(path, data)
         if self.on_stage is not None:
             try:
-                self.on_stage(stage, position, data)
+                self.on_stage(stage, position, data, files or [])
             except Exception as e:  # tracking must not abort the extraction
                 log(f"{stage}{'' if position is None else f' #{position}'}: could not upload stage result: {e}")

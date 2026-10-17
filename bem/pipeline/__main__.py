@@ -59,7 +59,7 @@ def run_pipeline(
     config: PipelineConfig | None = None,
     on_stage: OnStage | None = None,
 ) -> tuple[list[dict], list[StepReport], float]:
-    """Run all four steps on one PDF; every step hands its output to `on_stage(stage, position, data)`.
+    """Run all four steps on one PDF; every step hands its output to `on_stage(stage, position, data, files)`.
 
     The intermediate PDFs the model reads live in `out_dir`. With BEM_ENV=prod (or no `out_dir`)
     that is a temporary directory that is removed afterwards, and no JSON is written locally.

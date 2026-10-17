@@ -12,6 +12,7 @@ the run and answers 202 at once. One worker thread downloads the document from t
 import os
 import pathlib
 import queue
+import re
 import shutil
 import tempfile
 import threading
@@ -37,15 +38,35 @@ WORKERS = int(os.environ.get("BEM_WORKERS", "4"))
 _jobs: queue.Queue[tuple[str, str | None, PipelineConfig]] = queue.Queue()
 
 
-def process(document_id: str, config: PipelineConfig, api: ApiService) -> bool:
+def _safe_name(text: str) -> str:
+    return re.sub(r"[^\w.-]+", "_", text).strip("_") or "borehole"
+
+
+def process(document_id: str, pipeline_id: str | None, config: PipelineConfig, api: ApiService) -> bool:
     """Download one document, run the pipeline on it and upload everything. Returns success."""
     new_run()
-    run = run_id()
+    # exec_stages and the report are grouped by the API's pipeline run id, which GET /pipeline_runs/:id filters on
+    run = pipeline_id or run_id()
     out_dir = WORKDIR / document_id / "out"
     get_ai().debug_dir = out_dir / "debug" if persist_enabled() else None
 
-    def on_stage(stage: str, position: int | None, data: dict) -> None:
-        api.create_exec_stage(stage, run, data, [document_id], position)
+    split_documents: dict[int, str] = {}  # borehole position -> id of its split-out PDF document
+
+    def on_stage(stage: str, position: int | None, data: dict, files: list[pathlib.Path]) -> None:
+        if stage == "split":
+            # each split-out PDF becomes a document of its own; the grouping records its id
+            for i, (group, f) in enumerate(zip(data["boreholes"], files), 1):
+                try:
+                    name = f"{document_id[:8]}_{_safe_name(group['label'])}.pdf"
+                    split_documents[i] = group["document_id"] = api.upload_document(f, name)
+                except ApiError as e:
+                    log(f"{document_id}: split document {i} not uploaded: {e}")
+        document_ids = [document_id]
+        if stage == "split":
+            document_ids += split_documents.values()
+        elif position in split_documents:  # extract/transform link to the source and their split PDF
+            document_ids.append(split_documents[position])
+        api.create_exec_stage(stage, run, data, document_ids, position)
 
     with tempfile.TemporaryDirectory(prefix="bem-") as tmp:
         # the download is a scratch copy; prod keeps no local copy of the confidential document
@@ -68,10 +89,12 @@ def process(document_id: str, config: PipelineConfig, api: ApiService) -> bool:
         return False
 
     ok = True
-    for r in results:
+    for position, r in enumerate(results, 1):  # same order as the extract/transform positions
         name = r["payload"]["borehole"].get("name")
+        # the source stays the original; the split-out PDF this borehole came from is linked as additional
+        additional = [split_documents[position]] if position in split_documents else []
         try:
-            api.upload_borehole(r["payload"], document_id)
+            api.upload_borehole(r["payload"], document_id, additional)
         except Din4023Error as e:
             log(f"{document_id}: borehole {name!r} violates DIN 4023, not uploaded: {e}")
             ok = False
@@ -87,7 +110,7 @@ def _worker() -> None:
         document_id, pipeline_id, config = _jobs.get()
         log(f"{document_id}: pipeline {pipeline_id or '-'} starts with stage 1 (filter)")
         try:
-            success = process(document_id, config, api)
+            success = process(document_id, pipeline_id, config, api)
         except Exception:  # keep the worker alive whatever one document does
             log(f"{document_id}: unexpected error")
             traceback.print_exc()

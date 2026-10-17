@@ -66,12 +66,31 @@ class Service(unittest.TestCase):
         self.assertEqual(self.calls[1], ("POST", "/api/reports", {"document_id": "d1", "run_id": "r1", "data": {"steps": [{"step": "x"}]}}))
 
     def test_borehole_is_normalised_or_blocked(self):
-        self.api.upload_borehole({"borehole": {"name": "B"}, "layers": [layer("sand")]}, "d1")
+        self.api.upload_borehole({"borehole": {"name": "B"}, "layers": [layer("sand")]}, "d1", ["s1"])
         method, path, body = self.calls[0]
+        self.assertEqual(body["additional_document_ids"], ["s1"])
         self.assertEqual((method, path, body["document_id"], body["layers"][0]["petrography"]), ("POST", "/api/boreholes", "d1", "Sand"))
         with self.assertRaises(din4023.Din4023Error):
             self.api.upload_borehole({"borehole": {"name": "B"}, "layers": [layer("clay")]}, "d1")
         self.assertEqual(len(self.calls), 1)  # the violating borehole was never sent
+
+    def test_upload_document_returns_id(self):
+        import pathlib, tempfile
+
+        seen = {}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            seen["path"], seen["ctype"], seen["body"] = req.url.path, req.headers["content-type"], req.content
+            return httpx.Response(202, json={"data": {"id": "new-id"}})
+
+        api = ApiService("localhost:4000", httpx.Client(transport=httpx.MockTransport(handler)))
+        with tempfile.TemporaryDirectory() as tmp:
+            f = pathlib.Path(tmp) / "b.pdf"
+            f.write_bytes(b"%PDF-1.7 x")
+            self.assertEqual(api.upload_document(f, "BH_1.pdf"), "new-id")
+        self.assertEqual(seen["path"], "/api/documents")
+        self.assertTrue(seen["ctype"].startswith("multipart/form-data"))
+        self.assertIn(b'name="file"; filename="BH_1.pdf"', seen["body"])
 
     def test_download_checks_for_pdf(self):
         import pathlib, tempfile

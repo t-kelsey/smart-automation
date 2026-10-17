@@ -29,6 +29,54 @@ defmodule ApiWeb.BoreholeControllerTest do
     {:ok, _links} = Api.Boreholes.attach_documents(borehole, document)
   end
 
+  describe "POST /api/boreholes" do
+    defp post_borehole(conn, extra) do
+      body = Map.merge(%{"borehole" => %{"name" => "BH 1"}, "layers" => []}, extra)
+      post(conn, ~p"/api/boreholes", body)
+    end
+
+    test "links the original and additional documents", %{conn: conn} do
+      original = insert_document(%{original_filename: "source.pdf", storage_path: "source.pdf"})
+      split = insert_document(%{original_filename: "split.pdf", storage_path: "split.pdf"})
+      other = insert_document(%{original_filename: "other.pdf", storage_path: "other.pdf"})
+
+      conn =
+        post_borehole(conn, %{
+          "document_id" => original.id,
+          # duplicates and the original itself are ignored
+          "additional_document_ids" => [split.id, other.id, split.id, original.id]
+        })
+
+      assert %{"documents" => documents} = json_response(conn, 201)["data"]
+
+      assert [
+               %{"original_filename" => "source.pdf", "role" => "original"},
+               %{"original_filename" => "other.pdf", "role" => "additional"},
+               %{"original_filename" => "split.pdf", "role" => "additional"}
+             ] = documents
+    end
+
+    test "additional documents work without an original", %{conn: conn} do
+      split = insert_document(%{original_filename: "split.pdf", storage_path: "split.pdf"})
+      conn = post_borehole(conn, %{"additional_document_ids" => [split.id]})
+
+      assert [%{"role" => "additional"}] = json_response(conn, 201)["data"]["documents"]
+    end
+
+    test "returns 400 for an unknown or malformed additional document and creates nothing", %{
+      conn: conn
+    } do
+      conn = post_borehole(conn, %{"additional_document_ids" => [Ecto.UUID.generate()]})
+      assert %{"errors" => %{"detail" => detail}} = json_response(conn, 400)
+      assert detail =~ "additional_document_ids does not reference an existing document"
+
+      conn = post_borehole(build_conn(), %{"additional_document_ids" => "not-a-list"})
+      assert json_response(conn, 400)["errors"]["detail"] =~ "must be a list"
+
+      assert Repo.aggregate(Borehole, :count) == 0
+    end
+  end
+
   describe "GET /api/boreholes" do
     test "returns a GeoJSON FeatureCollection", %{conn: conn} do
       insert_borehole(%{

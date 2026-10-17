@@ -54,16 +54,22 @@ class ApiService:
         """`POST /reports`: the run's per-step model/time/token/cost stats (`data` must be an object)."""
         return self._send("POST", "/reports", {"document_id": document_id, "run_id": run_id, "data": {"steps": steps}})
 
-    def upload_borehole(self, payload: dict, document_id: str) -> dict:
+    def upload_borehole(self, payload: dict, document_id: str, additional_document_ids: list[str] | None = None) -> dict:
         """`POST /boreholes`. The payload must satisfy DIN 4023 (see `din4023.conform`), otherwise
-        `Din4023Error` is raised and nothing is sent."""
+        `Din4023Error` is raised and nothing is sent. `document_id` becomes the borehole's original document,
+        `additional_document_ids` (e.g. its split-out PDF) are linked as additional documents."""
         conformed, issues = din4023.conform(payload)
         if issues:
             raise din4023.Din4023Error(issues)
         return self._send(
             "POST",
             "/boreholes",
-            {"borehole": conformed["borehole"], "layers": conformed["layers"], "document_id": document_id},
+            {
+                "borehole": conformed["borehole"],
+                "layers": conformed["layers"],
+                "document_id": document_id,
+                "additional_document_ids": additional_document_ids or [],
+            },
         )
 
     def download_document(self, document_id: str, dest: pathlib.Path) -> pathlib.Path:
@@ -86,6 +92,19 @@ class ApiService:
                 dest.unlink(missing_ok=True)
                 raise ApiError(f"document {document_id} is not a PDF, only PDFs are supported")
         return dest
+
+    def upload_document(self, path: pathlib.Path, filename: str) -> str:
+        """`POST /documents` (multipart `file`): store a file, e.g. a split-out borehole PDF, as a new
+        document and return its id."""
+        try:
+            with path.open("rb") as f:
+                r = self._client.post(f"{self.base_url}/documents", files={"file": (filename, f, "application/pdf")})
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise ApiError(f"POST /documents -> {e.response.status_code}: {e.response.text[:500]}") from e
+        except httpx.HTTPError as e:
+            raise ApiError(f"POST /documents failed: {e}") from e
+        return r.json()["data"]["id"]
 
     def set_pipeline_run_status(self, pipeline_id: str, status: str) -> dict:
         """`PUT /pipeline_runs/:id/status`: `completed` or `failed` (ADR-0035). `pipeline_id` is the

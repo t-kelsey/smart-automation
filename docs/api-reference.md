@@ -161,13 +161,15 @@ Creates a borehole with its layers, optionally linked to an existing document (A
   "layers": [
     { "depth_from_m": 0.0, "depth_to_m": 3.5, "stratigraphy": "...", "petrography": "...", "color": "..." }
   ],
-  "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+  "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "additional_document_ids": ["9b2c1a4e-0d53-4c5e-8d0a-6f1f3c7a2b10"]
 }
 ```
 
 - `"x"`/`"y"`/`"epsg"` are reprojected to WGS84 via `ST_Transform` (ADR-0002) — omit all three (or send `"location"` directly) if coordinates aren't known yet.
 - `layers[].position` defaults to the 1-based list order if not given.
 - `document_id` is optional; if given, the borehole is attached as that document's `"original"` (ADR-0028, at most one per borehole).
+- `additional_document_ids` is optional (list of document UUIDs); each is linked with role `"additional"`, e.g. the split-out per-borehole PDF the pipeline uploaded. Duplicates and the original are ignored; it also works without `document_id`.
 - Everything runs in one transaction — any failure leaves nothing half-created.
 
 ### Response `201 Created`
@@ -184,7 +186,7 @@ Changeset validation failure (e.g. missing `name`, `depth_to_m` not greater than
 
 ### Response `400 Bad Request`
 
-Returned if `document_id` doesn't reference an existing document:
+Returned if `document_id` or an `additional_document_ids` entry doesn't reference an existing document, or `additional_document_ids` is not a list (nothing is created):
 
 ```json
 { "errors": { "detail": "document_id does not reference an existing document" } }

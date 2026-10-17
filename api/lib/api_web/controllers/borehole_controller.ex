@@ -25,8 +25,10 @@ defmodule ApiWeb.BoreholeController do
 
   @doc """
   Creates a borehole with its layers (see docs/api-reference.md). Body: `{"borehole": {...},
-  "layers": [...], "document_id": "..."}`. `borehole` may carry `"x"`/`"y"`/`"epsg"` instead of
-  `"location"` directly (ADR-0002).
+  "layers": [...], "document_id": "...", "additional_document_ids": ["..."]}`. `document_id` is
+  the borehole's original document, `additional_document_ids` further linked documents (e.g. the
+  split-out PDF). `borehole` may carry `"x"`/`"y"`/`"epsg"` instead of `"location"` directly
+  (ADR-0002).
   """
   def create(conn, params) do
     borehole_attrs = params["borehole"] || %{}
@@ -34,7 +36,8 @@ defmodule ApiWeb.BoreholeController do
 
     with {:ok, borehole} <-
            Boreholes.create_borehole(borehole_attrs, layers_attrs,
-             document_id: params["document_id"]
+             document_id: params["document_id"],
+             additional_document_ids: params["additional_document_ids"]
            ) do
       conn
       |> put_status(:created)

@@ -92,7 +92,7 @@ def split_boreholes(
         pdfutil.write_pages(pages_pdf, g["pages"], dest)
         g["file"] = dest.name
         files.append(dest)
-    recorder.record("split", {"boreholes": groups}, path=stamped(step_dir / "grouping.json"))
+    recorder.record("split", {"boreholes": groups}, path=stamped(step_dir / "grouping.json"), files=files)
     log(f"step 2: {len(files)} borehole file(s): " + "; ".join(f"{g['label']} = pages {g['pages']}" for g in groups))
     return files
 

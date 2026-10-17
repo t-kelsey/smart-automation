@@ -140,6 +140,9 @@ defmodule Api.Boreholes do
   Options:
     * `:document_id` - an existing `documents.id` to attach as this borehole's original
       document (ADR-0013, via `attach_documents/3`)
+    * `:additional_document_ids` - existing `documents.id`s to attach as `additional` documents
+      (e.g. the split-out PDF the borehole was extracted from); duplicates and the original are
+      ignored
   """
   def create_borehole(borehole_attrs, layers_attrs, opts \\ []) do
     Repo.transaction(fn ->
@@ -198,22 +201,49 @@ defmodule Api.Boreholes do
   end
 
   defp maybe_attach(borehole, opts) do
-    case Keyword.get(opts, :document_id) do
-      nil ->
-        :ok
-
-      document_id ->
-        case get_document(document_id) do
-          nil ->
-            {:error, "document_id does not reference an existing document"}
-
-          document ->
-            with {:ok, _links} <- attach_documents(borehole, document, []) do
-              :ok
-            end
-        end
+    with {:ok, original} <- fetch_original(Keyword.get(opts, :document_id)),
+         {:ok, additional} <-
+           fetch_additional(Keyword.get(opts, :additional_document_ids), original),
+         {:ok, _links} <- attach_documents(borehole, original, additional) do
+      :ok
     end
   end
+
+  defp fetch_original(nil), do: {:ok, nil}
+
+  defp fetch_original(document_id) do
+    case get_document(document_id) do
+      nil -> {:error, "document_id does not reference an existing document"}
+      document -> {:ok, document}
+    end
+  end
+
+  defp fetch_additional(nil, _original), do: {:ok, []}
+
+  defp fetch_additional(ids, original) when is_list(ids) do
+    ids
+    |> Enum.uniq()
+    |> Enum.reduce_while({:ok, []}, fn id, {:ok, acc} ->
+      case get_document(id) do
+        nil ->
+          {:halt,
+           {:error,
+            "additional_document_ids does not reference an existing document: #{inspect(id)}"}}
+
+        %{id: id} when original != nil and id == original.id ->
+          {:cont, {:ok, acc}}
+
+        document ->
+          {:cont, {:ok, [document | acc]}}
+      end
+    end)
+    |> case do
+      {:ok, documents} -> {:ok, Enum.reverse(documents)}
+      error -> error
+    end
+  end
+
+  defp fetch_additional(_ids, _original), do: {:error, "additional_document_ids must be a list"}
 
   defp stringify_keys(map) do
     Map.new(map, fn {k, v} -> {to_string(k), v} end)
