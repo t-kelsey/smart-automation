@@ -19,7 +19,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..schema import Borehole as PipelineBorehole
 from .config import load_prompt, load_settings
 from .extract import extract_record, make_client
 from .render import render
@@ -93,7 +92,6 @@ def main() -> None:
 
     # 1 - read
     text = args.input.read_text(encoding="utf-8")
-    section = PipelineBorehole(name=args.input.stem, source_file=args.input.name, raw_markdown=text)
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[1/4] Read input: {len(text):,} characters")
 
@@ -124,7 +122,7 @@ def main() -> None:
         "extracted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "status": st,
         "issues": [asdict(i) for i in issues],
-        "record": b.to_pipeline(section).to_api_dict(),
+        "record": b.to_pipeline().model_copy(update={"source_file": args.input.name, "raw_markdown": text}).to_api_dict(),
     }
     json_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     written = [json_path]

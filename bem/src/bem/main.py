@@ -55,12 +55,15 @@ def process_file(path: Path, sink, debug: bool, client: ApiClient | None = None)
         log.warning("%s: file name is not a document ID, boreholes are created without stage tracking", path.name)
     track = client if document_id else None
 
-    document = ocr_file(path)              # any format -> markdown (every page is OCR'd)
+    # STAGE 1 - OCR: any format -> markdown (every page is OCR'd)
+    document = ocr_file(path)              
     if debug:
         save_stage("ocr", path, document)
     if track:
         track.put_stage(document_id, "ocr", {"markdown": document})
-    document, translate_errors = translate(document)  # local terms -> English, keywords labeled
+
+    # STAGE 2 - translation: local terms -> English, keywords labeled
+    document, translate_errors = translate(document)
     if debug:
         save_stage("translate", path, document)
     if track:
@@ -74,16 +77,14 @@ def process_file(path: Path, sink, debug: bool, client: ApiClient | None = None)
     failures = []
     for i, section in enumerate(sections):
         if debug:
-            save_stage("triage", path, section)
+            save_stage("triage", path, section.raw_markdown, f"__{i}.md")
 
-        # record = extract(section)     # Borehole -> Borehole (JSON-serialisable)
-        # if debug:
-        #     save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")
-        # sink(record)
-        # except Exception as e:
-        #     if track:
-        #         track.put_extraction_result(document_id, i, None, error=str(e))
-        #   raise
+        record = extract(section.raw_markdown).model_copy(update={
+            "name": section.name,
+            "external_id": section.external_id,
+            "source_file": section.source_file,
+            "translate_errors": section.translate_errors,
+        })
         
         if debug:
             save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")

@@ -58,15 +58,14 @@ class Borehole(_Strict):
     metadata: List[MetadataItem] = Field(description="Other borehole values with no own field (contractor, rig, driller, ...); [] if none")
     layers: List[Layer] = Field(description="All layers, one entry each, in depth order")
 
-    def to_pipeline(self, section: pipeline.Borehole) -> pipeline.Borehole:
+    def to_pipeline(self) -> pipeline.Borehole:
         """The pipeline record: metadata as maps, layers numbered by position (sorted by depth).
 
-        `section` is the triaged borehole this was extracted from. Its provenance is carried
-        over, and its name and ID are the fallback when the model returned none.
+        Only holds what the model extracted. Provenance (source_file, raw_markdown,
+        translate_errors) is set by the caller.
         """
         data = self.model_dump(mode="json", exclude={"layers", "metadata"})
-        data["name"] = self.name.strip() or section.name
-        data["external_id"] = self.external_id or section.external_id
+        data["name"] = self.name.strip() or None
         layers = sorted(self.layers, key=lambda l: l.depth_from_m)
         return pipeline.Borehole(
             **data,
@@ -79,7 +78,4 @@ class Borehole(_Strict):
                 )
                 for position, layer in enumerate(layers, 1)
             ],
-            source_file=section.source_file,
-            raw_markdown=section.raw_markdown,
-            translate_errors=section.translate_errors,
         )

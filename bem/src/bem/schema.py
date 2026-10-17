@@ -48,7 +48,7 @@ class Borehole(BaseModel):
     borehole_layers: list[BoreholeLayer] = Field(default_factory=list)
 
     # Pipeline-only provenance (ADR-0005). Not API columns.
-    source_file: str
+    source_file: str = ""
     # The translated markdown this record was built from.
     raw_markdown: str = ""
     # Values in this borehole's section that could not be translated (translate_error:...).

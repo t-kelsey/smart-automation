@@ -68,20 +68,18 @@ def extract_record(
     raise RuntimeError(f"Extraction failed after retries: {last_error}")
 
 
-def extract(section: PipelineBorehole, client: OpenAI | None = None) -> PipelineBorehole:
-    """Pipeline step: fill a triaged Borehole (name, source_file, raw_markdown) from its text.
+def extract(markdown: str, client: OpenAI | None = None) -> PipelineBorehole:
+    """Pipeline step: translated markdown of one borehole -> pipeline Borehole.
 
-    Returns a new pipeline Borehole shaped for the API sink. Triage provenance
-    (source_file, raw_markdown, translate_errors) is carried over. The record stays
-    `verified=False`; validation issues are logged, not raised, so that one doubtful
-    record does not stop the run.
+    The record stays `verified=False`. Its raw_markdown is the input text; the caller sets
+    the rest of the provenance. Validation issues are logged, not raised, so that one
+    doubtful record does not stop the run.
     """
-    text = section.raw_markdown
-    record = extract_record(text, client or make_client())
+    record = extract_record(markdown, client or make_client())
     record.layers.sort(key=lambda l: l.depth_from_m)  # the consistency checks expect depth order
-    issues = check_all(record, text)
+    issues = check_all(record, markdown)
     for issue in issues:
-        log.warning("%s: [%s] %s: %s", section.name, issue.level, issue.field, issue.message)
-    log.info("%s: extracted %d layer(s), status %s", section.name, len(record.layers), status(issues))
+        log.warning("[%s] %s: %s", issue.level, issue.field, issue.message)
+    log.info("extracted %d layer(s), status %s", len(record.layers), status(issues))
 
-    return record.to_pipeline(section)
+    return record.to_pipeline().model_copy(update={"raw_markdown": markdown})
