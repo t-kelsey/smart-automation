@@ -11,3 +11,20 @@ export function takeMapSnapshot(): string | undefined {
 	snapshot = undefined;
 	return taken;
 }
+
+export interface MapView {
+	lat: number;
+	lon: number;
+	zoom: number;
+}
+
+let lastView: MapView | undefined;
+
+/** Remember where the user left a map, so the other map (dashboard or /map) continues from there. */
+export function setLastMapView(view: MapView) {
+	lastView = view;
+}
+
+export function getLastMapView(): MapView | undefined {
+	return lastView;
+}
