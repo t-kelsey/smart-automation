@@ -7,9 +7,14 @@ title: Document upload endpoint that triggers the extraction pipeline
 
 # ADR-0033 – Document upload endpoint that triggers the extraction pipeline
 
+> **Partly superseded by ADR-0035/ADR-0037**: uploading no longer auto-triggers the pipeline (a
+> separate `POST /api/pipeline_runs` submission step does); the `bem-serve`/FastAPI worker
+> described below ran the old, now-dropped Python pipeline and no longer exists. The endpoint
+> itself (`POST /api/documents`, storage layout, allowed types/size) is unchanged and current.
+
 ## Context
 
-Documents only existed after copying files into `api/priv/uploads/` and running `mix documents.backfill` (ADR-0014, ADR-0032). The web app had no way to add a raw log, and `bem` was a CLI without an HTTP entry point.
+Documents only existed after copying files into `api/priv/uploads/` and running `mix documents.backfill` (ADR-0014). The web app had no way to add a raw log, and `bem` was a CLI without an HTTP entry point.
 
 ## Decision
 
@@ -28,7 +33,7 @@ Documents only existed after copying files into `api/priv/uploads/` and running 
 
 - The queue is in memory in `bem-serve`: a restart loses queued files (their documents stay `processing`).
 - No authentication and no virus scanning (hackathon prototype).
-- Re-uploading the same file creates a second document and, on success, duplicate boreholes (ADR-0032).
+- Re-uploading the same file creates a second document and, on success, duplicate boreholes.
 
 ## Alternatives
 
@@ -42,4 +47,4 @@ Documents only existed after copying files into `api/priv/uploads/` and running 
 
 ## References
 
-- ADR-0014, ADR-0030, ADR-0032, `bem/API_INTEGRATION.md`
+- ADR-0014, ADR-0035, ADR-0037

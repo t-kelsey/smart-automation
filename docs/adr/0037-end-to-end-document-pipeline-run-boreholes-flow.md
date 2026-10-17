@@ -143,6 +143,6 @@ calls it — it is legacy/manual-only bookkeeping now, not part of this flow.
 
 ## References
 
-- ADR-0014, ADR-0030, ADR-0031, ADR-0033, ADR-0034, ADR-0035
+- ADR-0014, ADR-0031, ADR-0033, ADR-0034, ADR-0035
 - `docs/api-reference.md`, `docs/elixir-backend-borehole-pipeline.md`
 - `bem/README.md`, `bem/pipeline/api_service.py`, `bem/pipeline/server.py`

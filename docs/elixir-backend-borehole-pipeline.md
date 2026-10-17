@@ -95,91 +95,14 @@ Keep `raw_text` / `raw_extraction` fields everywhere plausible — given handwri
 
 ---
 
-## Pipeline Stage Tracking (superseded by ADR-0034/ADR-0035 — historical record)
-
-> **Superseded**: the tables and endpoints below were built for `bem/`'s five-stage pipeline and have since been dropped. `claude_test/` (ADR-0034) and the `pipeline_runs` submission flow (ADR-0035) replaced them — see "Pipeline Runs & Stage Tracking (current, ADR-0034/ADR-0035)" further down this document for what's actually implemented today. Kept here as a record of what was built, per this project's convention of adding new decisions instead of rewriting old ones.
-
-### Motivation
-
-`bem/`'s pipeline has five stages (OCR → translation/labeling → triage → extraction → output, ADR-0001). Today the only intermediate visibility is a local, gitignored, per-developer JSON file cache (ADR-0006) — nothing is visible to the rest of the team, and nothing survives past a developer's machine. `documents.raw_extraction` (ADR-0016) is a single JSONB blob written at the very end of ingestion, not a per-stage trace.
-
-Goal: for any `document`, be able to inspect what each stage actually produced — including where triage split one document into several borehole candidates, and which of those candidates extraction succeeded or failed on.
-
-### Decisions (confirmed with the team)
-
-- **Write path**: `bem/` reports stage results to new `api/` endpoints (not direct DB access) — the API stays the only thing that touches Postgres, consistent with ADR-0017/0023.
-- **History**: latest run only. A rerun overwrites/replaces the previous stage data for that document rather than keeping every past attempt. This keeps the schema simple at the cost of before/after comparisons across BEM code changes.
-- **Granularity**: relational, not a JSON blob — triage's one-document-to-many-boreholes fan-out gets its own rows so individual candidates are filterable/queryable.
-- **Relation to ADR-0006**: additive. The local file cache stays for fast BEM-local iteration; these tables are for cross-team troubleshooting once a run has reached (or reported to) the API.
-- **Confidentiality**: identical rule to `storage_path`/`raw_extraction` (ADR-0014) — none of this is ever serialised in a public API response. Debug/internal visibility only.
-
-### Proposed tables
-
-Because only the latest run is kept, these are modelled as overwrite-on-rerun (upsert or delete-and-reinsert), not an append-only history.
-
-#### `pipeline_stage_runs`
-One row per `(document, stage)` for the two stages that are still document-level (haven't fanned out into per-borehole candidates yet). A rerun upserts on `(document_id, stage)`.
-
-| field | type | notes |
-|---|---|---|
-| `id` | `binary_id` | PK |
-| `document_id` | `references(:documents)` | |
-| `stage` | `string` | `"ocr"` \| `"translation"` |
-| `status` | `string` | `"ok"` \| `"error"` |
-| `output` | `map` (`jsonb`) | e.g. OCR: `{"markdown": ...}`; translation: `{"translated_markdown": ..., "source_language": ..., "translate_errors": [...]}` |
-| `error` | `string` | nullable |
-| `started_at` / `finished_at` | `utc_datetime` | |
-
-Unique index on `(document_id, stage)`.
-
-#### `triage_sections`
-One row per borehole candidate that triage found in the document — the fan-out point. A rerun deletes all existing sections for that `document_id` and reinserts the new set (count/content can change between runs).
-
-| field | type | notes |
-|---|---|---|
-| `id` | `binary_id` | PK |
-| `document_id` | `references(:documents)` | |
-| `section_index` | `integer` | 0-based position within the document |
-| `borehole_id_guess` | `string` | nullable — the raw label triage matched, e.g. `"BH-2"` |
-| `raw_markdown` | `string` | this section's slice of the translated markdown |
-| `translate_errors` | `{array, :string}` (`jsonb`) | errors found within this section |
-
-Unique index on `(document_id, section_index)`.
-
-#### `extraction_results`
-One row per `triage_section` (1:1). `on_delete: :delete_all` from `triage_sections`, so a rerun's section cleanup cascades automatically — no separate overwrite logic needed here.
-
-| field | type | notes |
-|---|---|---|
-| `id` | `binary_id` | PK |
-| `triage_section_id` | `references(:triage_sections)` | unique (1:1) |
-| `status` | `string` | `"ok"` \| `"error"` |
-| `extracted_fields` | `map` (`jsonb`) | the candidate `Borehole`/`Bohrung` fields as extracted |
-| `validation_issues` | `map` (`jsonb`) | e.g. depth-range or missing-field issues |
-| `error` | `string` | nullable |
-
-#### `sink_results`
-One row per `extraction_result` (1:1), cascading the same way.
-
-| field | type | notes |
-|---|---|---|
-| `id` | `binary_id` | PK |
-| `extraction_result_id` | `references(:extraction_results)` | unique (1:1) |
-| `target` | `string` | `"api"` \| `"json"` \| `"print"` |
-| `success` | `boolean` | |
-| `response_status` | `integer` | nullable, HTTP status if `target == "api"` |
-| `created_borehole_id` | `references(:boreholes)` | nullable — set once the API has actually created the borehole |
-| `error` | `string` | nullable |
-
-### API endpoints (implemented, ADR-0030)
-
-- `PUT /api/documents/:document_id/pipeline_stages/:stage` — upsert the OCR or translation result for a document
-- `PUT /api/documents/:document_id/triage_sections` — replace all triage sections for a document in one call (body: list of sections)
-- `PUT /api/documents/:document_id/triage_sections/:section_index/extraction_result` — upsert the extraction result for one section
-- `PUT /api/documents/:document_id/triage_sections/:section_index/sink_result` — upsert the sink result for one section
-- `GET /api/documents/:document_id/pipeline_trace` — the full trace for a document (stage runs + triage sections, each with its extraction/sink result) in one nested response, for troubleshooting
-
-`bem/API_INTEGRATION.md` documented the full contract (bodies, call order) from the old `bem/`'s side at the time; that file no longer exists in the repo, and the pipeline it described (and these endpoints) have since been dropped (ADR-0034).
+> **Dropped design**: an earlier version of this backend task doc specified a five-stage `bem/`
+> pipeline (OCR → translation/labeling → triage → extraction → output) with its own
+> `pipeline_stage_runs`/`triage_sections`/`extraction_results`/`sink_results` tables and
+> `PUT /api/documents/:document_id/pipeline_stages/...` write-back endpoints. That pipeline was
+> dropped wholesale in favour of the Claude-based pipeline in `bem/` (see
+> [ADR-0034](adr/0034-exec-stage-pipeline-tracking.md)); the tables and endpoints built for it were
+> dropped with it and are no longer part of the schema or API. See "Pipeline Runs & Stage Tracking"
+> below for what's actually implemented today.
 
 ---
 
@@ -209,7 +132,7 @@ The current pipeline is `bem/` (`bem/README.md`; ADR-0034/ADR-0035 call it `clau
 - Ecto schemas + changesets with validation (depth_from < depth_to, lat/lon bounds, etc.)
 
 ### 2. Ingestion pipeline
-> **Superseded by ADR-0031** for the creation step: there is no external extraction service to poll (`bem/` runs extraction itself and reports results directly, ADR-0030), so the design below was not built. `POST /api/boreholes` (synchronous, see Task 4) is what exists today. The upload endpoint also doesn't exist yet — see `bem/API_INTEGRATION.md` for how `bem/` gets a `document_id` without one.
+> **Superseded by ADR-0031** for the creation step: there is no external extraction service to poll (`bem/` runs extraction itself and reports results directly), so the design below was not built. `POST /api/boreholes` (synchronous, see Task 4) is what exists today. The upload endpoint was added later (ADR-0033) — see "Pipeline Runs & Stage Tracking" above for the current end-to-end flow.
 
 - ~~Upload endpoint (`POST /api/documents`) accepting a file, stores it (local disk for the hackathon, or S3-compatible bucket), creates a `documents` row with `status: :pending`~~ — built since, see ADR-0033 and "Pipeline Runs & Stage Tracking" above.
 - ~~Background job (use `Oban` — add dep) that:~~

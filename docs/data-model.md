@@ -64,54 +64,42 @@ erDiagram
     }
 ```
 
-## Pipeline stage tracking (implemented, ADR-0030)
+## Pipeline runs & stage tracking (implemented, ADR-0034/ADR-0035)
 
-See "Pipeline Stage Tracking" in [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md). Latest-run-only: a rerun upserts `pipeline_stage_runs`/`triage_sections` or cascades deletes down to `extraction_results`/`sink_results`.
+See "Pipeline Runs & Stage Tracking" in [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md) and [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the full flow. `exec_stages` is append-only (reruns add rows, not upserts); `pipeline_runs` tracks one submission/polling lifecycle per document.
 
 ```mermaid
 erDiagram
-    DOCUMENTS ||--o{ PIPELINE_STAGE_RUNS : document_id
-    DOCUMENTS ||--o{ TRIAGE_SECTIONS : document_id
-    TRIAGE_SECTIONS ||--o| EXTRACTION_RESULTS : triage_section_id
-    EXTRACTION_RESULTS ||--o| SINK_RESULTS : extraction_result_id
-    BOREHOLES ||--o| SINK_RESULTS : created_borehole_id
+    DOCUMENTS ||--o{ STAGE_DOCUMENT_LINKS : document_id
+    EXEC_STAGES ||--o{ STAGE_DOCUMENT_LINKS : exec_stage_id
+    DOCUMENTS ||--o{ REPORTS : document_id
+    DOCUMENTS ||--o{ PIPELINE_RUNS : document_id
 
-    PIPELINE_STAGE_RUNS {
+    EXEC_STAGES {
         binary_id id PK
-        binary_id document_id FK "not unique alone"
-        string stage UK "ocr | translation - UK is (document_id, stage)"
-        string status "ok | error"
-        jsonb output
-        string error
-        utc_datetime started_at
-        utc_datetime finished_at
+        string type "filter | split | extract | transform"
+        string run_id "groups every stage + the report of one run"
+        integer position "borehole index within the run; null for filter/split"
+        jsonb data "the step's JSON file as-is"
     }
 
-    TRIAGE_SECTIONS {
+    STAGE_DOCUMENT_LINKS {
         binary_id id PK
-        binary_id document_id FK "not unique alone"
-        integer section_index UK "UK is (document_id, section_index)"
-        string borehole_id_guess
-        string raw_markdown
-        jsonb translate_errors
+        binary_id exec_stage_id FK
+        binary_id document_id FK
     }
 
-    EXTRACTION_RESULTS {
+    REPORTS {
         binary_id id PK
-        binary_id triage_section_id FK
-        string status "ok | error"
-        jsonb extracted_fields
-        jsonb validation_issues
-        string error
+        binary_id document_id FK
+        string run_id
+        jsonb data "report.json: per-step model/time/token/cost stats"
     }
 
-    SINK_RESULTS {
+    PIPELINE_RUNS {
         binary_id id PK
-        binary_id extraction_result_id FK
-        string target "api | json | print"
-        boolean success
-        integer response_status
-        binary_id created_borehole_id FK
-        string error
+        binary_id document_id FK
+        string status "new | running | completed | failed"
+        jsonb config "per-stage model/effort choices, as-is"
     }
 ```

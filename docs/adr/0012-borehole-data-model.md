@@ -19,7 +19,7 @@ Three core tables, all with UUID primary keys:
 - `boreholes` — one row per borehole (Stammdaten): name, drilling metadata, a PostGIS `geometry(Point, 4326)` for the standardised WGS84 location plus `source_coordinate_system`/`source_coordinate_raw` for traceability, depth/elevation/groundwater fields, `verified`, and an open `metadata` jsonb map for anything not covered by a fixed column.
 - `borehole_layers` — one row per stratigraphy interval (von/bis/Stratigraphie/Petrographie/Farbe), ordered by `position`, with the same open `metadata` jsonb map.
 
-All descriptive fields are nullable by default; only structurally required fields are enforced (`boreholes.name`; `borehole_layers.position`/`depth_from_m`/`depth_to_m`, plus `depth_to_m > depth_from_m`). `raw_text`/`raw_extraction` columns preserve the unprocessed source text alongside standardised fields, mirroring the raw-jsonb provenance pattern from ADR-0005 (bem/ pipeline) on the `api/` side.
+All descriptive fields are nullable by default; only structurally required fields are enforced (`boreholes.name`; `borehole_layers.position`/`depth_from_m`/`depth_to_m`, plus `depth_to_m > depth_from_m`). `raw_text`/`raw_extraction` columns preserve the unprocessed source text alongside standardised fields, so low-quality extractions can be corrected later without re-running OCR.
 
 ## Pros
 
@@ -43,4 +43,3 @@ All descriptive fields are nullable by default; only structurally required field
 ## References
 
 - docs/elixir-backend-borehole-pipeline.md
-- ADR-0005
