@@ -1,66 +1,68 @@
-"""Pipeline: OCR -> translate -> extract -> split into per-borehole JSON (ADR-0007).
+"""Run the borehole pipeline: OCR -> translation -> triage -> extraction -> output.
 
-Run from bem/ (the modules import each other without a package prefix):
-    python main.py <file-or-dir>... [--api http://localhost:4000/api/boreholes] [--dry-run]
+Usage:
+    python -m bem.main <file-or-dir>... [--to api|json|print] [--api-url URL] [--out-dir DIR]
 """
 
 import argparse
 import logging
 from pathlib import Path
 
-import requests
+from .extraction import extract
+from .ocr import ocr
+from .output import make_sink
+from .translation import translate
+from .triage import triage
 
-from ocr import ocr_file
-from schema import Borehole
-from translation_and_extraction import extract, translate
-from triage import split
+log = logging.getLogger("bem")
 
-OUTPUT_DIR = Path(__file__).parent / "output"
-OCR_DIR = OUTPUT_DIR / "ocr"
-RECORD_DIR = OUTPUT_DIR / "records"
-INPUT_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".docx"}
-
-log = logging.getLogger(__name__)
+SUPPORTED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".docx"}
 
 
-def input_files(paths: list[Path]):
+def collect_inputs(paths: list[Path]) -> list[Path]:
+    """Expand directories into the supported files they contain."""
+    files = []
     for path in paths:
         if path.is_dir():
-            yield from sorted(f for f in path.rglob("*") if f.suffix.lower() in INPUT_SUFFIXES)
-        elif path.suffix.lower() in INPUT_SUFFIXES:
-            yield path
+            files += sorted(p for p in path.rglob("*") if p.suffix.lower() in SUPPORTED_SUFFIXES)
         else:
-            log.warning("skipping unsupported file %s", path)
+            files.append(path)
+    return files
 
 
-def process(path: Path, api: str | None) -> list[Borehole]:
-    """Run one input through every stage. Writes JSON records, and POSTs them if api is set."""
-    md_path = ocr_file(path, OCR_DIR)
-    translated, _ = translate(md_path.read_text(encoding="utf-8"))
-    markdown = extract(translated)
-    boreholes = split(path.name, markdown)
-
-    RECORD_DIR.mkdir(parents=True, exist_ok=True)
-    for borehole in boreholes:
-        name = f"{md_path.stem}_{borehole.borehole_id or 'unknown'}.json"
-        (RECORD_DIR / name).write_text(borehole.model_dump_json(indent=2), encoding="utf-8")
-        if api:
-            requests.post(api, json=borehole.model_dump(mode="json"), timeout=30).raise_for_status()
-    return boreholes
+def process_file(path: Path, sink) -> int:
+    """Push every borehole found in one input file through the pipeline. Returns the count."""
+    document = ocr(path)  # any format -> TextDocument (digital text layer or OCR'd pages)
+    document = translate(document)  # local terms and abbreviations -> English
+    count = 0
+    for section in triage(document):  # one BoreholeText per borehole, irrelevant parts dropped
+        sink(extract(section))  # BoreholeText -> Borehole (JSON-serialisable)
+        count += 1
+    return count
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("paths", nargs="+", type=Path)
-    parser.add_argument("--api", default="http://localhost:4000/api/boreholes")
-    parser.add_argument("--dry-run", action="store_true", help="write JSON only, don't POST")
+    parser.add_argument("inputs", nargs="+", type=Path)
+    parser.add_argument("--to", choices=["api", "json", "print"], default="print")
+    parser.add_argument("--api-url", default="http://localhost:4000/api/boreholes")
+    parser.add_argument("--out-dir", type=Path, default=Path("out"))
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    api = None if args.dry_run else args.api
-    for path in input_files(args.paths):
-        for borehole in process(path, api):
-            print(f"{path.name}: borehole={borehole.borehole_id} chars={len(borehole.raw_markdown)}")
+
+    failed = []
+    with make_sink(args.to, api_url=args.api_url, out_dir=args.out_dir) as sink:
+        for path in collect_inputs(args.inputs):
+            try:
+                count = process_file(path, sink)
+                log.info("%s: %d borehole(s)", path.name, count)
+            except Exception:
+                log.exception("failed: %s", path)
+                failed.append(path)
+
+    if failed:
+        raise SystemExit(f"{len(failed)} file(s) failed: {', '.join(str(p) for p in failed)}")
 
 
 if __name__ == "__main__":
