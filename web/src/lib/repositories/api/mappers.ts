@@ -3,31 +3,13 @@ import type {
 	BoreholeDocument,
 	BoreholeLayer,
 	BoreholeSummary,
-	DocumentType,
-	LithologyKey
+	DocumentType
 } from '#lib/domain/borehole.ts';
+import { parseComposition } from '#lib/din4023/index.ts';
 import type { ApiBorehole, ApiBoreholeLayer, ApiDocument } from './api-types';
 
 const num = (value: string | number | null | undefined): number | null =>
 	value === null || value === undefined ? null : Number(value);
-
-/** Keywords (English and German) found in the free-text petrography, checked in order. */
-const lithologyKeywords: [RegExp, LithologyKey][] = [
-	[/claystone|tonstein/i, 'claystone'],
-	[/sandstone|sandstein/i, 'sandstone'],
-	[/limestone|kalkstein/i, 'limestone'],
-	[/marl|mergel/i, 'marl'],
-	[/topsoil|mutterboden|humus/i, 'topsoil'],
-	[/fill|made ground|auffüllung/i, 'fill'],
-	[/gravel|kies/i, 'gravel'],
-	[/clay|ton\b|lehm/i, 'clay'],
-	[/silt|schluff/i, 'silt'],
-	[/sand/i, 'sand']
-];
-
-export function toLithology(petrography: string | null): LithologyKey {
-	return lithologyKeywords.find(([re]) => re.test(petrography ?? ''))?.[1] ?? 'unknown';
-}
 
 /** The API stores stratigraphy as one string, e.g. "km1" or "km1 Gipskeuper". */
 function toStratigraphy(value: string | null): BoreholeLayer['stratigraphy'] {
@@ -50,7 +32,7 @@ export function toLayer(layer: ApiBoreholeLayer): BoreholeLayer {
 		endDepth: Number(layer.depth_to_m),
 		stratigraphy: toStratigraphy(layer.stratigraphy),
 		petrography: {
-			lithology: toLithology(layer.petrography),
+			composition: parseComposition(layer.petrography),
 			description: layer.petrography ?? layer.raw_text ?? ''
 		},
 		color: toColor(layer.color)

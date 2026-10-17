@@ -1,116 +1,186 @@
+<!--
+	Borehole column after DIN 4023:2023-02: two vertical lines with cross lines at the layer boundaries,
+	hatch pattern (and optional DIN colour) per layer, depths on the left, short form on the right.
+-->
 <script lang="ts">
-	import { lithologies } from './lithology';
 	import type { BoreholeLayer } from '#lib/domain/borehole.ts';
+	import {
+		columnFill,
+		describe,
+		dinColors,
+		materials,
+		patternId,
+		shortForm
+	} from '#lib/din4023/index.ts';
+	import type { MaterialKey } from '#lib/din4023/index.ts';
 
 	interface Props {
 		layers: BoreholeLayer[];
-		/** Height of the borehole start in m ü. NN. */
-		elevation: number;
 		totalDepth: number;
+		/** Tint the layers with the DIN colours; otherwise only the hatch patterns are drawn. */
+		colored?: boolean;
 		selectedId?: string | null;
 		onselect?: (id: string | null) => void;
 	}
 
-	let { layers, elevation, totalDepth, selectedId = null, onselect }: Props = $props();
+	let { layers, totalDepth, colored = true, selectedId = null, onselect }: Props = $props();
 
-	const scale = 14; // px per metre
-	const axisWidth = 44;
-	const columnWidth = 70;
-	const labelWidth = 130;
-	const top = 12;
+	const scale = 14; // units per metre
+	const top = 8;
+	const colX = 50;
+	const colW = 60;
+	const half = colW / 2;
+	const width = colX + colW + 70;
 
-	let height = $derived(totalDepth * scale);
-	let width = axisWidth + columnWidth + labelWidth;
-	let ticks = $derived(Array.from({ length: Math.floor(totalDepth / 2) + 1 }, (_, i) => i * 2));
+	const y = (depth: number) => top + depth * scale;
+	let bottom = $derived(y(totalDepth));
+	let height = $derived(bottom + 14);
+
+	/** Pushes sorted positions apart so that labels do not overlap. */
+	function spread(positions: number[], gap: number, limit: number): number[] {
+		const out = [...positions];
+		for (let i = 1; i < out.length; i++) out[i] = Math.max(out[i], out[i - 1] + gap);
+		const last = out.length - 1;
+		if (last >= 0 && out[last] > limit) {
+			out[last] = limit;
+			for (let i = last - 1; i >= 0; i--) out[i] = Math.min(out[i], out[i + 1] - gap);
+		}
+		return out;
+	}
+
+	const hex = (key: MaterialKey | undefined) => {
+		const color = key && materials[key].color;
+		return color ? dinColors[color].hex : undefined;
+	};
+
+	let rows = $derived.by(() => {
+		const sorted = [...layers].sort((a, b) => a.startDepth - b.startDepth);
+		const labelYs = spread(
+			sorted.map((l) => y((l.startDepth + l.endDepth) / 2)),
+			11.5,
+			bottom
+		);
+		const depthYs = spread(
+			sorted.map((l) => y(l.endDepth) - 2),
+			10.5,
+			bottom + 10
+		);
+		return sorted.map((layer, i) => {
+			const composition = layer.petrography.composition;
+			const fill = composition && columnFill(composition);
+			return {
+				layer,
+				y0: y(layer.startDepth),
+				y1: y(layer.endDepth),
+				labelY: labelYs[i],
+				depthY: depthYs[i],
+				fill,
+				leftColor: fill && hex(fill.main),
+				rightColor: fill && (hex(fill.second) ?? hex(fill.main)),
+				label: composition ? shortForm(composition) : '?',
+				title: composition ? describe(composition) : layer.petrography.description
+			};
+		});
+	});
 </script>
 
 <svg
-	viewBox="0 0 {width} {height + top * 2}"
+	viewBox="0 0 {width} {height}"
 	class="w-full"
 	role="img"
-	aria-label="Borehole cross section"
+	aria-label="Borehole cross section after DIN 4023"
+	font-family="inherit"
 >
-	<g transform="translate(0 {top})">
-		<!-- depth / height axis -->
-		{#each ticks as depth (depth)}
-			<line
-				x1={axisWidth - 5}
-				x2={axisWidth}
-				y1={depth * scale}
-				y2={depth * scale}
-				class="stroke-surface-500"
-			/>
-			<text
-				x={axisWidth - 8}
-				y={depth * scale}
-				text-anchor="end"
-				dominant-baseline="middle"
-				class="fill-current text-[8px]"
-			>
-				{(elevation - depth).toFixed(0)}
-			</text>
-		{/each}
-		<text x="0" y="-3" class="fill-current text-[7px] opacity-60">m ü. NN</text>
-
-		<!-- layers -->
-		{#each layers as layer (layer.id)}
-			{@const y = layer.startDepth * scale}
-			{@const h = (layer.endDepth - layer.startDepth) * scale}
-			{@const selected = selectedId === layer.id}
-			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-			<g
-				class="cursor-pointer"
-				onmouseenter={() => onselect?.(layer.id)}
-				onmouseleave={() => onselect?.(null)}
-				onclick={() => onselect?.(selected ? null : layer.id)}
-			>
-				<title>{layer.position}: {lithologies[layer.petrography.lithology].label}</title>
-				<rect x={axisWidth} {y} width={columnWidth} height={h} fill={layer.color.hex} />
-				<rect
-					x={axisWidth}
-					{y}
-					width={columnWidth}
-					height={h}
-					fill="url(#{lithologies[layer.petrography.lithology].patternId})"
-				/>
-				<rect
-					x={axisWidth}
-					{y}
-					width={columnWidth}
-					height={h}
-					fill="none"
-					class={selected ? 'stroke-primary-500' : 'stroke-black/70'}
-					stroke-width={selected ? 2 : 0.8}
-				/>
-				{#if h >= 10}
-					<text
-						x={axisWidth + columnWidth + 6}
-						y={y + h / 2}
-						dominant-baseline="middle"
-						class="fill-current text-[8px] {selected ? 'font-bold' : ''}"
-					>
-						{layer.stratigraphy.code} · {lithologies[layer.petrography.lithology].label}
-					</text>
-				{/if}
-			</g>
-		{/each}
-
-		<!-- end of borehole marker -->
-		<line
-			x1={axisWidth}
-			x2={axisWidth + columnWidth}
-			y1={height}
-			y2={height}
-			stroke-width="2"
-			class="stroke-black"
-		/>
-		<text
-			x={axisWidth + columnWidth / 2}
-			y={height + 9}
-			text-anchor="middle"
-			class="fill-current text-[7px] opacity-60"
+	{#each rows as row (row.layer.id)}
+		{@const h = row.y1 - row.y0}
+		{@const selected = selectedId === row.layer.id}
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<g
+			class="cursor-pointer"
+			onmouseenter={() => onselect?.(row.layer.id)}
+			onmouseleave={() => onselect?.(null)}
+			onclick={() => onselect?.(selected ? null : row.layer.id)}
 		>
-			EOH {totalDepth.toFixed(1)} m
+			<title>{row.title}</title>
+			<rect x={colX} y={row.y0} width={colW} height={h} fill={row.fill ? 'white' : '#e5e7eb'} />
+			{#if row.fill}
+				{#if colored}
+					{#if row.leftColor}
+						<rect
+							x={colX}
+							y={row.y0}
+							width={half}
+							height={h}
+							fill={row.leftColor}
+							fill-opacity="0.5"
+						/>
+					{/if}
+					{#if row.rightColor}
+						<rect
+							x={colX + half}
+							y={row.y0}
+							width={half}
+							height={h}
+							fill={row.rightColor}
+							fill-opacity="0.5"
+						/>
+					{/if}
+				{/if}
+				<rect
+					x={colX}
+					y={row.y0}
+					width={colW}
+					height={h}
+					fill="url(#{patternId(row.fill.main, 'a')})"
+				/>
+				{#if row.fill.second}
+					<!-- 4.2.5: the first minor component only fills the right half; equal components fill both -->
+					<rect
+						x={row.fill.mode === 'both' ? colX : colX + half}
+						y={row.y0}
+						width={row.fill.mode === 'both' ? colW : half}
+						height={h}
+						fill="url(#{patternId(row.fill.second, 'b')})"
+					/>
+				{/if}
+			{/if}
+			{#if selected}
+				<rect
+					x={colX}
+					y={row.y0}
+					width={colW}
+					height={h}
+					class="fill-primary-500/25 stroke-primary-500"
+					stroke-width="2"
+				/>
+			{/if}
+		</g>
+		<text
+			x={colX + colW + 8}
+			y={row.labelY}
+			dominant-baseline="middle"
+			font-size="10"
+			fill="currentColor"
+			font-weight={selected ? 700 : 600}
+		>
+			{row.label}
 		</text>
+	{/each}
+
+	<g stroke="currentColor" fill="none" stroke-width="0.9">
+		<line x1={colX} x2={colX} y1={top} y2={bottom} />
+		<line x1={colX + colW} x2={colX + colW} y1={top} y2={bottom} />
+		{#each rows as row (row.layer.id)}
+			<line x1={colX - 30} x2={colX + colW} y1={row.y1} y2={row.y1} />
+		{/each}
+		<line x1={colX - 30} x2={colX + colW + 6} y1={top} y2={top} stroke-width="1.6" />
+		<line x1={colX - 30} x2={colX + colW + 6} y1={bottom} y2={bottom} stroke-width="1.6" />
+	</g>
+
+	<!-- depths below the borehole start -->
+	<g fill="currentColor" font-size="9" text-anchor="end">
+		{#each rows as row (row.layer.id)}
+			<text x={colX - 4} y={row.depthY}>{row.layer.endDepth.toFixed(1)}</text>
+		{/each}
 	</g>
 </svg>

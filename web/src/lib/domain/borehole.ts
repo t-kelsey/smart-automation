@@ -1,18 +1,6 @@
-/** Lithology classes that have a hatch pattern in the cross-section drawing. */
-export type LithologyKey =
-	| 'topsoil'
-	| 'fill'
-	| 'clay'
-	| 'silt'
-	| 'sand'
-	| 'gravel'
-	| 'sandstone'
-	| 'claystone'
-	| 'limestone'
-	| 'marl'
-	/** Petrography that could not be mapped to a known class. */
-	| 'unknown';
+import type { Composition } from '#lib/din4023/index.ts';
 
+/** Layer of a borehole; soil and rock are described after DIN 4023 (see `#lib/din4023`). */
 export interface BoreholeLayer {
 	/** Database id (uuid); use for keys and selection, not for display. */
 	id: string;
@@ -22,7 +10,12 @@ export interface BoreholeLayer {
 	startDepth: number;
 	endDepth: number;
 	stratigraphy: { code: string; name: string };
-	petrography: { lithology: LithologyKey; description: string };
+	petrography: {
+		/** Structured soil/rock description; `undefined` when the text could not be classified. */
+		composition?: Composition;
+		/** Description as written on the original log. */
+		description: string;
+	};
 	/** Layer colour as shown on the original log. */
 	color: { hex: string; name: string };
 }

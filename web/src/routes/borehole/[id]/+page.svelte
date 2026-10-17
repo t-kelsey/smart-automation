@@ -14,10 +14,10 @@
 	} from '@lucide/svelte';
 	import BoreholeColumn from '#lib/components/borehole/BoreholeColumn.svelte';
 	import HelpDrawer from '#lib/components/borehole/HelpDrawer.svelte';
-	import LithologyDefs from '#lib/components/borehole/LithologyDefs.svelte';
+	import PatternDefs from '#lib/components/borehole/PatternDefs.svelte';
 	import MapSnippet from '#lib/components/borehole/MapSnippet.svelte';
-	import type { BoreholeDocument } from '#lib/domain/borehole.ts';
-	import { lithologies } from '#lib/components/borehole/lithology.ts';
+	import type { BoreholeDocument, BoreholeLayer } from '#lib/domain/borehole.ts';
+	import { describe, shortForm } from '#lib/din4023/index.ts';
 	import type { PageProps } from './$types';
 	import { Collapsible, Menu, Portal } from '@skeletonlabs/skeleton-svelte';
 	import { goto } from '$app/navigation';
@@ -28,6 +28,7 @@
 
 	let coreDataOpen = $state(true);
 	let selectedLayerId = $state<string | null>(null);
+	let colored = $state(true);
 
 	let coreData = $derived([
 		{ label: 'Name', value: borehole.name },
@@ -41,11 +42,6 @@
 		{ label: 'Drilling method', value: borehole.drillingMethod ?? '–' },
 		{ label: 'Client', value: borehole.client ?? '–' },
 		{ label: 'Location', value: borehole.location?.place ?? '–' }
-	]);
-
-	// Unique layer colours for the legend.
-	let legendColors = $derived([
-		...new Map(borehole.layers.map((layer) => [layer.color.hex, layer.color])).values()
 	]);
 
 	const documentIcons: Record<BoreholeDocument['type'], typeof FileTextIcon> = {
@@ -63,7 +59,18 @@
 	];
 </script>
 
-<LithologyDefs />
+{#snippet petrography(layer: BoreholeLayer)}
+	{@const composition = layer.petrography.composition}
+	{#if composition}
+		<span class="font-medium">{shortForm(composition)}</span>
+		{describe(composition)}
+	{:else}
+		<span class="opacity-60">Unclassified</span>
+	{/if}
+	<span class="block text-xs opacity-60">{layer.petrography.description}</span>
+{/snippet}
+
+<PatternDefs />
 
 <div class="-m-6 flex h-screen flex-col">
 	<header
@@ -79,7 +86,7 @@
 				<Share2Icon class="size-4" />
 				Share
 			</button>
-			<HelpDrawer colors={legendColors} />
+			<HelpDrawer layers={borehole.layers} />
 		</div>
 	</header>
 
@@ -87,11 +94,17 @@
 		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
 			<!-- Cross section -->
 			<section class="card border border-surface-200-800 bg-surface-50-950 p-4 lg:col-span-1">
-				<h2 class="mb-3 h5">Cross section</h2>
+				<div class="mb-3 flex items-center justify-between gap-2">
+					<h2 class="h5">Cross section</h2>
+					<label class="flex cursor-pointer items-center gap-2 text-sm">
+						<input type="checkbox" class="checkbox" bind:checked={colored} />
+						Colour
+					</label>
+				</div>
 				<BoreholeColumn
 					layers={borehole.layers}
-					elevation={borehole.elevation ?? 0}
 					totalDepth={borehole.totalDepth}
+					{colored}
 					selectedId={selectedLayerId}
 					onselect={(id) => (selectedLayerId = id)}
 				/>
@@ -173,8 +186,7 @@
 									</dd>
 									<dt class="opacity-60">Petrographie</dt>
 									<dd>
-										{lithologies[layer.petrography.lithology].label}
-										<span class="block text-xs opacity-60">{layer.petrography.description}</span>
+										{@render petrography(layer)}
 									</dd>
 									<dt class="opacity-60">Color</dt>
 									<dd class="flex items-center gap-2">
@@ -216,8 +228,7 @@
 											<span class="block text-xs opacity-60">{layer.stratigraphy.name}</span>
 										</td>
 										<td>
-											{lithologies[layer.petrography.lithology].label}
-											<span class="block text-xs opacity-60">{layer.petrography.description}</span>
+											{@render petrography(layer)}
 										</td>
 										<td>
 											<span class="flex items-center gap-2 whitespace-nowrap">
