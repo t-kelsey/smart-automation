@@ -30,5 +30,6 @@ defmodule ApiWeb.Router do
     get "/pipeline_runs/:id", PipelineRunController, :show
     put "/pipeline_runs/:id/status", PipelineRunController, :update_status
     post "/pipeline_runs/:id/stop", PipelineRunController, :stop
+    delete "/pipeline_runs/:id", PipelineRunController, :delete
   end
 end

@@ -348,7 +348,7 @@ file bytes. The pipeline fetches the document's file itself via
 | `document_id` | UUID of an existing document (from `POST /api/documents`). |
 | `config` | Free-form map of per-stage model/effort choices, stored as-is and sent to the pipeline unchanged. |
 
-Submission happens synchronously in this request: the response's `status` reflects whether the pipeline could be reached (`running`) or not (`new` if no `PIPELINE_URL` is configured, `failed` if the pipeline refused the request or couldn't be reached). See [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the full flow this kicks off.
+Submission happens synchronously in this request: the response's `status` reflects whether the pipeline could be reached (`running`) or not (`new` if no pipeline is configured — dev defaults to `http://localhost:8000/execute` in `config/dev.exs`, `PIPELINE_URL` overrides it and an empty `PIPELINE_URL` turns it off — `failed` if the pipeline refused the request or couldn't be reached). See [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the full flow this kicks off.
 
 `201`:
 
@@ -440,6 +440,10 @@ curl -X PUT "http://localhost:4000/api/pipeline_runs/6b1e.../status" \
   -H "Content-Type: application/json" \
   -d '{"status": "failed", "error": "step 2 could not group the pages into boreholes"}'
 ```
+
+### `DELETE /api/pipeline_runs/:id`
+
+Deletes a run (e.g. a stuck one) together with its `exec_stages` and `reports`. A `running` run is cancelled in the pipeline first (best effort). Boreholes the run already created are kept. `204` with no body, `404` if the run does not exist.
 
 ### `POST /api/pipeline_runs/:id/stop`
 

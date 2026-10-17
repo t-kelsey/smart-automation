@@ -109,6 +109,19 @@ export class ApiPipelineRepository implements PipelineRepository {
 		};
 	}
 
+	async delete(id: string): Promise<void> {
+		const path = `/pipeline_runs/${encodeURIComponent(id)}`;
+		let response: Response;
+		try {
+			response = await this.options.fetch(`${this.options.baseUrl}${path}`, { method: 'DELETE' });
+		} catch (cause) {
+			throw new RepositoryError(`API request failed: ${path}`, undefined, { cause });
+		}
+		if (!response.ok) {
+			throw new RepositoryError(`API ${path} returned ${response.status}`, response.status);
+		}
+	}
+
 	async start(documentId: string, config: PipelineConfig): Promise<StartedPipeline> {
 		const path = '/pipeline_runs';
 		let response: Response;

@@ -82,6 +82,16 @@ defmodule ApiWeb.PipelineRunController do
     end
   end
 
+  @doc """
+  Deletes a pipeline run with its stages and report (e.g. a stuck run). Boreholes it created stay.
+  """
+  def delete(conn, %{"id" => id}) do
+    with %PipelineRun{} = pipeline_run <- Boreholes.get_pipeline_run(id) || {:error, :not_found},
+         {:ok, _} <- Boreholes.delete_pipeline_run(pipeline_run) do
+      send_resp(conn, :no_content, "")
+    end
+  end
+
   defp render_run(conn, pipeline_run) do
     exec_stages =
       Boreholes.list_document_exec_stages(pipeline_run.document_id, %{

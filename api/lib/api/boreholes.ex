@@ -588,6 +588,21 @@ defmodule Api.Boreholes do
     end
   end
 
+  @doc """
+  Deletes a pipeline run together with its `exec_stages` and `reports` (matched by `run_id`), e.g.
+  when it is stuck. A run that is still `new`/`running` is asked to cancel first (best effort).
+  Boreholes already created by the run are kept.
+  """
+  def delete_pipeline_run(%PipelineRun{} = pipeline_run) do
+    if pipeline_run.status == "running", do: Api.Pipeline.stop_pipeline_run(pipeline_run)
+
+    Repo.transaction(fn ->
+      from(e in ExecStage, where: e.run_id == ^pipeline_run.id) |> Repo.delete_all()
+      from(r in Report, where: r.run_id == ^pipeline_run.id) |> Repo.delete_all()
+      Repo.delete!(pipeline_run)
+    end)
+  end
+
   # stages that never finished end with their run
   defp stop_open_stages(%PipelineRun{id: id}) do
     now = DateTime.utc_now()
