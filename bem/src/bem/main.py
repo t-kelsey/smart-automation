@@ -43,7 +43,7 @@ def process_file(path: Path, sink, debug: bool) -> int:
 
     With debug, the output of OCR, translation, triage and extraction is saved under output/.
     """
-    document = ocr(path)              # any format -> TextDocument (digital text layer or OCR'd pages)
+    document = ocr_file(path)              # any format -> TextDocument (digital text layer or OCR'd pages)
     if debug:
         save_stage("ocr", path, document)
     document, _ = translate(document)  # local terms -> English, keywords labeled
@@ -53,10 +53,10 @@ def process_file(path: Path, sink, debug: bool) -> int:
     for i, section in enumerate(split(path.name, document)):  # one Borehole per borehole ID
         if debug:
             save_stage("triage", path, section.model_dump_json(indent=2), f"__{i}.json")
-        record = extract(section)     # Borehole -> Borehole (JSON-serialisable)
-        if debug:
-            save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")
-        sink(record)
+        # record = extract(section)     # Borehole -> Borehole (JSON-serialisable)
+        # if debug:
+        #     save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")
+        # sink(record)
         count += 1
     return count
 
