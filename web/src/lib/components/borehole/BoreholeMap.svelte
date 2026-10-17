@@ -38,6 +38,9 @@
 <script lang="ts">
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import * as maplibregl from 'maplibre-gl';
+	// maplibre-gl locates its worker next to its own module via import.meta.url. Vite does not emit
+	// that file in the production build (404, "Worker failed to load"), so ship and point to it explicitly.
+	import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 	import { mount, unmount } from 'svelte';
 	import BoreholeHoverCard from '#lib/components/borehole/BoreholeHoverCard.svelte';
 	import { LocateFixedIcon } from '@lucide/svelte';
@@ -86,6 +89,8 @@
 	}: Props = $props();
 
 	let container: HTMLDivElement;
+	maplibregl.setWorkerUrl(workerUrl);
+
 	let mapInstance: maplibregl.Map | undefined;
 	let locateNow: (() => void) | undefined;
 	let locating = $state(false);
