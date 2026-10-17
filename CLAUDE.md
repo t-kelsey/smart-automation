@@ -52,5 +52,5 @@ Web (run in `web/`):
 
 ## Source of truth
 
-`api/` owns the data model and API response shape (see `docs/elixir-backend-borehole-pipeline.md` and `docs/adr/`). If `web/`'s existing types or mock data disagree with what the backend actually defines/returns, the backend wins — update the frontend's types/mock data to match it, not the other way around. See ADR-0017.
+`api/` owns the data model and API response shape (see `docs/elixir-backend-borehole-pipeline.md` and `docs/adr/`). If `web/`'s existing types or mock data disagree with what the backend actually defines/returns, the backend wins — update the frontend's types/mock data to match it, not the other way around. See ADR-0023.
 

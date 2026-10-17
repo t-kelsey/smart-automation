@@ -42,4 +42,4 @@ Split ingestion into two phases:
 
 - docs/elixir-backend-borehole-pipeline.md
 - ADR-0005 (same raw-provenance pattern on the `bem/` pipeline side)
-- ADR-0011
+- ADR-0012

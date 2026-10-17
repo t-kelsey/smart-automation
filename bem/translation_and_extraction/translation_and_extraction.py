@@ -1,4 +1,4 @@
-"""Translate the OCR markdown to DIN 4023 terms, then extract borehole fields from it (ADR-0007, ADR-0009, ADR-0010).
+"""Translate the OCR markdown to DIN 4023 terms, then extract borehole fields from it (ADR-0007, ADR-0017, ADR-0018).
 
 Translation is a glossary lookup with a local machine-translation fallback (din4023.py, mt.py).
 Extraction is still a stub: it needs a field mapping (ADR-0004), so until then the split step

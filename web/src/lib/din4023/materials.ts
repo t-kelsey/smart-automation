@@ -5,7 +5,7 @@ import type { DinColorKey, Language, Material, MaterialGroup, MaterialKey } from
 const n = (de: string, en: string): Record<Language, string> => ({ de, en });
 
 /**
- * Web material key → id in the standard file and English names (the file is German only, ADR-0011).
+ * Web material key → id in the standard file and English names (the file is German only, ADR-0022).
  * Soils use the ids of `tabelle_1.bodenarten`, rocks and geological terms those of `schraffuren`.
  * Colours of rocks and geological terms (Tables 2 and 3) are not in the file and are kept here.
  */

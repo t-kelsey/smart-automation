@@ -1,15 +1,15 @@
 ---
-id: ADR-0010
+id: ADR-0018
 date: 2026-10-17
 author: Tyler Kelsey
 title: Open-source MarianMT models as the offline machine-translation fallback behind the DIN 4023 glossary
 ---
 
-# ADR-0010 – Open-source MarianMT models as the offline machine-translation fallback behind the DIN 4023 glossary
+# ADR-0018 – Open-source MarianMT models as the offline machine-translation fallback behind the DIN 4023 glossary
 
 ## Context
 
-ADR-0009 translates lithology cells with a glossary. Terms the glossary doesn't cover need a fallback that:
+ADR-0017 translates lithology cells with a glossary. Terms the glossary doesn't cover need a fallback that:
 
 - is an open-source model that can be downloaded and then runs locally, with no paid service or API (ADR-0001: the data must not leave the machine),
 - covers the source languages in our logs (Spanish, Danish, Norwegian, German, French, plus English),
@@ -60,6 +60,6 @@ The glossary stays the authority for the output. A machine translation is only u
 
 ## References
 
-- ADR-0001, ADR-0007, ADR-0009
+- ADR-0001, ADR-0007, ADR-0017
 - Helsinki-NLP OPUS-MT models on Hugging Face: https://huggingface.co/Helsinki-NLP
 - Argos Translate Python 3.14 issue: https://github.com/argosopentech/argos-translate/issues/517

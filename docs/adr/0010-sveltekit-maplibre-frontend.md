@@ -1,11 +1,11 @@
 ---
-id: ADR-0009
+id: ADR-0010
 date: 2026-10-17
 author: jl
 title: Frontend stack - SvelteKit app with MapLibre for the interactive map
 ---
 
-# ADR-0009 – Frontend stack - SvelteKit app with MapLibre for the interactive map
+# ADR-0010 – Frontend stack - SvelteKit app with MapLibre for the interactive map
 
 ## Context
 
@@ -13,7 +13,7 @@ title: Frontend stack - SvelteKit app with MapLibre for the interactive map
 
 ## Decision
 
-Use the existing SvelteKit app as the frontend, with MapLibre GL JS for the interactive map. The map consumes GeoJSON directly from the Phoenix API (see ADR-0011); MapLibre and GeoJSON both use WGS84 lon/lat, so no coordinate conversion is needed in the frontend.
+Use the existing SvelteKit app as the frontend, with MapLibre GL JS for the interactive map. The map consumes GeoJSON directly from the Phoenix API (see ADR-0012); MapLibre and GeoJSON both use WGS84 lon/lat, so no coordinate conversion is needed in the frontend.
 
 ## Pros
 

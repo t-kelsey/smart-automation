@@ -1,11 +1,11 @@
 ---
-id: ADR-0010
+id: ADR-0011
 date: 2026-10-17
 author: jl
 title: Local Postgres+PostGIS via Docker Compose for development
 ---
 
-# ADR-0010 – Local Postgres+PostGIS via Docker Compose for development
+# ADR-0011 – Local Postgres+PostGIS via Docker Compose for development
 
 ## Context
 

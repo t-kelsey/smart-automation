@@ -1,4 +1,4 @@
-"""Format keys from BoreholeDataFormat.xlsx, each mapped to its backend target and value kind (ADR-0012).
+"""Format keys from BoreholeDataFormat.xlsx, each mapped to its backend target and value kind (ADR-0020).
 
 FORMAT_TARGETS gives the target path for each key in the xlsx. Paths follow
 docs/elixir-backend-borehole-pipeline.md: fixed columns where the backend has one, and
@@ -7,7 +7,7 @@ borehole values to `boreholes`, so the split step can route each value to its ta
 
 VALUE_KIND says how a value under that key is translated (see din4023.py):
 - identifier, name, date, coordinate, crs, number: kept unchanged (extraction converts them, ADR-0002/0004)
-- soil: DIN 4023 soil and rock term (ADR-0009)
+- soil: DIN 4023 soil and rock term (ADR-0017)
 - colour: colour words only
 - text: free text, machine-translated
 
@@ -18,7 +18,7 @@ FORMAT_LABELS gives the source-language labels that appear as table headers or
 import difflib
 import re
 
-# Layer depth columns are not keys in the xlsx; the layer table needs them (ADR-0012).
+# Layer depth columns are not keys in the xlsx; the layer table needs them (ADR-0020).
 FORMAT_TARGETS: dict[str, str] = {
     "BoreholeID": "boreholes.external_id",
     "BoreholeName": "boreholes.name",
@@ -65,7 +65,7 @@ FORMAT_TARGETS: dict[str, str] = {
     "HydraulicCoefficient": "borehole_layers.metadata.hydraulic_coefficient_m_s",
     "E-Modulus": "borehole_layers.metadata.e_modulus_mpa",
     "PoissonsRatio": "borehole_layers.metadata.poissons_ratio",
-    # Not xlsx keys: layer top and bottom depth, from the layer table (ADR-0012).
+    # Not xlsx keys: layer top and bottom depth, from the layer table (ADR-0020).
     "LayerDepthFrom": "borehole_layers.depth_from_m",
     "LayerDepthTo": "borehole_layers.depth_to_m",
 }

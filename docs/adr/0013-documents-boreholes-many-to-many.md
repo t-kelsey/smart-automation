@@ -1,11 +1,11 @@
 ---
-id: ADR-0012
+id: ADR-0013
 date: 2026-10-17
 author: jl
 title: documents and boreholes are many-to-many, not a document_id foreign key
 ---
 
-# ADR-0012 – documents and boreholes are many-to-many, not a document_id foreign key
+# ADR-0013 – documents and boreholes are many-to-many, not a document_id foreign key
 
 ## Context
 
@@ -36,4 +36,4 @@ Replace `boreholes.document_id` with a join table `borehole_documents` (`borehol
 ## References
 
 - docs/elixir-backend-borehole-pipeline.md
-- ADR-0011
+- ADR-0012

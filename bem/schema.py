@@ -36,5 +36,5 @@ class Borehole(BaseModel):
     # fields we couldn't map yet (ADR-0005).
     raw_markdown: str = ""
     # Values in this borehole's section that could not be translated (translate_error:...).
-    # The API should keep the record unverified until these are resolved (ADR-0012).
+    # The API should keep the record unverified until these are resolved (ADR-0020).
     translate_errors: list[str] = Field(default_factory=list)

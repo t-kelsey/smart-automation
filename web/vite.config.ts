@@ -7,7 +7,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	server: {
-		// ADR-0011: the DIN 4023 standard file lives outside web/
+		// ADR-0022: the DIN 4023 standard file lives outside web/
 		fs: { allow: ['..'] },
 		// Dev proxy for PUBLIC_DATA_SOURCE=api with the default PUBLIC_API_URL=/api
 		proxy: { '/api': 'http://localhost:4000' }

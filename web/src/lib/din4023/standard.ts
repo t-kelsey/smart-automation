@@ -1,6 +1,6 @@
 import raw from '../../../../standards/din-4023/din-4023.json';
 
-/** Typed view of `standards/din-4023/din-4023.json` (ADR-0011), the shared source of truth. */
+/** Typed view of `standards/din-4023/din-4023.json` (ADR-0022), the shared source of truth. */
 export interface StandardFile {
 	norm: { ausgabe_schraffuren: string; ausgabe_tabelle_1: string };
 	farben: { name: string; rgb: number[]; hex: string; ral: number }[];

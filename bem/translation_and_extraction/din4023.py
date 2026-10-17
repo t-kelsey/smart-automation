@@ -1,4 +1,4 @@
-"""DIN 4023 glossary and translation of the whole OCR markdown (ADR-0009 to ADR-0012).
+"""DIN 4023 glossary and translation of the whole OCR markdown (ADR-0017 to ADR-0020).
 
 Every label and value in the markdown becomes a target:
 - labels (table headers, "label: value" lines) resolve to a backend target path (format_keys.py),

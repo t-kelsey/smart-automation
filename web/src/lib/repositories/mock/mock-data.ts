@@ -173,7 +173,7 @@ const rockSets = {
 	sedimentary: sedimentaryRocks
 };
 
-/** Table 1 soil ids of the shared standard file (ADR-0011) mapped to the drawing model keys. */
+/** Table 1 soil ids of the shared standard file (ADR-0022) mapped to the drawing model keys. */
 const soilKeys: Record<string, SoilKey> = {
 	grosser_block: 'largeBoulder',
 	block: 'boulder',

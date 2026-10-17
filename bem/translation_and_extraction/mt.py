@@ -1,4 +1,4 @@
-"""Local machine translation for terms the glossary doesn't cover (ADR-0010, ADR-0011).
+"""Local machine translation for terms the glossary doesn't cover (ADR-0018, ADR-0019).
 
 Uses open-source MarianMT models (Helsinki-NLP opus-mt-<src>-en) from Hugging Face.
 Each model is downloaded once (download_models.py) and then loaded from the local cache.

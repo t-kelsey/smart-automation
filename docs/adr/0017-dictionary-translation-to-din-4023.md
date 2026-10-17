@@ -1,11 +1,11 @@
 ---
-id: ADR-0009
+id: ADR-0017
 date: 2026-10-17
 author: Tyler Kelsey
 title: Translate soil and rock terms with a DIN 4023 glossary instead of an LLM
 ---
 
-# ADR-0009 – Translate soil and rock terms with a DIN 4023 glossary instead of an LLM
+# ADR-0017 – Translate soil and rock terms with a DIN 4023 glossary instead of an LLM
 
 ## Context
 

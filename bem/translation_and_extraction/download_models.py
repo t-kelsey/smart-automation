@@ -1,4 +1,4 @@
-"""Download the translation models once, while online (ADR-0010, ADR-0011).
+"""Download the translation models once, while online (ADR-0018, ADR-0019).
 
 Run from bem/ before the event, then use HF_HUB_OFFLINE=1 for runs:
     python download_models.py

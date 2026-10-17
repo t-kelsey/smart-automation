@@ -1,11 +1,11 @@
 ---
-id: ADR-0010
+id: ADR-0021
 date: 2026-10-17
 author: Kasimir Uihlein
 title: DIN 4023 as the drawing standard for borehole cross sections
 ---
 
-# ADR-0010 – DIN 4023 as the drawing standard for borehole cross sections
+# ADR-0021 – DIN 4023 as the drawing standard for borehole cross sections
 
 ## Context
 

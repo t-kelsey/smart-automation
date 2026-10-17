@@ -1,25 +1,25 @@
 ---
-id: ADR-0011
+id: ADR-0019
 date: 2026-10-17
 author: Tyler Kelsey
 title: Colour words, header fallback, Norwegian model order and a one-time model download
 ---
 
-# ADR-0011 – Colour words, header fallback, Norwegian model order and a one-time model download
+# ADR-0019 – Colour words, header fallback, Norwegian model order and a one-time model download
 
 ## Context
 
-ADR-0009 and ADR-0010 left four open points:
+ADR-0017 and ADR-0018 left four open points:
 
 - **Colour** was dropped from translated cells, though the brief says colour carries meaning. The colour field of the format is `Soil/Rockprofile` (color/pattern).
-- **Norwegian** had no model: ADR-0010 used the Danish model as a stand-in.
+- **Norwegian** had no model: ADR-0018 used the Danish model as a stand-in.
 - **Column detection** depended only on the table header text, which Docling sometimes garbles.
 - **Setup** had no step for downloading the translation models before the event.
 
 ## Decision
 
 - **Colour** (`bem/din4023.py`, `translate_colour`): colour words are mapped to German colour names, using the words of DIN 4023 Tables 1–3 and Annex A where they exist. Tints ("rojizo", "amarillento") are added in front of the base colour, and lightness ("claro", "oscuro") comes first. "castaño rojizo claro" → `hellrotbraun`. The colour is written after the soil name as `; Farbe: <colour>`. Colours without a DIN word (e.g. "weiß") use the nearest German name.
-- **Norwegian** (`bem/mt.py`): the model list for `no` tries `Helsinki-NLP/opus-mt-no-en` first and falls back to the Danish model. This supersedes the Norwegian point in ADR-0010. The first download shows which one loaded.
+- **Norwegian** (`bem/mt.py`): the model list for `no` tries `Helsinki-NLP/opus-mt-no-en` first and falls back to the Danish model. This supersedes the Norwegian point in ADR-0018. The first download shows which one loaded.
 - **Column detection** (`bem/din4023.py`, `_translate_table`): a column is lithology if its header matches a lithology keyword. If no header matches, the columns where at least one cell is a known glossary term are used instead. The `grund` keyword is removed, because "Grundvand" (groundwater) is not a lithology column.
 - **Setup** (`bem/download_models.py`): one command downloads every candidate model while online. Runs then use `HF_HUB_OFFLINE=1`.
 
@@ -49,5 +49,5 @@ ADR-0009 and ADR-0010 left four open points:
 
 ## References
 
-- ADR-0009, ADR-0010
+- ADR-0017, ADR-0018
 - DIN 4023:2023-02, Tables 1–3 and Annex A (colour words)

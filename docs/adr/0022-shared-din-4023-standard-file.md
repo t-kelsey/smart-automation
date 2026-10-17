@@ -1,15 +1,15 @@
 ---
-id: ADR-0011
+id: ADR-0022
 date: 2026-10-17
 author: Kasimir Uihlein
 title: Shared DIN 4023 standard file for bem, api and web
 ---
 
-# ADR-0011 – Shared DIN 4023 standard file for bem, api and web
+# ADR-0022 – Shared DIN 4023 standard file for bem, api and web
 
 ## Context
 
-All three components need the same vocabulary for soils and rocks: `bem` normalises extracted lithology, `api` stores and validates it, and `web` draws it (ADR-0010). Today the only encoding of DIN 4023 is TypeScript in `web/src/lib/din4023/` (materials, colours, patterns), so `bem` (Python) and `api` (Elixir) cannot use it and would have to copy it by hand. Copies drift, and the sources already disagree in places:
+All three components need the same vocabulary for soils and rocks: `bem` normalises extracted lithology, `api` stores and validates it, and `web` draws it (ADR-0021). Today the only encoding of DIN 4023 is TypeScript in `web/src/lib/din4023/` (materials, colours, patterns), so `bem` (Python) and `api` (Elixir) cannot use it and would have to copy it by hand. Copies drift, and the sources already disagree in places:
 
 - `data/Standards_Formats/DIN 4023.pdf` is the 2023-02 edition (replaces 2006-02), while the hatch sheet `DIN 4023 Schraffuren.pdf` is 2006-02.
 - The 2023 Table 1 adds "Grobschluff" and "Großer Block", which have no hatch on the 2006 sheet.
@@ -53,7 +53,7 @@ All three components need the same vocabulary for soils and rocks: `bem` normali
 ## Consequences
 
 - `bem`, `api` and `web` should reference ids from this file for hatches and Table 1 soil types.
-- ADR-0010 states 49 materials and that the sheet equals Table 1. The sheet actually holds 47 hatches and covers more than Table 1. This ADR does not change ADR-0010; the file is a reference, not a replacement.
+- ADR-0021 states 49 materials and that the sheet equals Table 1. The sheet actually holds 47 hatches and covers more than Table 1. This ADR does not change ADR-0021; the file is a reference, not a replacement.
 - Extending coverage (Tables 2 to 6) or adding English labels means editing this file and noting it in a new ADR.
 - If the licence question above is answered "no", the file moves out of version control and is loaded from `data/`.
 
@@ -61,5 +61,5 @@ All three components need the same vocabulary for soils and rocks: `bem` normali
 
 - `standards/din-4023/din-4023.json`
 - DIN 4023:2023-02, Table 1 (p. 10) and Annex A, Table A.1 (p. 17); DIN 4023 Schraffuren, 2006-02 (`data/Standards_Formats/`, confidential, not committed)
-- ADR-0010 – DIN 4023 as the drawing standard for borehole cross sections
+- ADR-0021 – DIN 4023 as the drawing standard for borehole cross sections
 - ADR-0009 – Frontend layered data architecture

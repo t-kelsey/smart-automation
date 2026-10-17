@@ -1,11 +1,11 @@
 ---
-id: ADR-0017
+id: ADR-0023
 date: 2026-10-17
 author: jl
 title: Backend data model and API shape are the source of truth
 ---
 
-# ADR-0017 – Backend data model and API shape are the source of truth
+# ADR-0023 – Backend data model and API shape are the source of truth
 
 ## Context
 
@@ -13,7 +13,7 @@ title: Backend data model and API shape are the source of truth
 
 ## Decision
 
-`api/`'s data model and the JSON it actually returns (as documented in `docs/elixir-backend-borehole-pipeline.md` and the corresponding ADRs, in particular ADR-0011 and ADR-0012) is the single source of truth. Where the frontend's existing types/mock data disagree with it, the frontend updates its types and mock data to match the backend — not the other way around.
+`api/`'s data model and the JSON it actually returns (as documented in `docs/elixir-backend-borehole-pipeline.md` and the corresponding ADRs, in particular ADR-0012 and ADR-0013) is the single source of truth. Where the frontend's existing types/mock data disagree with it, the frontend updates its types and mock data to match the backend — not the other way around.
 
 ## Pros
 
@@ -37,6 +37,6 @@ title: Backend data model and API shape are the source of truth
 ## References
 
 - docs/elixir-backend-borehole-pipeline.md
-- ADR-0011
 - ADR-0012
+- ADR-0013
 - CLAUDE.md

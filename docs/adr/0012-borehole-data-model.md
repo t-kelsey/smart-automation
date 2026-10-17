@@ -1,11 +1,11 @@
 ---
-id: ADR-0011
+id: ADR-0012
 date: 2026-10-17
 author: jl
 title: Borehole data model - documents, boreholes, and borehole_layers
 ---
 
-# ADR-0011 – Borehole data model - documents, boreholes, and borehole_layers
+# ADR-0012 – Borehole data model - documents, boreholes, and borehole_layers
 
 ## Context
 
