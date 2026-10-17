@@ -32,9 +32,8 @@ services:
       PHX_PUBLIC_SCHEME: http
       SEED_MOCK_DATA: ${SEED_MOCK_DATA:-false}
       MOCK_BOREHOLES: ${MOCK_BOREHOLES:-1000}
-      # Where uploaded documents are sent for extraction, e.g. http://pipeline:8000/execute
-      # (needs `docker compose --profile bem up`). Empty: uploads are stored but not processed.
-      PIPELINE_URL: ${PIPELINE_URL:-}
+      # Where uploaded documents are sent for extraction. Empty: uploads are stored but not processed.
+      PIPELINE_URL: ${PIPELINE_URL-http://pipeline:8000/execute}
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
@@ -52,6 +51,23 @@ services:
       API_INTERNAL_URL: http://api:4000
     ports:
       - "${WEB_PORT:-3000}:3000"
+
+  pipeline:
+    # BEM extraction pipeline (FastAPI, POST /execute); the API sends uploaded documents here.
+    build:
+      context: .
+      dockerfile: bem/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      BEM_API_URL: http://api:4000
+      BEM_ENV: ${BEM_ENV:-prod}
+      # Auth for the `claude` CLI: either an API key or a token from `claude setup-token`
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+    ports:
+      - "${BEM_PORT:-8000}:8000"
 
 volumes:
   db_data:

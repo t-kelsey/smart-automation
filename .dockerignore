@@ -11,5 +11,8 @@ api/_build
 api/deps
 api/priv/storage/*
 api/priv/uploads/*
-bem
+bem/.venv
+bem/out
+bem/.env
+**/__pycache__
 docs
