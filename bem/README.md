@@ -1,174 +1,70 @@
-# bem – borehole extraction pipeline
+# claude_test
 
-Pipeline (ADR-0001, ADR-0007): **OCR → translation → triage → extraction (Qwen) → output**.
-`src/bem/main.py` runs all stages on any number of files or folders; each stage can also be run
-alone (sections 1-3 below).
+Experiment: turn a borehole PDF into payloads for `POST /api/boreholes`, using a
+pipeline of `claude -p` calls with different models and effort levels.
 
-```
-report.pdf ─ocr─▶ markdown ─translate─▶ markdown ─triage─▶ one Borehole per ID ─qwen─▶ Borehole ─▶ api | json | print
-```
+## Pipeline
 
-Triage splits a report into one section per borehole ID, and extraction runs once per section.
-With `--debug`, every stage writes its result under `output/` (gitignored, it holds confidential text):
+| # | Step | Model | Effort | Input → output |
+|---|------|-------|--------|----------------|
+| 1 | Filter pages | haiku | high | PDF → PDF with only real borehole log pages (classified in chunks of 10 pages) |
+| 2 | Split boreholes | haiku | medium | filtered PDF → one PDF per borehole |
+| 3 | Extract | sonnet | high | one borehole PDF → all data in the original wording (JSON) |
+| 4 | Transform | haiku | high | extraction JSON → English, DB-shaped payload (no tools, text only) |
 
-```
-output/ocr/<folder>__<file>.md   output/translate/<folder>__<file>.md
-output/triage/<folder>__<file>__<n>.json   output/extraction/<folder>__<file>__<n>.json
-```
+Step 3 also checks that the file holds exactly one borehole (`is_single_borehole`).
+Step 4 targets the `boreholes` / `borehole_layers` columns from `api/priv/repo/migrations`
+and the request shape in `docs/api-reference.md`; data without a column goes to `metadata`.
+It then runs the API's validation rules locally (`validation_issues`). Nothing is posted to the API.
 
-Once the pipeline works end to end, see [`API_INTEGRATION.md`](API_INTEGRATION.md) for how to
-report stage results and the final boreholes to `api/`.
+Code: `pipeline/steps.py` (steps and prompts), `pipeline/schemas.py` (JSON schemas),
+`pipeline/claude_cli.py` (CLI wrapper, token/cost accounting), `pipeline/pdfutil.py`.
 
-All commands run from this folder (`bem/`) with [uv](https://docs.astral.sh/uv/). The first
-`uv run` creates `.venv` and installs the dependencies from `uv.lock` (Python 3.14 is required;
-uv downloads it if missing).
+## Requirements
 
-```bash
-cd bem
+- [uv](https://docs.astral.sh/uv/) and the [Claude Code CLI](https://claude.com/claude-code) on `PATH`, logged in
+- **poppler** (`brew install poppler`, checked at start): without `pdftoppm`, the Read tool cannot render PDF
+  pages, so Claude only sees the text layer. That works for digital PDFs but not for scans,
+  and colours and hatch patterns are lost.
+
+## Usage
+
+```sh
 uv sync
+uv run python -m pipeline path/to/report.pdf
+# options: --out DIR (default claude_test/out)  --chunk-size 10  --workers 4
 ```
 
-## Run the full pipeline
+Progress and the final report (time, tokens, cost per step) go to stderr.
 
-`uv run bem` calls `bem.main:main` (entry point in `pyproject.toml`). `python -m bem.main` does the same.
-It needs the model server from section 3 and the translation models from section 2.
+## Output
 
-```bash
-uv run bem <file-or-dir>... [--to print|json|api] [--out-dir DIR] [--api-url URL] [--debug]
+Everything is written to `out/<pdf-name>/` (git-ignored). Every file name is prefixed with
+the run id (`YYYYMMDD-HHMMSS_`, the start time of the execution), the same for all files of one
+run, e.g. `20261017-173012_borehole_01.json`. The run id is printed at start:
 
-uv run bem ../data/BoreholeData/<folder> --to json --debug   # → out/<file>__<borehole>.json
+```
+01_filter/   classification.json, borehole_pages.pdf, chunks/
+02_split/    grouping.json, borehole_NN.pdf
+03_extract/  borehole_NN.json     raw extraction
+04_transform/ borehole_NN.json    {payload, validation_issues}
+report.json  per-step time, tokens, cost
+result.json  final payloads for all boreholes
 ```
 
-| Option | Meaning |
-|---|---|
-| `inputs` | files (`.pdf`, `.png`, `.jpg`, `.tif`, `.docx`) or folders, searched recursively |
-| `--to` | `print` (default) to the terminal, `json` to one file per borehole, `api` to POST to the API |
-| `--out-dir DIR` | where `--to json` writes (default `out/`) |
-| `--api-url URL` | API base URL for `--to api`, default `http://localhost:4000/api` |
-| `--debug` | save the intermediate stage results under `output/` |
+Time per step is wall clock; calls inside a step run in parallel (`--workers`).
+Cost is what the CLI reports, so it includes Claude Code's own system prompt
+(roughly 40k cached tokens per call), which dominates small inputs.
 
-- A file that fails is logged and skipped; the run exits with an error listing the failed files.
-- `--to api` (ADR-0032, `src/bem/api.py`): each borehole is created with `POST /api/boreholes`. If the
-  input file is named `<document_id>.<ext>` (what `mix documents.backfill` produces, ADR-0014), the
-  borehole is linked to that document and every stage result is reported with the `PUT` endpoints
-  (see [`API_INTEGRATION.md`](API_INTEGRATION.md)). Other file names only create the borehole, with a warning.
-- The borehole payload (`Borehole.to_api_dict()` in `src/bem/schema.py`) puts `source_file` and
-  `translate_errors` into `metadata`, and leaves out the raw markdown. `--to api` wraps it as
-  `{"borehole", "layers", "document_id"}`.
+## Data confidentiality
 
-## 1. OCR (Docling): document → markdown
+Every PDF page is sent to Claude. Do not run this on the confidential files in
+`../data/` (see the root `CLAUDE.md`). `out/` contains copies of the input pages
+and is git-ignored; delete it when done.
 
-`src/bem/ocr.py` converts one PDF or image to markdown. Every page is OCR'd, even digital PDFs,
-because the text layer loses table structure (ADR-0007, ADR-0008). `ocr_file(path)` returns the
-markdown as a string and has no command-line interface, so use the full pipeline with `--debug`, or:
+## Known limitations
 
-```bash
-uv run python -c "
-from pathlib import Path
-from bem.ocr import ocr_file
-path = Path('../data/BoreholeData/<folder>/<report>.pdf')
-out = Path('output/ocr') / f'{path.parent.name}__{path.stem}.md'
-out.parent.mkdir(parents=True, exist_ok=True)
-out.write_text(ocr_file(path), encoding='utf-8')
-"
-```
-
-- Output: `output/ocr/<parent-folder>__<file-name>.md` (the folder name is a prefix, because different
-  reports share file names such as `Report01.pdf`; `--debug` uses the same names).
-- The first run downloads the Docling and EasyOCR models, so it is slow.
-- In the full pipeline, `unload_ocr()` (`src/bem/ocr.py`) runs right after the OCR stage of each file. It
-  drops the Docling converter and empties the CUDA cache, so the OCR models do not hold (GPU) memory
-  while Qwen runs. The next file loads them again, which costs some seconds per file.
-- Quick check with Docling's default settings (no forced OCR), printing to the terminal or a file:
-  ```bash
-  uv run python tests/docling_test.py <file.pdf>
-  uv run python tests/docling_test.py <file.pdf> -o output/ocr/<name>.md
-  ```
-
-## 2. Translation: markdown → English with standard keys
-
-Translates labels and values to English and maps labels to the borehole format keys (ADR-0017 to
-ADR-0020). Values it cannot translate are marked `translate_error:<text>`.
-
-```bash
-# once, while online: download the local MarianMT translation models (ADR-0018)
-uv run python -m bem.translation_and_labeling.download_models
-
-# translate every output/ocr/*.md → output/translate/*.md
-uv run python tests/translation_test.py
-
-# same, but make sure nothing is fetched from the internet
-HF_HUB_OFFLINE=1 uv run python tests/translation_test.py
-```
-
-- It prints the number of `translate_error` values per file and lists them.
-- It is a script, not a pytest test: it has no assertions.
-
-## 3. Extraction (Qwen): translated markdown → JSON
-
-In the full pipeline, `extract(section)` in `src/bem/extraction/extract.py` does this for each triaged
-borehole. The command below runs it on one translated file on its own (no triage).
-
-Sends one translated file to a Qwen model behind an OpenAI-compatible server, validates the result,
-and writes JSON in the backend's shape (`boreholes` + `borehole_layers`, ADR-0012, ADR-0023).
-
-Start a model server first (default: Ollama).
-
-Install Ollama (Linux; on macOS/Windows use the installer from <https://ollama.com/download>), then pull Qwen:
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh   # once; on Linux this also starts the service
-ollama pull qwen3.5:2b      # once, downloads the model
-ollama serve                # skip if already running; check with `ollama ps`
-ollama run qwen3.5:2b "hi"  # optional: quick check that the model answers
-```
-
-With Docker, `docker compose up ollama` (repo root) starts Ollama and pulls the model named in
-`BEM_MODEL_NAME` by itself.
-
-Run the extraction on one translated file:
-
-```bash
-uv run python -m bem.extraction output/translate/AF01.md              # → output/extraction/AF01.json
-uv run python -m bem.extraction output/translate/AF01.md --markdown   # also → AF01.md (readable tables)
-uv run python -m bem.extraction output/translate/AF01.md --out-dir results
-```
-
-| Option | Meaning |
-|---|---|
-| `input` | translated text or markdown file (one borehole report) |
-| `--out-dir DIR` | output folder (default `output/extraction`) |
-| `--markdown` | also write the record as markdown tables |
-| `--model NAME` | model name (default from `settings.toml`, `qwen3.5:2b`) |
-| `--base-url URL` | OpenAI-compatible server (default `http://localhost:11434/v1`) |
-| `--prompt-file FILE` | system prompt file, for trying a prompt without editing the default |
-
-Using a larger Qwen on a vLLM server:
-
-```bash
-vllm serve Qwen/Qwen3-32B --port 8000
-uv run python -m bem.extraction output/translate/AF01.md \
-  --model Qwen/Qwen3-32B --base-url http://localhost:8000/v1
-```
-
-The output JSON has `source_file`, `model`, `extracted_at`, `status` (`ok`, `warning` or `error`),
-`issues`, and `record`. `record` is the borehole in the API's shape, with layers numbered by `position`.
-
-### Configuration
-
-Edit these files in `src/bem/extraction/`, no code changes needed:
-
-| File | What it holds |
-|---|---|
-| `config/system_prompt.md` | the system prompt sent to Qwen |
-| `config/settings.toml` | model name, server URL, temperature, Qwen thinking on/off, retries |
-| `schema.py` | the JSON output format (Pydantic model). Its field descriptions are part of what the model sees |
-| `validate.py` | consistency and grounding checks, and the `KNOWN_*` vocabularies |
-
-## Run the stages by hand for one report
-
-```bash
-uv run python -c "from pathlib import Path; from bem.ocr import ocr_file; p = Path('../data/BoreholeData/<folder>/<report>.pdf'); o = Path('output/ocr/<folder>__<report>.md'); o.parent.mkdir(parents=True, exist_ok=True); o.write_text(ocr_file(p), encoding='utf-8')"
-uv run python tests/translation_test.py
-uv run python -m bem.extraction output/translate/<folder>__<report>.md --markdown
-```
+- Step 4 uses a small model for translation and the unit/coordinate conversions
+  (e.g. Gauss-Krüger to EPSG); check `validation_issues` and the metadata notes.
+- Step 2 reads the whole filtered PDF in one call; very long ones need many Read calls.
+- The API requires `elevation_m >= 0`, so boreholes below sea level fail validation.
