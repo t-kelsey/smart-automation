@@ -26,6 +26,25 @@ defmodule ApiWeb.PipelineRunController do
   end
 
   @doc """
+  Lists pipeline runs for the `pipelines/` overview page (see docs/api-reference.md). Optional
+  query params: `status`/`document_id` (exact match), `limit`/`offset` paging. Newest first.
+  """
+  def index(conn, params) do
+    limit = parse_int(params["limit"])
+    offset = parse_int(params["offset"]) || 0
+
+    filters =
+      %{offset: offset}
+      |> put_filter(:status, params["status"])
+      |> put_filter(:document_id, params["document_id"])
+      |> put_filter(:limit, limit)
+
+    %{entries: entries, total: total} = Boreholes.list_pipeline_runs(filters)
+
+    render(conn, :index, entries: entries, total: total, limit: limit, offset: offset)
+  end
+
+  @doc """
   The pipeline run plus its `exec_stages` (newest first) and `report` (`nil` until the pipeline
   has posted one), for the frontend to poll live progress.
   """
@@ -72,6 +91,18 @@ defmodule ApiWeb.PipelineRunController do
     else
       nil -> {:error, :not_found}
       {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp put_filter(filters, _key, nil), do: filters
+  defp put_filter(filters, key, value), do: Map.put(filters, key, value)
+
+  defp parse_int(nil), do: nil
+
+  defp parse_int(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} -> int
+      _ -> nil
     end
   end
 end

@@ -287,6 +287,44 @@ curl -OJ "http://localhost:4000/api/documents/c7a2.../file?download=1"
 
 Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `bem/` pipeline (`claude_test/` in ADR-0034/ADR-0035) runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
 
+### `GET /api/pipeline_runs`
+
+Lists pipeline runs for the `pipelines/` overview page, newest first (`inserted_at` desc). Each entry carries `document_filename` (the linked document's `original_filename`) so the table doesn't need a second round-trip per row; `exec_stages`/`report` are left out of the list — use [`GET /api/pipeline_runs/:id`](#get-apipipeline_runsid) for those.
+
+### Query parameters (all optional)
+
+| Param | Format | Description |
+|---|---|---|
+| `status` | `new` / `running` / `completed` / `failed` | Exact match. |
+| `document_id` | UUID | Only runs for this document. |
+| `limit` | integer ≥ 1 | Page size. Omit to get every match. |
+| `offset` | integer ≥ 0 | Number of matches to skip. Default `0`. |
+
+### Response `200 OK`
+
+```json
+{
+  "data": [
+    {
+      "id": "6b1e...",
+      "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "document_filename": "report.pdf",
+      "status": "running",
+      "config": { "extract": "sonnet" },
+      "inserted_at": "2026-10-17T18:00:00Z",
+      "updated_at": "2026-10-17T18:00:05Z"
+    }
+  ],
+  "total": 12,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+```bash
+curl "http://localhost:4000/api/pipeline_runs?status=running&limit=20&offset=0"
+```
+
 ### `POST /api/pipeline_runs`
 
 Creates a pipeline run for a document and submits it to the pipeline (ADR-0035). The frontend calls this once it has a `config` to submit — uploading (`POST /api/documents`) no longer does this by itself.
@@ -301,6 +339,7 @@ file bytes. The pipeline fetches the document's file itself via
   "config": { "extract": "sonnet", "transform": "opus" }
 }
 ```
+
 
 | Field | Description |
 |---|---|

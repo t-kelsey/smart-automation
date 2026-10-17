@@ -1,9 +1,30 @@
 defmodule ApiWeb.PipelineRunJSON do
   @doc """
+  Renders the pipeline runs list (`index`): one row per run with `document_filename`, no
+  `exec_stages`/`report` (those stay on `GET /api/pipeline_runs/:id`, for a light table view).
+  """
+  def index(%{entries: entries, total: total, limit: limit, offset: offset}) do
+    %{
+      data: Enum.map(entries, &entry_data/1),
+      total: total,
+      limit: limit,
+      offset: offset
+    }
+  end
+
+  @doc """
   Renders a pipeline run. `exec_stages`/`report` are included only when given (`show`/
   `update_status`); omitted right after `create`, where there is nothing to show yet.
   """
   def show(assigns), do: %{data: data(assigns)}
+
+  defp entry_data(pipeline_run) do
+    data(%{pipeline_run: pipeline_run})
+    |> Map.put(:document_filename, document_filename(pipeline_run))
+  end
+
+  defp document_filename(%{document: %Ecto.Association.NotLoaded{}}), do: nil
+  defp document_filename(%{document: document}), do: document.original_filename
 
   defp data(%{pipeline_run: pipeline_run} = assigns) do
     %{

@@ -412,6 +412,41 @@ defmodule Api.Boreholes do
     end
   end
 
+  @doc """
+  Lists pipeline runs for the overview page (`filters["status"]`/`filters["document_id"]` exact
+  match, `filters[:limit]`/`filters[:offset]` paging), newest first. Preloads `:document` so the
+  caller can read `original_filename` without a per-row round-trip.
+  """
+  @spec list_pipeline_runs(map()) :: %{entries: [PipelineRun.t()], total: non_neg_integer()}
+  def list_pipeline_runs(filters \\ %{}) do
+    query = filtered_pipeline_runs_query(filters)
+
+    total = Repo.aggregate(query, :count, :id)
+
+    entries =
+      query
+      |> order_by([pr], desc: pr.inserted_at, asc: pr.id)
+      |> page(filters)
+      |> Repo.all()
+      |> Repo.preload(:document)
+
+    %{entries: entries, total: total}
+  end
+
+  defp filtered_pipeline_runs_query(filters) do
+    from(pr in PipelineRun)
+    |> maybe_filter_pipeline_run(:status, filters["status"] || filters[:status])
+    |> maybe_filter_pipeline_run(:document_id, filters["document_id"] || filters[:document_id])
+  end
+
+  defp maybe_filter_pipeline_run(query, _field, nil), do: query
+
+  defp maybe_filter_pipeline_run(query, :status, status),
+    do: where(query, [pr], pr.status == ^status)
+
+  defp maybe_filter_pipeline_run(query, :document_id, document_id),
+    do: where(query, [pr], pr.document_id == ^document_id)
+
   @doc "Sets the status of a pipeline run."
   def update_pipeline_run_status(%PipelineRun{} = pipeline_run, status) do
     pipeline_run |> PipelineRun.changeset(%{status: status}) |> Repo.update()

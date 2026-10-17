@@ -24,6 +24,7 @@ defmodule ApiWeb.Router do
     post "/reports", ReportController, :create
 
     post "/pipeline_runs", PipelineRunController, :create
+    get "/pipeline_runs", PipelineRunController, :index
     get "/pipeline_runs/:id", PipelineRunController, :show
     put "/pipeline_runs/:id/status", PipelineRunController, :update_status
   end
