@@ -70,7 +70,8 @@ def process_file(path: Path, sink, debug: bool, client: ApiClient | None = None)
     if track:
         track.put_stage(document_id, "translation", {"translated_markdown": document, "translate_errors": translate_errors})
 
-    sections = split(path.name, document)  # one Borehole per borehole ID
+    # STAGE 3 triage: split into individual boreholes
+    sections = split(path.name, document)
     if track:
         track.put_triage_sections(document_id, sections)
 
@@ -80,18 +81,19 @@ def process_file(path: Path, sink, debug: bool, client: ApiClient | None = None)
         if debug:
             save_stage("triage", path, section.raw_markdown, f"__{i}.md")
 
+        # STAGE 4 extract: extract 
         record = extract(section.raw_markdown).model_copy(update={
             "name": section.name,
             "external_id": section.external_id,
             "source_file": section.source_file,
             "translate_errors": section.translate_errors,
         })
-        
         if debug:
             save_stage("extract", path, record.model_dump_json(indent=2), f"__{i}.json")
         if track:
             track.put_extraction_result(document_id, i, record)
 
+        # OUTPUT
         try:
             created_id = sink(record, document_id)
         except Exception as e:
