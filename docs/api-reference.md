@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Type: application/json`). No authentication is currently implemented. Errors always have the shape `{ "errors": { "detail": "..." } }`.
 
-This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md). Ingestion/upload endpoints (Task 2) don't exist yet.
+This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031). A file-upload endpoint doesn't exist yet — see [`bem/API_INTEGRATION.md`](../bem/API_INTEGRATION.md) for how `bem/` gets a `document_id` without one, and for the separate debug/internal pipeline-stage-tracking endpoints (ADR-0030), not covered here since they're never public.
 
 > **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0026). Never publish or commit these files.
 
@@ -142,6 +142,58 @@ Returned if no borehole with that `id` exists, including ids that are not valid 
 
 ```json
 { "errors": { "detail": "Not Found" } }
+```
+
+---
+
+## `POST /api/boreholes`
+
+Creates a borehole with its layers, optionally linked to an existing document (ADR-0031).
+
+```json
+{
+  "borehole": {
+    "name": "B 1/59 Schönberg",
+    "x": 9.177, "y": 48.776, "epsg": 4326,
+    "total_depth_m": 18.3,
+    "purpose": "...", "place": "...", "client": "..."
+  },
+  "layers": [
+    { "depth_from_m": 0.0, "depth_to_m": 3.5, "stratigraphy": "...", "petrography": "...", "color": "..." }
+  ],
+  "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+}
+```
+
+- `"x"`/`"y"`/`"epsg"` are reprojected to WGS84 via `ST_Transform` (ADR-0002) — omit all three (or send `"location"` directly) if coordinates aren't known yet.
+- `layers[].position` defaults to the 1-based list order if not given.
+- `document_id` is optional; if given, the borehole is attached as that document's `"original"` (ADR-0028, at most one per borehole).
+- Everything runs in one transaction — any failure leaves nothing half-created.
+
+### Response `201 Created`
+
+Same shape as [`GET /api/boreholes/:id`](#get-apiboreholesid).
+
+### Response `422 Unprocessable Entity`
+
+Changeset validation failure (e.g. missing `name`, `depth_to_m` not greater than `depth_from_m`):
+
+```json
+{ "errors": { "depth_to_m": ["must be greater than depth_from_m"] } }
+```
+
+### Response `400 Bad Request`
+
+Returned if `document_id` doesn't reference an existing document:
+
+```json
+{ "errors": { "detail": "document_id does not reference an existing document" } }
+```
+
+```bash
+curl -X POST "http://localhost:4000/api/boreholes" \
+  -H "Content-Type: application/json" \
+  -d '{"borehole": {"name": "Test BH", "x": 9.177, "y": 48.776, "epsg": 4326}, "layers": []}'
 ```
 
 ---

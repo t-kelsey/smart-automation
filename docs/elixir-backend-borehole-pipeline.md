@@ -70,9 +70,10 @@ Join table for the `boreholes` ↔ `documents` many-to-many (ADR-0013). A schema
 | `id` | `binary_id` | yes (PK) | |
 | `borehole_id` | `references(:boreholes)` | yes | |
 | `document_id` | `references(:documents)` | yes | |
+| `role` | `string` | yes (default `additional`) | `original` (the one log the borehole was extracted from) or `additional`; set via `Api.Boreholes.attach_documents/3`, not `put_assoc` (ADR-0028) |
 | `inserted_at` / `updated_at` | | yes (auto) | |
 
-Unique index on `(borehole_id, document_id)`; index on `document_id` for the reverse lookup.
+Unique index on `(borehole_id, document_id)`; partial unique index on `borehole_id` where `role = 'original'` (at most one original document per borehole, ADR-0028); index on `document_id` for the reverse lookup.
 
 ### `borehole_layers`
 Stratigraphy rows (the table in the screenshot: von/bis/Stratigraphie/Petrographie/Farbe).
@@ -94,7 +95,7 @@ Keep `raw_text` / `raw_extraction` fields everywhere plausible — given handwri
 
 ---
 
-## Proposed Extension: Pipeline Stage Tracking (design only, not yet implemented)
+## Pipeline Stage Tracking (implemented, ADR-0030)
 
 ### Motivation
 
@@ -168,14 +169,14 @@ One row per `extraction_result` (1:1), cascading the same way.
 | `created_borehole_id` | `references(:boreholes)` | nullable — set once the API has actually created the borehole |
 | `error` | `string` | nullable |
 
-### Sketch of new API endpoints (not designed in detail yet)
+### API endpoints (implemented, ADR-0030)
 
-- `PUT /api/documents/:id/pipeline_stages/:stage` — upsert the OCR or translation result for a document
-- `PUT /api/documents/:id/triage_sections` — replace all triage sections for a document in one call (body: list of sections)
-- `PUT /api/documents/:id/triage_sections/:section_index/extraction_result` — upsert the extraction result for one section
-- `PUT /api/documents/:id/triage_sections/:section_index/sink_result` — upsert the sink result for one section
+- `PUT /api/documents/:document_id/pipeline_stages/:stage` — upsert the OCR or translation result for a document
+- `PUT /api/documents/:document_id/triage_sections` — replace all triage sections for a document in one call (body: list of sections)
+- `PUT /api/documents/:document_id/triage_sections/:section_index/extraction_result` — upsert the extraction result for one section
+- `PUT /api/documents/:document_id/triage_sections/:section_index/sink_result` — upsert the sink result for one section
 
-These would need their own ADR once the shapes are finalised, and BEM-side changes (currently only `output.py`'s `ApiSink` talks to the API at all) are out of scope for `api/`.
+See `bem/API_INTEGRATION.md` for the full contract (bodies, call order) from `bem/`'s side; BEM-side changes to actually call these are out of scope for `api/`.
 
 ---
 
@@ -188,13 +189,15 @@ These would need their own ADR once the shapes are finalised, and BEM-side chang
 - Ecto schemas + changesets with validation (depth_from < depth_to, lat/lon bounds, etc.)
 
 ### 2. Ingestion pipeline
-- Upload endpoint (`POST /api/documents`) accepting a file, stores it (local disk for the hackathon, or S3-compatible bucket), creates a `documents` row with `status: :pending`
-- Background job (use `Oban` — add dep) that:
-  1. Calls the external extraction service via `Req` (per `AGENTS.md`, avoid `:httpoison`/`:tesla`)
-  2. Stores the raw JSON result in `documents.raw_extraction`
-  3. Runs the **standardisation** step (see below) to populate `boreholes` + `borehole_layers`
-  4. Sets `documents.status` to `:extracted` or `:failed`
-- Make the job idempotent/retryable (Oban gives this for free) since OCR calls can fail or time out
+> **Superseded by ADR-0031** for the creation step: there is no external extraction service to poll (`bem/` runs extraction itself and reports results directly, ADR-0030), so the design below was not built. `POST /api/boreholes` (synchronous, see Task 4) is what exists today. The upload endpoint also doesn't exist yet — see `bem/API_INTEGRATION.md` for how `bem/` gets a `document_id` without one.
+
+- ~~Upload endpoint (`POST /api/documents`) accepting a file, stores it (local disk for the hackathon, or S3-compatible bucket), creates a `documents` row with `status: :pending`~~
+- ~~Background job (use `Oban` — add dep) that:~~
+  1. ~~Calls the external extraction service via `Req` (per `AGENTS.md`, avoid `:httpoison`/`:tesla`)~~
+  2. ~~Stores the raw JSON result in `documents.raw_extraction`~~
+  3. ~~Runs the **standardisation** step (see below) to populate `boreholes` + `borehole_layers`~~
+  4. ~~Sets `documents.status` to `:extracted` or `:failed`~~
+- ~~Make the job idempotent/retryable (Oban gives this for free) since OCR calls can fail or time out~~
 
 ### 3. Standardisation
 - Normalise units (cm/m), decimal separators (`,` vs `.`), depth ranges, and language-specific stratigraphy/petrography terms into a consistent vocabulary (consider a lookup/mapping table rather than hardcoding, so new terms from new countries can be added)
@@ -205,7 +208,8 @@ These would need their own ADR once the shapes are finalised, and BEM-side chang
 - `GET /api/boreholes/:id` → full detail (Stammdaten + ordered `borehole_layers` + confidentiality-filtered `documents`); `404` JSON for an unknown or malformed id
 - `GET /api/boreholes/search` → same shape as the list endpoint, plus `score`/`snippet` per feature (ADR-0025)
 - `GET /api/documents/:id/file` → streams a document's stored file for in-app viewing, `?download=1` for an attachment (ADR-0026, supersedes the "never exposed" part of ADR-0014)
-- Errors are JSON (`{ errors: { detail } }`) via `action_fallback ApiWeb.FallbackController`: `400` for invalid parameters, `404` for unknown/malformed ids
+- `POST /api/boreholes` → creates a borehole + its layers synchronously, optionally linked to an existing document (ADR-0031, supersedes the async design in Task 2 above)
+- Errors are JSON (`{ errors: { detail } }`) via `action_fallback ApiWeb.FallbackController`: `400`/`404` for GETs, `422` with field errors for `POST /api/boreholes` changeset failures
 - `Api.MockData` + `mix boreholes.mock --count N` (and `MOCK_BOREHOLES` in seeds) generates up to 10 000 deterministic boreholes/layers/documents for load-testing paging and search without real data
 
 ### 5. Review/QA workflow (nice-to-have if time allows)

@@ -47,6 +47,7 @@ erDiagram
         binary_id id PK
         binary_id borehole_id FK
         binary_id document_id FK
+        string role "original | additional - at most one original per borehole"
     }
 
     BOREHOLE_LAYERS {
@@ -63,9 +64,9 @@ erDiagram
     }
 ```
 
-## Proposed extension: pipeline stage tracking
+## Pipeline stage tracking (implemented, ADR-0030)
 
-Design only (see "Proposed Extension" section in [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md)) — not yet implemented. Latest-run-only: a rerun upserts `pipeline_stage_runs`/`triage_sections` or cascades deletes down to `extraction_results`/`sink_results`.
+See "Pipeline Stage Tracking" in [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md). Latest-run-only: a rerun upserts `pipeline_stage_runs`/`triage_sections` or cascades deletes down to `extraction_results`/`sink_results`.
 
 ```mermaid
 erDiagram
