@@ -9,10 +9,12 @@
 ## Features
 
 - [ ] image support, currently only pdfs are supported
+- [ ] Update the /about page to reflect the latest features, changes and api
 
 ## Presentation Preparation
 
 - [ ] beispielpdfs raussuchen für den vortrag
 - [ ] Alle pdfs mal von einer prod instanz runterladen lassen und schauen, ob alle durchlaufen?
+- [ ] mini präsi bauen
 - [ ] Präsentation vorbereiten
 - [ ] Generalprobe Vortrag
