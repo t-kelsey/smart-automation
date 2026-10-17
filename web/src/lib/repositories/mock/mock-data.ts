@@ -723,8 +723,7 @@ function makeDocuments(boreholeId: string, name: string, country: string): Boreh
 		status: faker.helpers.arrayElement(statuses),
 		language: country,
 		pages: type === 'image' ? undefined : faker.number.int({ min: 1, max: 12 }),
-		sizeKb: faker.number.int({ min: 120, max: 5000 }),
-		url: '#'
+		sizeKb: faker.number.int({ min: 120, max: 5000 })
 	}));
 }
 
@@ -885,16 +884,14 @@ const bk1042: Borehole = {
 			status: 'reviewed',
 			language: 'de',
 			pages: 3,
-			sizeKb: 1240,
-			url: '#'
+			sizeKb: 1240
 		},
 		{
 			id: 'D2',
 			name: 'BK1042_Kernfoto_Kasten1-4.jpg',
 			type: 'image',
 			status: 'extracted',
-			sizeKb: 3860,
-			url: '#'
+			sizeKb: 3860
 		},
 		{
 			id: 'D3',
@@ -903,8 +900,7 @@ const bk1042: Borehole = {
 			status: 'pending',
 			language: 'de',
 			pages: 7,
-			sizeKb: 410,
-			url: '#'
+			sizeKb: 410
 		}
 	]
 };

@@ -2,6 +2,7 @@ import type {
 	Borehole,
 	BoreholeSortField,
 	BoreholeSummary,
+	DocumentDetail,
 	ListParams,
 	MapPoint,
 	Page
@@ -10,11 +11,12 @@ import type { BoreholeRepository } from '../borehole-repository';
 import { ApiClient, type ApiClientOptions } from './api-client';
 import type {
 	ApiBoreholeDetail,
+	ApiDocumentDetail,
 	ApiFeatureCollection,
 	ApiItemResponse,
 	ApiPointFeature
 } from './api-types';
-import { featureToMapPoint, featureToSummary, toBorehole } from './mappers';
+import { featureToMapPoint, featureToSummary, toBorehole, toDocumentDetail } from './mappers';
 
 const sortFields: Record<BoreholeSortField, string> = {
 	name: 'name',
@@ -77,5 +79,13 @@ export class ApiBoreholeRepository implements BoreholeRepository {
 			[404]
 		);
 		return body ? toBorehole(body.data, this.options.baseUrl) : null;
+	}
+
+	async getDocument(id: string): Promise<DocumentDetail | null> {
+		const body = await this.client.getJson<ApiItemResponse<ApiDocumentDetail>>(
+			`/documents/${encodeURIComponent(id)}`,
+			[404]
+		);
+		return body ? toDocumentDetail(body.data, this.options.baseUrl) : null;
 	}
 }

@@ -269,18 +269,10 @@
 							{@const Icon = documentIcons[doc.type]}
 							<li class="group flex items-center gap-3 py-2 text-sm">
 								<Icon class="size-5 shrink-0 opacity-70" />
-								{#if doc.url}
-									<!-- eslint-disable svelte/no-navigation-without-resolve -- url comes from the API -->
-									<a
-										href={doc.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="min-w-0 flex-1 truncate anchor">{doc.name}</a
-									>
-									<!-- eslint-enable svelte/no-navigation-without-resolve -->
-								{:else}
-									<span class="min-w-0 flex-1 truncate">{doc.name}</span>
-								{/if}
+								<a
+									href={resolve('/document/[id]', { id: doc.id })}
+									class="min-w-0 flex-1 truncate anchor">{doc.name}</a
+								>
 								<span class="shrink-0 text-xs opacity-60">
 									{[
 										doc.type.toUpperCase(),

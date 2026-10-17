@@ -78,6 +78,16 @@ defmodule Api.Boreholes do
   end
 
   @doc """
+  Like `get_document/1`, with the linked boreholes preloaded (ordered by name).
+  """
+  def get_document_with_boreholes(id) do
+    case get_document(id) do
+      nil -> nil
+      document -> Repo.preload(document, boreholes: from(b in Borehole, order_by: b.name))
+    end
+  end
+
+  @doc """
   Absolute path of the document's file in the managed storage (ADR-0014), or `nil` if there is
   none. Only plain file names directly inside the storage directory are accepted, so a
   `storage_path` can never point elsewhere on disk.

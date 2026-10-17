@@ -4,7 +4,7 @@ import type { SearchRepository } from '#lib/repositories/search-repository.ts';
 import { BoreholeService } from './borehole-service';
 import { SearchService } from './search-service';
 
-export { BoreholeService, BoreholeNotFoundError } from './borehole-service';
+export { BoreholeService, BoreholeNotFoundError, DocumentNotFoundError } from './borehole-service';
 export type { BoreholeListQuery, PagedResult } from './borehole-service';
 export { SearchService } from './search-service';
 

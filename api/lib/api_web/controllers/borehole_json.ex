@@ -82,7 +82,8 @@ defmodule ApiWeb.BoreholeJSON do
 
   # Never include :storage_path or :raw_extraction (ADR-0014); the file itself is served by
   # GET /api/documents/:id/file when `has_file` is true (ADR-0026).
-  defp document(document) do
+  @doc false
+  def document(document) do
     %{
       id: document.id,
       original_filename: document.original_filename,

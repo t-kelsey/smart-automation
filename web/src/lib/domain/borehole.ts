@@ -37,6 +37,11 @@ export interface BoreholeDocument {
 	url?: string;
 }
 
+/** A document with the boreholes it is linked to. */
+export interface DocumentDetail extends BoreholeDocument {
+	boreholes: { id: string; name: string }[];
+}
+
 export interface Borehole {
 	id: string;
 	name: string;

@@ -3,6 +3,7 @@ import type {
 	BoreholeDocument,
 	BoreholeLayer,
 	BoreholeSummary,
+	DocumentDetail,
 	DocumentType,
 	MapPoint
 } from '#lib/domain/borehole.ts';
@@ -12,6 +13,7 @@ import type {
 	ApiBoreholeDetail,
 	ApiBoreholeLayer,
 	ApiDocument,
+	ApiDocumentDetail,
 	ApiFeature,
 	ApiGeoPoint,
 	ApiPointFeature
@@ -64,6 +66,10 @@ function toDocumentType(mimeType: string | null, filename: string): DocumentType
 	if (ext === 'pdf') return 'pdf';
 	if (ext === 'docx' || ext === 'doc') return 'docx';
 	return 'image';
+}
+
+export function toDocumentDetail(doc: ApiDocumentDetail, baseUrl: string): DocumentDetail {
+	return { ...toDocument(doc, baseUrl), boreholes: doc.boreholes };
 }
 
 export function toDocument(doc: ApiDocument, baseUrl: string): BoreholeDocument {

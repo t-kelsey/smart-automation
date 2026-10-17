@@ -69,6 +69,11 @@ export interface ApiBoreholeDetail extends ApiBorehole {
 	documents: ApiDocument[];
 }
 
+/** `GET /api/documents/:id` → `{ data: ApiDocumentDetail }`. */
+export interface ApiDocumentDetail extends ApiDocument {
+	boreholes: { id: string; name: string }[];
+}
+
 export interface ApiItemResponse<T> {
 	data: T;
 }
