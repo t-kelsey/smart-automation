@@ -224,3 +224,6 @@ __marimo__/
 
 # Borehole data
 data/*
+
+# Sample data for verification
+lgrb-sample/
