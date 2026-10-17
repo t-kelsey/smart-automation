@@ -5,7 +5,7 @@ Every label and value in the markdown becomes a target:
 - soil and rock values resolve to DIN 4023 designations (Tables 1-3), with colour words added,
 - long text is machine-translated (mt.py) without a glossary check,
 - numbers and units pass through unchanged,
-- single OCR digits inside words are corrected to the letter they replace (ADR-0024),
+- single OCR digits inside words are corrected to the letter they replace (ADR-0027),
 - comma-separated segments with a token of two or more digits are kept unchanged, as codes; the other segments are translated,
 - anything that cannot be translated is kept as translate_error:<original text>.
 
@@ -46,7 +46,7 @@ PASS_THROUGH_KINDS = {"identifier", "name", "date", "coordinate", "crs", "number
 # "Label: value" lines outside tables, e.g. "**Borehole No.:** T01".
 KEY_VALUE_RE = re.compile(r"^\**(?P<label>[^:*]{2,60}?)\**\s*:\s*\**(?P<value>.+)$")
 
-# Letters that OCR most often reads as a digit inside a word (ADR-0024).
+# Letters that OCR most often reads as a digit inside a word (ADR-0027).
 DIGIT_TO_LETTER = {"0": "o", "1": "l", "2": "z", "3": "e", "4": "a", "5": "s", "6": "g", "8": "b"}
 
 
@@ -362,7 +362,7 @@ def _has_code(text: str) -> bool:
 
 
 def _fix_ocr_digits(text: str) -> str:
-    """Replace a single digit inside a word with the letter OCR probably misread (ADR-0024).
+    """Replace a single digit inside a word with the letter OCR probably misread (ADR-0027).
 
     Tokens with two or more digits, and tokens with one digit and fewer than three letters,
     are kept unchanged.

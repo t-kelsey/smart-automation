@@ -27,10 +27,12 @@ Source file metadata (one row per uploaded PDF/scan/image).
 | `mime_type` | `string` | no | e.g. "application/pdf", "image/jpeg" |
 | `source_country` | `string` | no | optional, if known |
 | `status` | `enum` | yes (default `pending`) | `pending`, `processing`, `extracted`, `failed`, `reviewed` |
+| `page_count` | `integer` | no | ADR-0025 |
+| `size_bytes` | `integer` | no | ADR-0025 |
 | `raw_extraction` | `map` (`jsonb`) | no | unmodified output from the OCR service |
 | `inserted_at` / `updated_at` | | yes (auto) | |
 
-> **Confidentiality**: source documents are confidential and must never be published, committed to git, or sent to external services. Inside the application they may be shown (ADR-0026): `GET /api/documents/:id/file` serves a stored file to the `web/` frontend. `storage_path` and `raw_extraction` never appear in any JSON response. For the hackathon this is local disk; swap for an S3-compatible bucket if persistence across deploys is needed.
+> **Confidentiality**: source documents are confidential and must never be published, committed to git, or sent to external services. Inside the application they may be shown (ADR-0026): `GET /api/documents/:id/file` serves a stored file to the `web/` frontend. `storage_path` and `raw_extraction` never appear in any JSON response — a document's JSON representation only ever exposes `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` (whether a file is actually stored for it; generated mock documents have `has_file: false`). For the hackathon this is local disk; swap for an S3-compatible bucket if persistence across deploys is needed.
 
 > **Storage layout**: `api/priv/uploads/` is a staging inbox — files placed there are NOT yet tracked in `documents` (used for manually-dropped sample data; `mix documents.backfill` processes it). `api/priv/storage/` is the managed store: files live there as `<document_id><ext>` (flat, no subfolders), so a file's `documents` row can always be found from its filename. Both directories are gitignored, outside `priv/static` so Phoenix never serves them publicly. The real upload endpoint (Task 2) should write straight into `priv/storage/` and skip the inbox entirely.
 
@@ -43,6 +45,8 @@ One row per borehole (`Stammdaten` in the screenshot).
 | `name` | `string` | yes | e.g. "B 1/59 Schönberg..." |
 | `external_id` | `string` | no | project/source-assigned ID (e.g. "HOLE NO: BH_AB01"), not unique — different projects can reuse IDs |
 | `purpose` | `string` | no | "Bohrzweck" |
+| `place` | `string` | no | location/site name as it appears on the log (ADR-0025) |
+| `client` | `string` | no | "Auftraggeber" (ADR-0025) |
 | `drilling_method` | `string` | no | "Bohrart" |
 | `drilled_at` | `date` | no | "Bohrdatum" / "DATE STARTED" |
 | `end_date` | `date` | no | "DATE COMPLETED" — a borehole can span multiple days |
@@ -59,7 +63,7 @@ One row per borehole (`Stammdaten` in the screenshot).
 > **documents ↔ boreholes is many-to-many**, via the join table `borehole_documents` (`borehole_id`, `document_id`, unique on the pair). A single scanned report can cover several boreholes, and the same borehole can be documented across multiple files (e.g. a scan + a typed follow-up report). Use `many_to_many`/`put_assoc` on `Api.Boreholes.Borehole`/`Api.Boreholes.Document`, not a `document_id` column.
 
 ### `borehole_documents`
-Join table for the `boreholes` ↔ `documents` many-to-many (ADR-0012). A schema module (not a bare table-name string) backs `join_through`, so Ecto populates timestamps on `put_assoc` instead of raising a `not_null_violation`.
+Join table for the `boreholes` ↔ `documents` many-to-many (ADR-0013). A schema module (not a bare table-name string) backs `join_through`, so Ecto populates timestamps on `put_assoc` instead of raising a `not_null_violation`.
 
 | field | type | required? | notes |
 |---|---|---|---|
@@ -76,7 +80,7 @@ Stratigraphy rows (the table in the screenshot: von/bis/Stratigraphie/Petrograph
 | field | type | required? | notes |
 |---|---|---|---|
 | `id` | `binary_id` | yes (PK) | |
-| `borehole_id` | `references(:boreholes)` | yes | set programmatically, not user input |
+| `borehole_id` | `references(:boreholes)` | yes | set programmatically, not user input; `on_delete: :delete_all` (ADR-0025) — deleting a borehole deletes its layers |
 | `position` | `integer` | yes | ordering (1, 2, 3, ...) |
 | `depth_from_m` | `decimal` | yes | |
 | `depth_to_m` | `decimal` | yes | must be greater than `depth_from_m` |
@@ -196,11 +200,13 @@ These would need their own ADR once the shapes are finalised, and BEM-side chang
 - Normalise units (cm/m), decimal separators (`,` vs `.`), depth ranges, and language-specific stratigraphy/petrography terms into a consistent vocabulary (consider a lookup/mapping table rather than hardcoding, so new terms from new countries can be added)
 - Convert source coordinates (UTM zones, local grids, DMS, etc.) to WGS84 lon/lat for storage — `Geo` + a conversion lib (e.g. shell out to `proj` or use a pure-Elixir UTM conversion) is sufficient for the hackathon scope
 
-### 4. Map/Search API (consumed by `web/`)
-- `GET /api/boreholes?bbox=minLon,minLat,maxLon,maxLat` → GeoJSON `FeatureCollection` of boreholes in view (for MapLibre clustering/markers)
-- `GET /api/boreholes/:id` → full detail (Stammdaten + ordered `borehole_layers` + reference to original document) for the detail panel shown in the screenshot
-- `GET /api/boreholes/search?q=...` → free-text search (name, stratigraphy, country)
-- Return borehole list as GeoJSON (`Jason.Encoder` on a `%Geo.Point{}` via `geo_postgis`) so the frontend can feed it directly into a MapLibre GeoJSON source
+### 4. Map/Search API (consumed by `web/`) — implemented, see `docs/api-reference.md`
+- `GET /api/boreholes` → GeoJSON `FeatureCollection`, with `bbox`, ranked text search (`q`), filters (`verified`, `drilled_from`/`drilled_to`, `min_depth`/`max_depth`), `sort`, paging (`limit`/`offset`, capped at 10 000) and `view=points` for a lightweight map payload (ADR-0025)
+- `GET /api/boreholes/:id` → full detail (Stammdaten + ordered `borehole_layers` + confidentiality-filtered `documents`); `404` JSON for an unknown or malformed id
+- `GET /api/boreholes/search` → same shape as the list endpoint, plus `score`/`snippet` per feature (ADR-0025)
+- `GET /api/documents/:id/file` → streams a document's stored file for in-app viewing, `?download=1` for an attachment (ADR-0026, supersedes the "never exposed" part of ADR-0014)
+- Errors are JSON (`{ errors: { detail } }`) via `action_fallback ApiWeb.FallbackController`: `400` for invalid parameters, `404` for unknown/malformed ids
+- `Api.MockData` + `mix boreholes.mock --count N` (and `MOCK_BOREHOLES` in seeds) generates up to 10 000 deterministic boreholes/layers/documents for load-testing paging and search without real data
 
 ### 5. Review/QA workflow (nice-to-have if time allows)
 - Minimal endpoint/LiveView to list unverified boreholes and let a human correct depth/stratigraphy/coordinates before marking `verified: true`

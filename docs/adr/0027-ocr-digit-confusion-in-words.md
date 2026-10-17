@@ -1,11 +1,11 @@
 ---
-id: ADR-0024
+id: ADR-0027
 date: 2026-10-17
 author: Tyler Kelsey
 title: Correct single OCR digits inside words before translation, and pass through values with several digits
 ---
 
-# ADR-0024 – Correct single OCR digits inside words before translation, and pass through values with several digits
+# ADR-0027 – Correct single OCR digits inside words before translation, and pass through values with several digits
 
 ## Context
 

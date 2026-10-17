@@ -17,6 +17,8 @@ erDiagram
         string mime_type
         string source_country
         string status "pending/processing/extracted/failed/reviewed"
+        integer page_count
+        integer size_bytes
         jsonb raw_extraction "never exposed publicly"
     }
 
@@ -25,6 +27,8 @@ erDiagram
         string name
         string external_id "not unique"
         string purpose
+        string place
+        string client
         string drilling_method
         date drilled_at
         date end_date
@@ -47,7 +51,7 @@ erDiagram
 
     BOREHOLE_LAYERS {
         binary_id id PK
-        binary_id borehole_id FK
+        binary_id borehole_id FK "on delete: cascade"
         integer position
         decimal depth_from_m
         decimal depth_to_m
