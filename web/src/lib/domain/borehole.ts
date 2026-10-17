@@ -40,7 +40,7 @@ export interface StoredDocument {
 
 /**
  * `original` is the one source log a borehole was extracted from (at most one per borehole, see
- * ADR-0027); `additional` files carry more information.
+ * ADR-0028); `additional` files carry more information.
  */
 export type DocumentRole = 'original' | 'additional';
 

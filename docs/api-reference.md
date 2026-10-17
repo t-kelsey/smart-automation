@@ -134,7 +134,7 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
 
 `layers` is always ordered by `position` ascending. `documents` reflects the many-to-many `documents` ↔ `boreholes` relationship (see ADR-0013) — zero, one, or many entries.
 
-`role` is `original` for the one document the borehole was extracted from (at most one per borehole) and `additional` for any further information file (ADR-0027). The original comes first, then the rest by file name.
+`role` is `original` for the one document the borehole was extracted from (at most one per borehole) and `additional` for any further information file (ADR-0028). The original comes first, then the rest by file name.
 
 ### Response `404 Not Found`
 

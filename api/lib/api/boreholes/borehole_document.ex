@@ -17,7 +17,7 @@ defmodule Api.Boreholes.BoreholeDocument do
   @foreign_key_type :binary_id
   schema "borehole_documents" do
     # "original": the one source log the borehole was extracted from (at most one per borehole,
-    # ADR-0027); "additional": any further information file.
+    # ADR-0028); "additional": any further information file.
     field :role, :string, default: "additional"
 
     belongs_to :borehole, Api.Boreholes.Borehole

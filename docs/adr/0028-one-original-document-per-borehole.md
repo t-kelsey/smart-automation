@@ -1,11 +1,11 @@
 ---
-id: ADR-0027
+id: ADR-0028
 date: 2026-10-17
 author: Kasimir Uihlein
 title: Each borehole has exactly one original document and any number of additional files
 ---
 
-# ADR-0027 – Each borehole has exactly one original document and any number of additional files
+# ADR-0028 – Each borehole has exactly one original document and any number of additional files
 
 ## Context
 

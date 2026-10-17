@@ -82,7 +82,7 @@ defmodule ApiWeb.BoreholeJSON do
 
   # Never include :storage_path or :raw_extraction (ADR-0014); the file itself is served by
   # GET /api/documents/:id/file when `has_file` is true (ADR-0026).
-  # `role` is "original" for at most one document per borehole (ADR-0027).
+  # `role` is "original" for at most one document per borehole (ADR-0028).
   defp borehole_document(document), do: Map.put(document(document), :role, document.role)
 
   @doc false

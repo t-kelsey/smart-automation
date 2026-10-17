@@ -39,7 +39,7 @@ export interface ApiDocument {
 	has_file: boolean;
 }
 
-/** A document as listed on a borehole; `original` for at most one document per borehole (ADR-0027). */
+/** A document as listed on a borehole; `original` for at most one document per borehole (ADR-0028). */
 export interface ApiBoreholeDocument extends ApiDocument {
 	role: 'original' | 'additional';
 }
