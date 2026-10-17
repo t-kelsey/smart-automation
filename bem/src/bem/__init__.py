@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from bem!")
+"""Borehole extraction pipeline: OCR -> translation -> triage -> extraction -> output (ADR-0001)."""

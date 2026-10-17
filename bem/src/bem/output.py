@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from .models import Borehole
+from .schema import Borehole
 
 log = logging.getLogger("bem")
 

@@ -8,7 +8,7 @@ to the first borehole.
 
 import re
 
-from schema import Borehole
+from .schema import Borehole
 
 # Labels that introduce a borehole ID, e.g.
 #   "HOLE NO : BH_AB05S", "Borehole No.:   T01", "Borehole No. ( 1 )",

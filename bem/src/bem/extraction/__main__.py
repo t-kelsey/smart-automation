@@ -1,9 +1,9 @@
 """Run the extraction on ONE OCR text file, with progress output.
 
-    uv run --project bem python -m bem.extraction test.txt
-    uv run --project bem python -m bem.extraction test.txt --out-dir results --markdown
+    uv run --project bem python -m bem.extraction output/translate/AF01.md
+    uv run --project bem python -m bem.extraction output/translate/AF01.md --out-dir results --markdown
 
-Input : a plain-text file (OCR output of one borehole report)
+Input : a text/markdown file (translated OCR output of one borehole report)
 Output: <out-dir>/<name>.json   record + status + issues + provenance   (always)
         <out-dir>/<name>.md     record in template format               (only with --markdown)
 The default out-dir is bem/output/extraction (inside the repo, wherever you run the command from).
@@ -19,12 +19,13 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .config import load_prompt, load_settings
 from .extract import extract, make_client
 from .render import render
 from .validate import check_all, status
 
-# this file lives in bem/extraction/, so two levels up is bem/  ->  bem/output/extraction
-DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "output" / "extraction"
+# this file lives in bem/src/bem/extraction/, so parents[3] is bem/  ->  bem/output/extraction
+DEFAULT_OUT_DIR = Path(__file__).resolve().parents[3] / "output" / "extraction"
 
 
 class Spinner:
@@ -63,12 +64,17 @@ class Spinner:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract one borehole record from an OCR text file.")
-    ap.add_argument("input", type=Path, help="OCR text file (.txt)")
+    ap.add_argument("input", type=Path, help="translated OCR text/markdown file")
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="output folder (default: bem/output/extraction)")
     ap.add_argument("--markdown", action="store_true", help="also write the record in template Markdown format")
-    ap.add_argument("--model", default="qwen3.5:2b")
-    ap.add_argument("--base-url", default="http://localhost:11434/v1")
+    ap.add_argument("--model", help="default: config/settings.toml")
+    ap.add_argument("--base-url", help="default: config/settings.toml")
+    ap.add_argument("--prompt-file", type=Path, help="system prompt file (default: config/system_prompt.md)")
     args = ap.parse_args()
+    cfg = load_settings()["model"]
+    args.model = args.model or cfg["name"]
+    args.base_url = args.base_url or cfg["base_url"]
+    prompt = load_prompt(args.prompt_file)
 
     if not args.input.is_file():
         sys.exit(f"Input file not found: {args.input}")
@@ -93,16 +99,16 @@ def main() -> None:
     print(f"[2/4] Extracting with {args.model} (the first call also loads the model)")
     try:
         with Spinner("waiting for the model") as sp:
-            b = extract(text, make_client(args.base_url), args.model)
+            b = extract(text, make_client(args.base_url), args.model, system_prompt=prompt)
     except Exception as e:  # noqa: BLE001
         sys.exit(
             f"\nExtraction failed: {e}\n"
             "Check that Ollama is running ('ollama ps') and the model is pulled ('ollama list')."
         )
-    print(f"      done in {sp.elapsed:.1f}s: {len(b.schichten)} layers found")
+    print(f"      done in {sp.elapsed:.1f}s: {len(b.layers)} layers found")
 
     # 3 - validate
-    b.schichten.sort(key=lambda l: l.von_m)
+    b.layers.sort(key=lambda l: l.depth_from_m)
     issues = check_all(b, text)
     st = status(issues)
     print(f"[3/4] Validated: status {st.upper()}, {len(issues)} issue(s)")
@@ -116,7 +122,7 @@ def main() -> None:
         "extracted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "status": st,
         "issues": [asdict(i) for i in issues],
-        "record": b.model_dump(mode="json"),
+        "record": b.to_api_dict(),
     }
     json_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     written = [json_path]
