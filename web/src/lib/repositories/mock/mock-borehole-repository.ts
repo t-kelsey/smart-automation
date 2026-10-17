@@ -1,6 +1,7 @@
 import type {
 	Borehole,
 	BoreholeSummary,
+	DocumentDetail,
 	ListParams,
 	MapPoint,
 	Page
@@ -67,5 +68,15 @@ export class MockBoreholeRepository implements BoreholeRepository {
 	async getById(id: string): Promise<Borehole | null> {
 		const borehole = this.boreholes.find((b) => b.id === id);
 		return borehole ? structuredClone(borehole) : null;
+	}
+
+	async getDocument(id: string): Promise<DocumentDetail | null> {
+		const linked = this.boreholes.filter((b) => b.documents.some((d) => d.id === id));
+		const document = linked[0]?.documents.find((d) => d.id === id);
+		if (!document) return null;
+		return {
+			...structuredClone(document),
+			boreholes: linked.map(({ id, name }) => ({ id, name }))
+		};
 	}
 }

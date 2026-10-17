@@ -3,6 +3,7 @@ import type {
 	BoreholeFilter,
 	BoreholeSort,
 	BoreholeSummary,
+	DocumentDetail,
 	MapPoint
 } from '#lib/domain/borehole.ts';
 import type { BoreholeRepository } from '#lib/repositories/borehole-repository.ts';
@@ -11,6 +12,13 @@ export class BoreholeNotFoundError extends Error {
 	constructor(readonly id: string) {
 		super(`Borehole ${id} not found`);
 		this.name = 'BoreholeNotFoundError';
+	}
+}
+
+export class DocumentNotFoundError extends Error {
+	constructor(readonly id: string) {
+		super(`Document ${id} not found`);
+		this.name = 'DocumentNotFoundError';
 	}
 }
 
@@ -90,5 +98,12 @@ export class BoreholeService {
 			...borehole,
 			layers: [...borehole.layers].sort((a, b) => a.startDepth - b.startDepth)
 		};
+	}
+
+	/** Document with its linked boreholes. Throws `DocumentNotFoundError` if it does not exist. */
+	async getDocument(id: string): Promise<DocumentDetail> {
+		const document = await this.repository.getDocument(id);
+		if (!document) throw new DocumentNotFoundError(id);
+		return document;
 	}
 }

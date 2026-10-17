@@ -39,6 +39,11 @@ export interface ApiDocument {
 	has_file: boolean;
 }
 
+/** A document as listed on a borehole; `original` for at most one document per borehole (ADR-0027). */
+export interface ApiBoreholeDocument extends ApiDocument {
+	role: 'original' | 'additional';
+}
+
 /** Borehole columns without `location`; the properties of a GeoJSON feature. */
 export interface ApiBorehole {
 	id: string;
@@ -66,7 +71,12 @@ export interface ApiBorehole {
 export interface ApiBoreholeDetail extends ApiBorehole {
 	location: ApiGeoPoint | null;
 	layers: ApiBoreholeLayer[];
-	documents: ApiDocument[];
+	documents: ApiBoreholeDocument[];
+}
+
+/** `GET /api/documents/:id` → `{ data: ApiDocumentDetail }`. */
+export interface ApiDocumentDetail extends ApiDocument {
+	boreholes: { id: string; name: string }[];
 }
 
 export interface ApiItemResponse<T> {

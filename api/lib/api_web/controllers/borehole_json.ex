@@ -24,7 +24,7 @@ defmodule ApiWeb.BoreholeJSON do
         properties(borehole)
         |> Map.put(:location, borehole.location)
         |> Map.put(:layers, Enum.map(borehole.borehole_layers, &layer/1))
-        |> Map.put(:documents, Enum.map(borehole.documents, &document/1))
+        |> Map.put(:documents, Enum.map(borehole.documents, &borehole_document/1))
     }
   end
 
@@ -82,7 +82,11 @@ defmodule ApiWeb.BoreholeJSON do
 
   # Never include :storage_path or :raw_extraction (ADR-0014); the file itself is served by
   # GET /api/documents/:id/file when `has_file` is true (ADR-0026).
-  defp document(document) do
+  # `role` is "original" for at most one document per borehole (ADR-0027).
+  defp borehole_document(document), do: Map.put(document(document), :role, document.role)
+
+  @doc false
+  def document(document) do
     %{
       id: document.id,
       original_filename: document.original_filename,

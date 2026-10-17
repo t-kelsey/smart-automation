@@ -15,6 +15,8 @@ defmodule Api.Boreholes.Document do
     field :page_count, :integer
     field :size_bytes, :integer
     field :raw_extraction, :map
+    # Role for the borehole the document was loaded through (see `Api.Boreholes.get_borehole/1`).
+    field :role, :string, virtual: true
 
     many_to_many :boreholes, Api.Boreholes.Borehole, join_through: Api.Boreholes.BoreholeDocument
 

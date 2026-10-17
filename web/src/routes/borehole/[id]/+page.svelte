@@ -7,17 +7,17 @@
 		FileTypeIcon,
 		PencilLine,
 		PencilIcon,
-		Share2Icon,
 		TrashIcon,
 		UploadIcon,
 		Download
 	} from '@lucide/svelte';
-	import BoreholeColumn from '#lib/components/borehole/BoreholeColumn.svelte';
+	import BoreholePageHeader from '#lib/components/borehole/BoreholePageHeader.svelte';
+	import CoreData from '#lib/components/borehole/CoreData.svelte';
+	import CrossSection from '#lib/components/borehole/CrossSection.svelte';
+	import LayersTable from '#lib/components/borehole/LayersTable.svelte';
 	import HelpDrawer from '#lib/components/borehole/HelpDrawer.svelte';
 	import PatternDefs from '#lib/components/borehole/PatternDefs.svelte';
-	import MapSnippet from '#lib/components/borehole/MapSnippet.svelte';
-	import type { BoreholeDocument, BoreholeLayer } from '#lib/domain/borehole.ts';
-	import { describe, shortForm } from '#lib/din4023/index.ts';
+	import type { BoreholeDocument } from '#lib/domain/borehole.ts';
 	import type { PageProps } from './$types';
 	import { Collapsible, Menu, Portal } from '@skeletonlabs/skeleton-svelte';
 	import { goto } from '$app/navigation';
@@ -28,24 +28,7 @@
 
 	let coreDataOpen = $state(true);
 	let selectedLayerId = $state<string | null>(null);
-	let colored = $state(true);
-
-	let coreData = $derived([
-		{ label: 'Name', value: borehole.name },
-		{ label: 'Date', value: borehole.date ?? '–' },
-		{ label: 'Boring cause', value: borehole.cause ?? '–' },
-		{
-			label: 'Height o. NN',
-			value: borehole.elevation === null ? '–' : `${borehole.elevation.toFixed(2)} m`
-		},
-		{
-			label: 'Total depth',
-			value: borehole.totalDepth === null ? '–' : `${borehole.totalDepth.toFixed(1)} m`
-		},
-		{ label: 'Drilling method', value: borehole.drillingMethod ?? '–' },
-		{ label: 'Client', value: borehole.client ?? '–' },
-		{ label: 'Location', value: borehole.location?.place ?? '–' }
-	]);
+	const select = (id: string | null) => (selectedLayerId = id);
 
 	const documentIcons: Record<BoreholeDocument['type'], typeof FileTextIcon> = {
 		pdf: FileTextIcon,
@@ -67,58 +50,24 @@
 	}
 </script>
 
-{#snippet petrography(layer: BoreholeLayer)}
-	{@const composition = layer.petrography.composition}
-	{#if composition}
-		<span class="font-medium">{shortForm(composition)}</span>
-		{describe(composition)}
-	{:else}
-		<span class="opacity-60">Unclassified</span>
-	{/if}
-	<span class="block text-xs opacity-60">{layer.petrography.description}</span>
-{/snippet}
-
 <PatternDefs />
 
 <div class="-m-6 flex h-screen flex-col">
-	<header
-		class="flex shrink-0 flex-wrap items-center justify-between gap-4 border-b border-surface-200-800 bg-surface-50-950 px-6 py-4"
-	>
-		<div>
-			<h1 class="h2">Borehole {borehole.name}</h1>
-			<p class="text-sm opacity-70">{borehole.location?.place ?? ''}</p>
-		</div>
-		<div class="flex items-center gap-2">
-			<!-- TODO: implement sharing (e.g. copy link to this borehole). -->
-			<button type="button" class="btn preset-tonal">
-				<Share2Icon class="size-4" />
-				Share
-			</button>
-			<HelpDrawer layers={borehole.layers} />
-		</div>
-	</header>
+	<BoreholePageHeader {borehole} view="details">
+		<HelpDrawer layers={borehole.layers} />
+	</BoreholePageHeader>
 
 	<div class="min-h-0 flex-1 overflow-y-auto p-6">
-		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-			<!-- Cross section -->
-			<section class="card border border-surface-200-800 bg-surface-50-950 p-4 lg:col-span-1">
-				<div class="mb-3 flex items-center justify-between gap-2">
-					<h2 class="h5">Cross section</h2>
-					<label class="flex cursor-pointer items-center gap-2 text-sm">
-						<input type="checkbox" class="checkbox" bind:checked={colored} />
-						Colour
-					</label>
-				</div>
-				<BoreholeColumn
-					layers={borehole.layers}
-					totalDepth={borehole.totalDepth ?? 0}
-					{colored}
-					selectedId={selectedLayerId}
-					onselect={(id) => (selectedLayerId = id)}
-				/>
+		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-[18rem_minmax(0,1fr)]">
+			<!-- Cross section: as high as the screen below the header, and kept in view while scrolling -->
+			<section
+				class="flex h-[calc(100dvh-9rem)] flex-col self-start card border border-surface-200-800 bg-surface-50-950 p-4 lg:sticky lg:top-0"
+			>
+				<h2 class="mb-3 shrink-0 h5">Cross section</h2>
+				<CrossSection {borehole} selectedId={selectedLayerId} onselect={select} class="flex-1" />
 			</section>
 
-			<div class="min-w-0 space-y-6 lg:col-span-3">
+			<div class="min-w-0 space-y-6">
 				<!-- Core data and map -->
 				<Collapsible
 					open={coreDataOpen}
@@ -142,22 +91,12 @@
 						</button>
 					</div>
 					<Collapsible.Content>
-						<div class="mt-3 grid gap-4 xl:grid-cols-[1fr_20rem]">
-							<dl class="grid grid-cols-[auto_1fr] content-start gap-x-6 gap-y-2 text-sm">
-								{#each coreData as item (item.label)}
-									<dt class="opacity-60">{item.label}</dt>
-									<dd class="font-medium">{item.value}</dd>
-								{/each}
-							</dl>
-							{#if borehole.location}
-								<MapSnippet lat={borehole.location.lat} lon={borehole.location.lon} />
-							{/if}
-						</div>
+						<CoreData {borehole} class="mt-3" />
 					</Collapsible.Content>
 				</Collapsible>
 
 				<!-- Layer table -->
-				<section class="@container card border border-surface-200-800 bg-surface-50-950 p-4">
+				<section class="card border border-surface-200-800 bg-surface-50-950 p-4">
 					<div class="mb-3 flex items-center justify-between gap-2">
 						<h2 class="h5">Layers</h2>
 						<button
@@ -169,95 +108,13 @@
 							Edit layers
 						</button>
 					</div>
-					<!-- Narrow card: one card per layer instead of a horizontally scrolling table. -->
-					<ul class="space-y-3 @2xl:hidden">
-						{#each borehole.layers as layer (layer.id)}
-							<li
-								class="rounded-lg border border-surface-200-800 p-3 text-sm {selectedLayerId ===
-								layer.id
-									? 'bg-primary-500/15'
-									: ''}"
-								onmouseenter={() => (selectedLayerId = layer.id)}
-								onmouseleave={() => (selectedLayerId = null)}
-							>
-								<div class="mb-2 flex items-center justify-between gap-2">
-									<span class="font-medium">{layer.position}</span>
-									<span class="text-xs opacity-60">
-										{layer.startDepth.toFixed(1)} m – {layer.endDepth.toFixed(1)} m
-									</span>
-								</div>
-								<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-									<dt class="opacity-60">Stratigraphie</dt>
-									<dd>
-										<span class="font-medium">{layer.stratigraphy.code}</span>
-										<span class="text-xs opacity-60">{layer.stratigraphy.name}</span>
-									</dd>
-									<dt class="opacity-60">Petrographie</dt>
-									<dd>
-										{@render petrography(layer)}
-									</dd>
-									<dt class="opacity-60">Color</dt>
-									<dd class="flex items-center gap-2">
-										<span
-											class="size-4 rounded-sm border border-black/40"
-											style:background-color={layer.color.hex}
-										></span>
-										{layer.color.name}
-									</dd>
-								</dl>
-							</li>
-						{/each}
-					</ul>
-
-					<div class="hidden table-wrap @2xl:block">
-						<table class="table">
-							<thead>
-								<tr>
-									<th class="w-px">Id</th>
-									<th class="w-px whitespace-nowrap">From (m)</th>
-									<th class="w-px whitespace-nowrap">To (m)</th>
-									<th>Stratigraphie</th>
-									<th>Petrographie</th>
-									<th>Color</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each borehole.layers as layer (layer.id)}
-									<tr
-										class={selectedLayerId === layer.id ? 'bg-primary-500/15' : ''}
-										onmouseenter={() => (selectedLayerId = layer.id)}
-										onmouseleave={() => (selectedLayerId = null)}
-									>
-										<td class="font-medium">{layer.position}</td>
-										<td class="whitespace-nowrap">{layer.startDepth.toFixed(1)}</td>
-										<td class="whitespace-nowrap">{layer.endDepth.toFixed(1)}</td>
-										<td>
-											<span class="font-medium">{layer.stratigraphy.code}</span>
-											<span class="block text-xs opacity-60">{layer.stratigraphy.name}</span>
-										</td>
-										<td>
-											{@render petrography(layer)}
-										</td>
-										<td>
-											<span class="flex items-center gap-2 whitespace-nowrap">
-												<span
-													class="size-4 rounded-sm border border-black/40"
-													style:background-color={layer.color.hex}
-												></span>
-												{layer.color.name}
-											</span>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					<LayersTable layers={borehole.layers} selectedId={selectedLayerId} onselect={select} />
 				</section>
 
-				<!-- Original documents -->
+				<!-- Documents: the original log and additional information files -->
 				<section class="card border border-surface-200-800 bg-surface-50-950 p-4">
 					<div class="mb-3 flex items-center justify-between gap-2">
-						<h2 class="h5">Original documents</h2>
+						<h2 class="h5">Documents</h2>
 						<!-- TODO: implement document upload. -->
 						<button type="button" class="btn preset-tonal btn-sm">
 							<UploadIcon class="size-4" />
@@ -269,17 +126,12 @@
 							{@const Icon = documentIcons[doc.type]}
 							<li class="group flex items-center gap-3 py-2 text-sm">
 								<Icon class="size-5 shrink-0 opacity-70" />
-								{#if doc.url}
-									<!-- eslint-disable svelte/no-navigation-without-resolve -- url comes from the API -->
-									<a
-										href={doc.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="min-w-0 flex-1 truncate anchor">{doc.name}</a
-									>
-									<!-- eslint-enable svelte/no-navigation-without-resolve -->
-								{:else}
-									<span class="min-w-0 flex-1 truncate">{doc.name}</span>
+								<a
+									href={resolve('/document/[id]', { id: doc.id })}
+									class="min-w-0 flex-1 truncate anchor">{doc.name}</a
+								>
+								{#if doc.role === 'original'}
+									<span class="badge preset-tonal-primary">Original</span>
 								{/if}
 								<span class="shrink-0 text-xs opacity-60">
 									{[

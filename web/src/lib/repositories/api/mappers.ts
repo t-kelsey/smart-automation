@@ -3,7 +3,9 @@ import type {
 	BoreholeDocument,
 	BoreholeLayer,
 	BoreholeSummary,
+	DocumentDetail,
 	DocumentType,
+	StoredDocument,
 	MapPoint
 } from '#lib/domain/borehole.ts';
 import { colorKeyByName, dinColors, parseComposition } from '#lib/din4023/index.ts';
@@ -11,7 +13,9 @@ import type {
 	ApiBorehole,
 	ApiBoreholeDetail,
 	ApiBoreholeLayer,
+	ApiBoreholeDocument,
 	ApiDocument,
+	ApiDocumentDetail,
 	ApiFeature,
 	ApiGeoPoint,
 	ApiPointFeature
@@ -66,7 +70,15 @@ function toDocumentType(mimeType: string | null, filename: string): DocumentType
 	return 'image';
 }
 
-export function toDocument(doc: ApiDocument, baseUrl: string): BoreholeDocument {
+function toBoreholeDocument(doc: ApiBoreholeDocument, baseUrl: string): BoreholeDocument {
+	return { ...toDocument(doc, baseUrl), role: doc.role };
+}
+
+export function toDocumentDetail(doc: ApiDocumentDetail, baseUrl: string): DocumentDetail {
+	return { ...toDocument(doc, baseUrl), boreholes: doc.boreholes };
+}
+
+export function toDocument(doc: ApiDocument, baseUrl: string): StoredDocument {
 	return {
 		id: doc.id,
 		name: doc.original_filename,
@@ -120,6 +132,6 @@ export function toBorehole(b: ApiBoreholeDetail, baseUrl: string): Borehole {
 		groundwaterLevel: num(b.groundwater_level_m) ?? undefined,
 		drillingMethod: b.drilling_method ?? undefined,
 		layers,
-		documents: b.documents.map((doc) => toDocument(doc, baseUrl))
+		documents: b.documents.map((doc) => toBoreholeDocument(doc, baseUrl))
 	};
 }

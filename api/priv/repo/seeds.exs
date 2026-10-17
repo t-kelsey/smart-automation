@@ -56,12 +56,9 @@ insert_document = fn attrs ->
   %Document{} |> Document.changeset(attrs) |> Repo.insert!()
 end
 
-attach_documents = fn borehole, documents ->
-  borehole
-  |> Repo.preload(:documents)
-  |> Ecto.Changeset.change()
-  |> Ecto.Changeset.put_assoc(:documents, documents)
-  |> Repo.update!()
+# The first document is the borehole's original, any others are additional information files.
+attach_documents = fn borehole, [original | additional] ->
+  {:ok, _links} = Api.Boreholes.attach_documents(borehole, original, additional)
 end
 
 # --- Germany: fully-filled-in borehole, modelled on the screenshot example from the task doc ---

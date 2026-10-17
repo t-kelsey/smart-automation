@@ -1,5 +1,6 @@
 import type {
 	Borehole,
+	DocumentDetail,
 	BoreholeSummary,
 	ListParams,
 	MapPoint,
@@ -28,4 +29,6 @@ export interface BoreholeRepository {
 	listMapPoints(): Promise<MapPoint[]>;
 	/** Returns the borehole including layers and documents, or `null` if it does not exist. */
 	getById(id: string): Promise<Borehole | null>;
+	/** Returns one document with its linked boreholes, or `null` if it does not exist. */
+	getDocument(id: string): Promise<DocumentDetail | null>;
 }
