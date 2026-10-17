@@ -1,4 +1,4 @@
-"""Run the borehole pipeline: OCR -> translation -> triage -> extraction -> output.
+"""Run the borehole pipeline: OCR -> translation and labeling -> triage -> extraction -> output.
 
 Usage:
     python -m bem.main <file-or-dir>... [--to api|json|print] [--api-url URL] [--out-dir DIR]
@@ -11,7 +11,7 @@ from pathlib import Path
 from .extraction import extract
 from .ocr import ocr
 from .output import make_sink
-from .translation import translate
+from .translation_and_labeling.translation_and_labeling import translate
 from .triage import triage
 
 log = logging.getLogger("bem")
@@ -32,11 +32,11 @@ def collect_inputs(paths: list[Path]) -> list[Path]:
 
 def process_file(path: Path, sink) -> int:
     """Push every borehole found in one input file through the pipeline. Returns the count."""
-    document = ocr(path)  # any format -> TextDocument (digital text layer or OCR'd pages)
-    document = translate(document)  # local terms and abbreviations -> English
+    document = ocr(path)              # any format -> TextDocument (digital text layer or OCR'd pages)
+    document = translate(document)    # local terms -> English, keywords labeled
     count = 0
     for section in triage(document):  # one BoreholeText per borehole, irrelevant parts dropped
-        sink(extract(section))  # BoreholeText -> Borehole (JSON-serialisable)
+        sink(extract(section))        # BoreholeText -> Borehole (JSON-serialisable)
         count += 1
     return count
 

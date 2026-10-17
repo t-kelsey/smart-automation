@@ -16,7 +16,7 @@ Raw borehole data comes as digital PDFs, scanned PDFs, images (often handwritten
 A Python pipeline in `bem/` with four processing stages, run by `bem/main.py`, followed by an output step:
 
 1. **OCR** (`ocr.py`): convert every input format (digital PDF, scanned PDF, image, docx) into one unified text base format (`TextDocument`). Digital PDFs use their text layer; scans and images are OCR'd.
-2. **Translation** (`translation.py`): translate all terms in the text to English.
+2. **Translation and labeling** (`translation_and_labeling.py`): translate all terms in the text to English, and label the keywords that later stages rely on (for example depth, lithology and stratigraphy).
 3. **Triage** (`triage.py`): split the text into individual boreholes (`BoreholeText`) and drop irrelevant parts.
 4. **Extraction** (`extraction.py`): for each borehole, extract the fields defined in the borehole data format into a `Borehole` record. The result is JSON.
 5. **Output** (`output.py`): send the JSON to the Elixir API, save it as JSON files, or print it to the terminal (`--to api|json|print`). The API writes the records to PostGIS.

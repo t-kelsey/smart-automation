@@ -32,7 +32,3 @@ def translate(markdown: str, translator: Translator | None = None) -> tuple[str,
     log.info("source language: %s", src)
     return translate_markdown(markdown, src, translator or MarianTranslator())
 
-
-def extract(markdown: str) -> str:
-    # TODO: map the translated markdown onto Borehole/LogEntry fields; convert ft to m.
-    return markdown
