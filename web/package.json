@@ -51,6 +51,7 @@
 	},
 	"dependencies": {
 		"maplibre-gl": "^6.14.0",
+		"pdfjs-dist": "^6.4.299",
 		"supercluster": "^9.1.0"
 	}
 }

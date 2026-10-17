@@ -5,6 +5,14 @@ defmodule ApiWeb.DocumentController do
 
   action_fallback ApiWeb.FallbackController
 
+  @doc "Metadata of a single document and the boreholes it belongs to (never the storage path)."
+  def show(conn, %{"id" => id}) do
+    case Boreholes.get_document_with_boreholes(id) do
+      nil -> {:error, :not_found}
+      document -> render(conn, :show, document: document)
+    end
+  end
+
   @doc """
   Streams a source document from the managed storage, for viewing in the application
   (ADR-0026). `?download=1` asks the browser to save it instead of displaying it.

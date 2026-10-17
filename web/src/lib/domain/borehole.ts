@@ -24,7 +24,8 @@ export type DocumentType = 'pdf' | 'image' | 'docx';
 
 export type DocumentStatus = 'pending' | 'processing' | 'extracted' | 'failed' | 'reviewed';
 
-export interface BoreholeDocument {
+/** A stored file of a borehole's documentation, independent of the borehole it is shown for. */
+export interface StoredDocument {
 	id: string;
 	name: string;
 	type: DocumentType;
@@ -35,6 +36,22 @@ export interface BoreholeDocument {
 	sizeKb?: number;
 	/** Link to the original file (shown inline; add `?download=1` to save it); absent if no file is stored. */
 	url?: string;
+}
+
+/**
+ * `original` is the one source log a borehole was extracted from (at most one per borehole, see
+ * ADR-0028); `additional` files carry more information.
+ */
+export type DocumentRole = 'original' | 'additional';
+
+/** A document as linked to one borehole. */
+export interface BoreholeDocument extends StoredDocument {
+	role: DocumentRole;
+}
+
+/** A document with the boreholes it is linked to. */
+export interface DocumentDetail extends StoredDocument {
+	boreholes: { id: string; name: string }[];
 }
 
 export interface Borehole {

@@ -7,6 +7,7 @@ defmodule Api.Boreholes do
   alias Api.Repo
 
   alias Api.Boreholes.Borehole
+  alias Api.Boreholes.BoreholeDocument
   alias Api.Boreholes.BoreholeLayer
   alias Api.Boreholes.Document
 
@@ -55,16 +56,61 @@ defmodule Api.Boreholes do
   @doc """
   Fetches a borehole by id, preloading its documents and layers (ordered by position).
 
+  Each document carries its `role` for this borehole; the original document comes first.
+
   Returns `nil` if the id is not a valid UUID or no such borehole exists.
   """
   def get_borehole(id) do
     with {:ok, uuid} <- Ecto.UUID.cast(id),
          %Borehole{} = borehole <- Repo.get(Borehole, uuid) do
       layers_query = from(l in BoreholeLayer, order_by: l.position)
-      Repo.preload(borehole, [:documents, borehole_layers: layers_query])
+      borehole = Repo.preload(borehole, borehole_layers: layers_query)
+      %{borehole | documents: list_documents(borehole)}
     else
       _ -> nil
     end
+  end
+
+  # Documents of a borehole with their role, the original first.
+  defp list_documents(%Borehole{id: borehole_id}) do
+    from(d in Document,
+      join: bd in BoreholeDocument,
+      on: bd.document_id == d.id,
+      where: bd.borehole_id == ^borehole_id,
+      order_by: [desc: bd.role, asc: d.original_filename],
+      select: %{d | role: bd.role}
+    )
+    |> Repo.all()
+  end
+
+  @doc """
+  Links documents to a borehole: `original` becomes its original document (or `nil` for none),
+  `additional` its further information files. Fails if the borehole already has an original.
+  """
+  @spec attach_documents(Borehole.t(), Document.t() | nil, [Document.t()]) ::
+          {:ok, [BoreholeDocument.t()]} | {:error, Ecto.Changeset.t()}
+  def attach_documents(%Borehole{id: borehole_id}, original, additional \\ []) do
+    links =
+      Enum.reject([{original, "original"} | Enum.map(additional, &{&1, "additional"})], fn {doc,
+                                                                                            _} ->
+        is_nil(doc)
+      end)
+
+    Repo.transaction(fn ->
+      Enum.map(links, fn {document, role} ->
+        %BoreholeDocument{}
+        |> BoreholeDocument.changeset(%{
+          borehole_id: borehole_id,
+          document_id: document.id,
+          role: role
+        })
+        |> Repo.insert()
+        |> case do
+          {:ok, link} -> link
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+    end)
   end
 
   @doc """
@@ -74,6 +120,16 @@ defmodule Api.Boreholes do
     case Ecto.UUID.cast(id) do
       {:ok, uuid} -> Repo.get(Document, uuid)
       :error -> nil
+    end
+  end
+
+  @doc """
+  Like `get_document/1`, with the linked boreholes preloaded (ordered by name).
+  """
+  def get_document_with_boreholes(id) do
+    case get_document(id) do
+      nil -> nil
+      document -> Repo.preload(document, boreholes: from(b in Borehole, order_by: b.name))
     end
   end
 

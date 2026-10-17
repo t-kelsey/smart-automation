@@ -1,10 +1,10 @@
 """Download the translation models once, while online (ADR-0018, ADR-0019).
 
 Run from bem/ before the event, then use HF_HUB_OFFLINE=1 for runs:
-    python download_models.py
+    uv run python -m bem.translation_and_labeling.download_models
 """
 
-from mt import MODEL_FOR_LANG
+from .mt import MODEL_FOR_LANG
 
 
 def main() -> None:
