@@ -9,7 +9,8 @@
 		PencilIcon,
 		Share2Icon,
 		TrashIcon,
-		UploadIcon
+		UploadIcon,
+		Download
 	} from '@lucide/svelte';
 	import BoreholeColumn from '#lib/components/borehole/BoreholeColumn.svelte';
 	import HelpDrawer from '#lib/components/borehole/HelpDrawer.svelte';
@@ -52,7 +53,8 @@
 
 	// TODO: wire these up once the API exists.
 	const documentActions = [
-		{ label: 'Upload New Version', icon: UploadIcon },
+		{ label: "Download", icon: Download },
+		{ label: 'New Version', icon: UploadIcon },
 		{ label: 'Rename', icon: PencilIcon },
 		{ label: 'Delete', icon: TrashIcon, danger: true }
 	];

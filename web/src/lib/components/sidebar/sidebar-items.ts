@@ -1,4 +1,4 @@
-import { InfoIcon, MapIcon, SearchIcon } from '@lucide/svelte';
+import { InfoIcon, MapIcon, SearchIcon, ListIcon } from '@lucide/svelte';
 
 import type { SidebarItem } from './types';
 
@@ -6,6 +6,7 @@ import type { SidebarItem } from './types';
 export const defaultSidebarItems: SidebarItem[] = [
 	{ type: 'link', label: 'Search', href: '/search', icon: SearchIcon },
 	{ type: 'link', label: 'Map', href: '/map', icon: MapIcon },
+	{ type: 'link', label: 'List', href: '/borehole', icon: ListIcon },
 	{ type: 'hr' },
 	{ type: 'link', label: 'About', href: '/about', icon: InfoIcon }
 ];
