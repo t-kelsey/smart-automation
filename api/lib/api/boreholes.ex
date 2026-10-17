@@ -10,6 +10,10 @@ defmodule Api.Boreholes do
   alias Api.Boreholes.BoreholeDocument
   alias Api.Boreholes.BoreholeLayer
   alias Api.Boreholes.Document
+  alias Api.Boreholes.ExtractionResult
+  alias Api.Boreholes.PipelineStageRun
+  alias Api.Boreholes.SinkResult
+  alias Api.Boreholes.TriageSection
 
   @typedoc """
   Filters for `list_boreholes/1`; every key is optional.
@@ -121,6 +125,98 @@ defmodule Api.Boreholes do
       {:ok, uuid} -> Repo.get(Document, uuid)
       :error -> nil
     end
+  end
+
+  @doc """
+  Creates a borehole with its layers in one transaction. Returns the same shape as
+  `get_borehole/1` on success.
+
+  `borehole_attrs` may include `"x"`, `"y"`, `"epsg"` instead of a `"location"` key directly — if
+  present, `location` is set via `ST_Transform(ST_SetSRID(ST_MakePoint(x, y), epsg), 4326)`
+  (ADR-0002) rather than expecting the caller to reproject coordinates itself.
+
+  Each map in `layers_attrs` gets `"position"` set to its 1-based index if it doesn't have one.
+
+  Options:
+    * `:document_id` - an existing `documents.id` to attach as this borehole's original
+      document (ADR-0013, via `attach_documents/3`)
+  """
+  def create_borehole(borehole_attrs, layers_attrs, opts \\ []) do
+    Repo.transaction(fn ->
+      with {:ok, borehole} <- insert_borehole(borehole_attrs),
+           :ok <- set_location(borehole, borehole_attrs),
+           {:ok, _layers} <- insert_layers(borehole, layers_attrs),
+           :ok <- maybe_attach(borehole, opts) do
+        get_borehole(borehole.id)
+      else
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp insert_borehole(attrs) do
+    %Borehole{} |> Borehole.changeset(attrs) |> Repo.insert()
+  end
+
+  defp set_location(borehole, attrs) do
+    attrs = stringify_keys(attrs)
+
+    case {attrs["x"], attrs["y"], attrs["epsg"]} do
+      {x, y, epsg} when not is_nil(x) and not is_nil(y) and not is_nil(epsg) ->
+        query =
+          from(b in Borehole, where: b.id == ^borehole.id)
+          |> update(
+            set: [
+              location:
+                fragment("ST_Transform(ST_SetSRID(ST_MakePoint(?, ?), ?), 4326)", ^x, ^y, ^epsg)
+            ]
+          )
+
+        Repo.update_all(query, [])
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp insert_layers(borehole, layers_attrs) do
+    layers_attrs
+    |> Enum.with_index(1)
+    |> Enum.reduce_while({:ok, []}, fn {attrs, index}, {:ok, acc} ->
+      attrs = attrs |> stringify_keys() |> Map.put_new("position", index)
+
+      %BoreholeLayer{}
+      |> BoreholeLayer.changeset(attrs)
+      |> Ecto.Changeset.put_change(:borehole_id, borehole.id)
+      |> Repo.insert()
+      |> case do
+        {:ok, layer} -> {:cont, {:ok, [layer | acc]}}
+        {:error, changeset} -> {:halt, {:error, changeset}}
+      end
+    end)
+  end
+
+  defp maybe_attach(borehole, opts) do
+    case Keyword.get(opts, :document_id) do
+      nil ->
+        :ok
+
+      document_id ->
+        case get_document(document_id) do
+          nil ->
+            {:error, "document_id does not reference an existing document"}
+
+          document ->
+            with {:ok, _links} <- attach_documents(borehole, document, []) do
+              :ok
+            end
+        end
+    end
+  end
+
+  defp stringify_keys(map) do
+    Map.new(map, fn {k, v} -> {to_string(k), v} end)
   end
 
   @doc """
@@ -295,4 +391,93 @@ defmodule Api.Boreholes do
   end
 
   defp escape_like(s), do: String.replace(s, ~r/([\\%_])/, "\\\\\\1")
+
+  # -- Pipeline stage tracking (write path for `bem/`, design doc: ------------------------------
+  # docs/elixir-backend-borehole-pipeline.md, "Proposed Extension: Pipeline Stage Tracking".
+  # Debug/internal only, never consumed by `web/`. Latest run only: each `put_*`/`replace_*`
+  # call below replaces the previous result for that document/stage/section rather than keeping
+  # history. `attrs` is expected to be the string-keyed map straight from controller params.
+
+  @doc """
+  Upserts the OCR or translation result for a document. `stage` is `"ocr"` or `"translation"`.
+  """
+  def put_pipeline_stage_run(document_id, stage, attrs) do
+    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
+         true <- Repo.exists?(from(d in Document, where: d.id == ^uuid)) do
+      (Repo.get_by(PipelineStageRun, document_id: uuid, stage: stage) ||
+         %PipelineStageRun{document_id: uuid, stage: stage})
+      |> PipelineStageRun.changeset(attrs)
+      |> Repo.insert_or_update()
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Replaces every triage section for a document with `sections_attrs` (each a map, "section_index"
+  defaults to its 0-based position in the list). Deleting the old sections cascades to their
+  `extraction_results`/`sink_results` automatically.
+  """
+  def replace_triage_sections(document_id, sections_attrs) do
+    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
+         true <- Repo.exists?(from(d in Document, where: d.id == ^uuid)) do
+      Repo.transaction(fn ->
+        Repo.delete_all(from(t in TriageSection, where: t.document_id == ^uuid))
+
+        sections_attrs
+        |> Enum.with_index()
+        |> Enum.reduce_while([], fn {attrs, index}, acc ->
+          %TriageSection{document_id: uuid}
+          |> TriageSection.changeset(Map.put_new(attrs, "section_index", index))
+          |> Repo.insert()
+          |> case do
+            {:ok, section} -> {:cont, [section | acc]}
+            {:error, changeset} -> {:halt, {:error, changeset}}
+          end
+        end)
+        |> case do
+          {:error, changeset} -> Repo.rollback(changeset)
+          sections -> Enum.reverse(sections)
+        end
+      end)
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Upserts the extraction result for the triage section at `section_index` within a document.
+  """
+  def put_extraction_result(document_id, section_index, attrs) do
+    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
+         %TriageSection{} = section <-
+           Repo.get_by(TriageSection, document_id: uuid, section_index: section_index) do
+      (Repo.get_by(ExtractionResult, triage_section_id: section.id) ||
+         %ExtractionResult{triage_section_id: section.id})
+      |> ExtractionResult.changeset(attrs)
+      |> Repo.insert_or_update()
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Upserts the sink result for the extraction result of the triage section at `section_index`
+  within a document. `attrs["created_borehole_id"]` links the sink attempt to the borehole it
+  actually created, if any.
+  """
+  def put_sink_result(document_id, section_index, attrs) do
+    with {:ok, uuid} <- Ecto.UUID.cast(document_id),
+         %TriageSection{} = section <-
+           Repo.get_by(TriageSection, document_id: uuid, section_index: section_index),
+         %ExtractionResult{} = extraction <-
+           Repo.get_by(ExtractionResult, triage_section_id: section.id) do
+      (Repo.get_by(SinkResult, extraction_result_id: extraction.id) ||
+         %SinkResult{extraction_result_id: extraction.id})
+      |> SinkResult.changeset(attrs)
+      |> Repo.insert_or_update()
+    else
+      _ -> {:error, :not_found}
+    end
+  end
 end

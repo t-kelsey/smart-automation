@@ -27,9 +27,10 @@ defmodule Api.Boreholes.SinkResult do
   @doc false
   def changeset(sink_result, attrs) do
     sink_result
-    |> cast(attrs, [:target, :success, :response_status, :error])
+    |> cast(attrs, [:target, :success, :response_status, :created_borehole_id, :error])
     |> validate_required([:target, :success])
     |> validate_inclusion(:target, @targets)
     |> unique_constraint(:extraction_result_id)
+    |> foreign_key_constraint(:created_borehole_id)
   end
 end
