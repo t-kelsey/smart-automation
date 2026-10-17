@@ -8,11 +8,11 @@ import argparse
 import logging
 from pathlib import Path
 
-from .extraction import extract
 from .ocr import ocr
-from .output import make_sink
 from .translation_and_labeling.translation_and_labeling import translate
 from .triage import triage
+from .extraction import extract
+from .output import make_sink
 
 log = logging.getLogger("bem")
 

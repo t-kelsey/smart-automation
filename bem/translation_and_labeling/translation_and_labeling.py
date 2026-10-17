@@ -31,4 +31,3 @@ def translate(markdown: str, translator: Translator | None = None) -> tuple[str,
     src = detect_language(markdown)
     log.info("source language: %s", src)
     return translate_markdown(markdown, src, translator or MarianTranslator())
-
