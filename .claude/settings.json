@@ -1,13 +1,16 @@
 {
-	"extraKnownMarketplaces": {
-		"svelte": {
-			"source": {
-				"source": "github",
-				"repo": "sveltejs/ai-tools"
-			}
-		}
-	},
-	"enabledPlugins": {
-		"svelte@svelte": true
-	}
+  "extraKnownMarketplaces": {
+    "svelte": {
+      "source": {
+        "source": "github",
+        "repo": "sveltejs/ai-tools"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "svelte@svelte": true
+  },
+  "permissions": {
+    "allow": ["Bash(python3 -I lgrb-sample/fetch_lgrb.py:*)"]
+  }
 }
