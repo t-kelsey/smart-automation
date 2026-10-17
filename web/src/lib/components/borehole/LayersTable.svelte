@@ -1,23 +1,37 @@
 <!--
 @component
 Layers of a borehole: a table on wide containers, one card per layer on narrow ones. Hovering a
-layer reports it through `onselect`, so it can be highlighted in the cross section.
+layer, or clicking it, is reported to `selection`, so it is highlighted in the cross section too.
 
 @param layers - Layers to list, in display order.
-@param [selectedId] - Id of the highlighted layer.
-@param [onselect] - Called with a layer id on hover and with `null` when the pointer leaves.
+@param [selection] - Shared hover and click highlighting of the layers.
 -->
 <script lang="ts">
 	import type { BoreholeLayer } from '#lib/domain/borehole.ts';
+	import type { LayerSelection } from '#lib/layer-selection.svelte.ts';
 	import { describe, shortForm } from '#lib/din4023/index.ts';
 
 	interface Props {
 		layers: BoreholeLayer[];
-		selectedId?: string | null;
-		onselect?: (id: string | null) => void;
+		selection?: LayerSelection;
 	}
 
-	let { layers, selectedId = null, onselect }: Props = $props();
+	let { layers, selection }: Props = $props();
+
+	function onkey(event: KeyboardEvent, id: string) {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		selection?.toggle(id);
+	}
+
+	/** Selected layers are tinted stronger and outlined; hovering tints lightly. Both can apply. */
+	const highlight = (id: string) =>
+		[
+			selection?.isSelected(id)
+				? 'bg-primary-500/25 outline-2 -outline-offset-2 outline-primary-500'
+				: '',
+			selection?.isHovered(id) && !selection.isSelected(id) ? 'bg-primary-500/15' : ''
+		].join(' ');
 </script>
 
 {#snippet petrography(layer: BoreholeLayer)}
@@ -42,12 +56,16 @@ layer reports it through `onselect`, so it can be highlighted in the cross secti
 	<!-- Narrow container: one card per layer instead of a horizontally scrolling table. -->
 	<ul class="space-y-3 @2xl:hidden">
 		{#each layers as layer (layer.id)}
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->
 			<li
-				class="rounded-lg border border-surface-200-800 p-3 text-sm {selectedId === layer.id
-					? 'bg-primary-500/15'
-					: ''}"
-				onmouseenter={() => onselect?.(layer.id)}
-				onmouseleave={() => onselect?.(null)}
+				class="cursor-pointer rounded-lg border border-surface-200-800 p-3 text-sm {highlight(
+					layer.id
+				)}"
+				onmouseenter={() => selection?.hover(layer.id)}
+				onmouseleave={() => selection?.hover(null)}
+				onclick={() => selection?.toggle(layer.id)}
+				onkeydown={(event) => onkey(event, layer.id)}
+				tabindex="0"
 			>
 				<div class="mb-2 flex items-center justify-between gap-2">
 					<span class="font-medium">{layer.position}</span>
@@ -88,9 +106,12 @@ layer reports it through `onselect`, so it can be highlighted in the cross secti
 			<tbody>
 				{#each layers as layer (layer.id)}
 					<tr
-						class={selectedId === layer.id ? 'bg-primary-500/15' : ''}
-						onmouseenter={() => onselect?.(layer.id)}
-						onmouseleave={() => onselect?.(null)}
+						class="cursor-pointer {highlight(layer.id)}"
+						onmouseenter={() => selection?.hover(layer.id)}
+						onmouseleave={() => selection?.hover(null)}
+						onclick={() => selection?.toggle(layer.id)}
+						onkeydown={(event) => onkey(event, layer.id)}
+						tabindex="0"
 					>
 						<td class="font-medium">{layer.position}</td>
 						<td class="whitespace-nowrap">{layer.startDepth.toFixed(1)}</td>

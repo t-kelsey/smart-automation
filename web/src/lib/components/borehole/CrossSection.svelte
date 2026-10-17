@@ -5,23 +5,22 @@ parent. Owns the colour state, so every
 page that shows a cross section gets the same control.
 
 @param borehole - Borehole whose layers are drawn.
-@param [selectedId] - Id of the highlighted layer.
-@param [onselect] - Called with a layer id on hover and with `null` when the pointer leaves.
+@param [selection] - Shared hover and click highlighting of the layers.
 @param [class] - Extra classes for the root element. The component fills the height of its parent, so
   the parent needs a height.
 -->
 <script lang="ts">
 	import type { Borehole } from '#lib/domain/borehole.ts';
+	import type { LayerSelection } from '#lib/layer-selection.svelte.ts';
 	import BoreholeColumn from './BoreholeColumn.svelte';
 
 	interface Props {
 		borehole: Pick<Borehole, 'layers' | 'totalDepth'>;
-		selectedId?: string | null;
-		onselect?: (id: string | null) => void;
+		selection?: LayerSelection;
 		class?: string;
 	}
 
-	let { borehole, selectedId = null, onselect, class: className = '' }: Props = $props();
+	let { borehole, selection, class: className = '' }: Props = $props();
 
 	let colored = $state(true);
 	let columnHeight = $state(0);
@@ -38,8 +37,7 @@ page that shows a cross section gets the same control.
 			layers={borehole.layers}
 			totalDepth={borehole.totalDepth ?? 0}
 			{colored}
-			{selectedId}
-			{onselect}
+			{selection}
 			availableHeight={columnHeight}
 		/>
 	</div>

@@ -18,6 +18,7 @@
 	import HelpDrawer from '#lib/components/borehole/HelpDrawer.svelte';
 	import PatternDefs from '#lib/components/borehole/PatternDefs.svelte';
 	import type { BoreholeDocument } from '#lib/domain/borehole.ts';
+	import { LayerSelection } from '#lib/layer-selection.svelte.ts';
 	import type { PageProps } from './$types';
 	import { Collapsible, Menu, Portal } from '@skeletonlabs/skeleton-svelte';
 	import { goto } from '$app/navigation';
@@ -27,8 +28,9 @@
 	let borehole = $derived(data.borehole);
 
 	let coreDataOpen = $state(true);
-	let selectedLayerId = $state<string | null>(null);
-	const select = (id: string | null) => (selectedLayerId = id);
+	// Click selection is stored per borehole, so it carries over between details and review.
+	let selection = $derived(new LayerSelection(borehole.id));
+	$effect(() => selection.restore());
 
 	const documentIcons: Record<BoreholeDocument['type'], typeof FileTextIcon> = {
 		pdf: FileTextIcon,
@@ -64,7 +66,7 @@
 				class="flex h-[calc(100dvh-9rem)] flex-col self-start card border border-surface-200-800 bg-surface-50-950 p-4 lg:sticky lg:top-0"
 			>
 				<h2 class="mb-3 shrink-0 h5">Cross section</h2>
-				<CrossSection {borehole} selectedId={selectedLayerId} onselect={select} class="flex-1" />
+				<CrossSection {borehole} {selection} class="flex-1" />
 			</section>
 
 			<div class="min-w-0 space-y-6">
@@ -108,7 +110,7 @@
 							Edit layers
 						</button>
 					</div>
-					<LayersTable layers={borehole.layers} selectedId={selectedLayerId} onselect={select} />
+					<LayersTable layers={borehole.layers} {selection} />
 				</section>
 
 				<!-- Documents: the original log and additional information files -->

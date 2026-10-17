@@ -12,6 +12,7 @@
 		patternId,
 		shortForm
 	} from '#lib/din4023/index.ts';
+	import type { LayerSelection } from '#lib/layer-selection.svelte.ts';
 	import type { MaterialKey } from '#lib/din4023/index.ts';
 
 	interface Props {
@@ -19,8 +20,7 @@
 		totalDepth: number;
 		/** Tint the layers with the DIN colours; otherwise only the hatch patterns are drawn. */
 		colored?: boolean;
-		selectedId?: string | null;
-		onselect?: (id: string | null) => void;
+		selection?: LayerSelection;
 		/**
 		 * Height in pixels the drawing may use; the scale is chosen so that the whole column fits.
 		 * Without it the column is drawn at a fixed scale.
@@ -28,14 +28,7 @@
 		availableHeight?: number;
 	}
 
-	let {
-		layers,
-		totalDepth,
-		colored = true,
-		selectedId = null,
-		onselect,
-		availableHeight
-	}: Props = $props();
+	let { layers, totalDepth, colored = true, selection, availableHeight }: Props = $props();
 
 	const defaultScale = 14; // units (pixels) per metre
 	const minScale = 1;
@@ -116,13 +109,14 @@
 >
 	{#each rows as row (row.layer.id)}
 		{@const h = row.y1 - row.y0}
-		{@const selected = selectedId === row.layer.id}
+		{@const selected = selection?.isSelected(row.layer.id) ?? false}
+		{@const hovered = selection?.isHovered(row.layer.id) ?? false}
 		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 		<g
 			class="cursor-pointer"
-			onmouseenter={() => onselect?.(row.layer.id)}
-			onmouseleave={() => onselect?.(null)}
-			onclick={() => onselect?.(selected ? null : row.layer.id)}
+			onmouseenter={() => selection?.hover(row.layer.id)}
+			onmouseleave={() => selection?.hover(null)}
+			onclick={() => selection?.toggle(row.layer.id)}
 		>
 			<title>{row.title}</title>
 			<rect x={colX} y={row.y0} width={colW} height={h} fill={row.fill ? 'white' : '#e5e7eb'} />
@@ -167,14 +161,15 @@
 					/>
 				{/if}
 			{/if}
-			{#if selected}
+			{#if hovered || selected}
 				<rect
 					x={colX}
 					y={row.y0}
 					width={colW}
 					height={h}
-					class="fill-primary-500/25 stroke-primary-500"
-					stroke-width="2"
+					class="stroke-primary-500 {selected ? 'fill-primary-500/30' : 'fill-primary-500/15'}"
+					stroke-width={selected ? 2.5 : 1.5}
+					stroke-dasharray={selected || !hovered ? undefined : '4 2'}
 				/>
 			{/if}
 		</g>
@@ -184,7 +179,7 @@
 			dominant-baseline="middle"
 			font-size="12"
 			fill="currentColor"
-			font-weight={selected ? 700 : 600}
+			font-weight={selected || hovered ? 700 : 600}
 		>
 			{row.label}
 		</text>

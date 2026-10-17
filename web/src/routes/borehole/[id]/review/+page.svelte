@@ -8,14 +8,16 @@
 	import LayersTable from '#lib/components/borehole/LayersTable.svelte';
 	import PatternDefs from '#lib/components/borehole/PatternDefs.svelte';
 	import { DocumentPane } from '#lib/components/document/index.ts';
+	import { LayerSelection } from '#lib/layer-selection.svelte.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 	let borehole = $derived(data.borehole);
 
 	let tab = $state('cross-section');
-	let selectedLayerId = $state<string | null>(null);
-	const select = (id: string | null) => (selectedLayerId = id);
+	// Click selection is stored per borehole, so it carries over between details and review.
+	let selection = $derived(new LayerSelection(borehole.id));
+	$effect(() => selection.restore());
 </script>
 
 <svelte:head>
@@ -56,10 +58,10 @@
 					<CoreData {borehole} />
 				</Tabs.Content>
 				<Tabs.Content value="cross-section" class="h-full">
-					<CrossSection {borehole} selectedId={selectedLayerId} onselect={select} />
+					<CrossSection {borehole} {selection} />
 				</Tabs.Content>
 				<Tabs.Content value="layers">
-					<LayersTable layers={borehole.layers} selectedId={selectedLayerId} onselect={select} />
+					<LayersTable layers={borehole.layers} {selection} />
 				</Tabs.Content>
 			</div>
 		</Tabs>
