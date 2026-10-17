@@ -370,6 +370,14 @@ defmodule Api.Boreholes do
     end)
   end
 
+  @doc "One `exec_stage` with its documents, or `nil` if the id is not a valid UUID or unknown."
+  def get_exec_stage(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> ExecStage |> Repo.get(uuid) |> Repo.preload(:documents)
+      :error -> nil
+    end
+  end
+
   @doc """
   Every `exec_stage` linked to a document (via `stage_document_links`), newest first. Optional
   `filters["type"]`/`filters["run_id"]` narrow it down. `[]` if the id is not a valid UUID or no

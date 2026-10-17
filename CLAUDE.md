@@ -8,7 +8,7 @@ Hackathon project (Herrenknecht challenge): automated extraction and standardisa
 
 - `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, PostGIS, Bandit). Borehole list/search/detail endpoints are documented in `docs/api-reference.md`; `mix boreholes.mock --count N` (max 1000000) generates mock data.
 - `web/` — SvelteKit 3 / Svelte 5 frontend (TypeScript, Tailwind 4, pnpm). Currently scaffold only (`src/routes/`).
-- `bem/` — Python extraction pipeline (triage → OCR → translation/extraction → POST to API); see ADR-0001.
+- `bem/` — Python pipeline that runs a 4-stage `claude -p` pipeline (filter → split → extract → transform) over a borehole PDF and posts the result to `POST /api/boreholes`, exposed over HTTP (`bem/pipeline/server.py`, `POST /execute`); see `bem/README.md`.
 - `docs/` — Architecture Decision Records in `docs/adr/` (use `_template.md`).
 - `data/` — Confidential real-project sample data (borehole PDFs/images/docx, format standards). Restricted to hackathon use and must be deleted after the event; never copy, commit, or send it to external services. Agents may read it locally.
 
@@ -27,7 +27,7 @@ Architecture Decision Records capture important architectural decisions (e.g. ch
 
 - Each file starts with front matter (`id`, `date`, `author`, `title`), followed by the sections: Context, Decision, Pros, Cons, Alternatives, Consequences, References.
 - Check `docs/adr/` before making a significant architectural choice, and when making a new one, write an ADR for it instead of leaving the rationale only in chat or commit messages.
-- An ADR documents a decision at the time it was made; to change a decision, add a new ADR that references the old one rather than rewriting history.
+- Keep the ADR set lean and current: when a decision stops being true (replaced by a later, named ADR, or by a wholesale pivot that makes a whole batch of older ADRs moot), delete the superseded ADR file outright rather than leaving it as cross-reference clutter users have to chase through. Only keep an old ADR around if it still carries real rationale someone would want later (e.g. a genuinely rejected alternative that could resurface) — judge case by case. When you delete or renumber an ADR, fix every other ADR/doc that cross-references it by number.
 
 ## Commands
 

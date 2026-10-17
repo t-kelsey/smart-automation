@@ -9,7 +9,7 @@ title: exec_stages/reports replace bem's pipeline tracking (direct Claude pipeli
 
 ## Context
 
-`bem/` (OCR → dictionary/local-LLM translation → triage → extraction, ADR-0001) is dropped. Its
+`bem/` (OCR → dictionary/local-LLM translation → triage → extraction) is dropped. Its
 replacement is `claude_test/` (`claude_test/README.md`): a pipeline of `claude -p` calls that
 turns one borehole PDF into one or more `POST /api/boreholes` payloads in four steps —
 `01_filter` (keep only borehole-log pages), `02_split` (one PDF per borehole), `03_extract`
@@ -19,12 +19,12 @@ prefixed with a shared run id (`YYYYMMDD-HHMMSS`), plus a `report.json` (per-ste
 token/cost stats) and a `result.json` (all boreholes' payloads combined) — see
 `api/priv/out/AF01/` for a real example copied in during this design.
 
-The tables ADR-0030 built (`pipeline_stage_runs`, `triage_sections`, `extraction_results`,
-`sink_results`) are shaped around bem's five named stages (OCR, translation, triage, extraction,
-sink) and its one-row-per-document-or-section, latest-run-only model. They don't fit a pipeline
-that (a) has different, fewer stages, (b) keeps every run instead of only the latest, and (c)
-needs a stage's output (e.g. one `03_extract` result) traceable both to the original source
-document and, once split, to the per-borehole PDF it was produced from.
+bem's original design had built four tables (`pipeline_stage_runs`, `triage_sections`,
+`extraction_results`, `sink_results`) shaped around its five named stages (OCR, translation,
+triage, extraction, sink) and a one-row-per-document-or-section, latest-run-only model. They
+don't fit a pipeline that (a) has different, fewer stages, (b) keeps every run instead of only
+the latest, and (c) needs a stage's output (e.g. one `03_extract` result) traceable both to the
+original source document and, once split, to the per-borehole PDF it was produced from.
 
 ## Decision
 
@@ -35,7 +35,7 @@ Replace the four bem-specific tables with three generic ones:
   `position` (which borehole within the run — 1, 2, â€¦ — for `extract`/`transform`; `null` for the
   whole-document `filter`/`split` steps), `data` (jsonb — the step's JSON file as-is:
   `classification.json`, `grouping.json`, the raw extraction, or `{payload, validation_issues}`).
-  Append-only (unlike ADR-0030's latest-run-only tables): reruns add new rows, so the history of a
+  Append-only (unlike bem's old latest-run-only tables): reruns add new rows, so the history of a
   document's extraction attempts is kept for comparison/debugging.
 - **`stage_document_links`**: many-to-many join between `exec_stages` and `documents`. A `filter`
   stage links only to the original source document; an `extract`/`transform` stage for one
@@ -46,7 +46,7 @@ Replace the four bem-specific tables with three generic ones:
   as-is: step name, model, effort, tokens, cost, wall/API seconds). Kept separate from
   `exec_stages` because it describes the whole run, not one step, and has no `position`.
 - Drop `pipeline_stage_runs`, `triage_sections`, `extraction_results`, `sink_results` and the
-  `PipelineController` endpoints built for them (ADR-0030) — bem is gone, nothing writes to them
+  `PipelineController` endpoints built for them — bem is gone, nothing writes to them
   anymore.
 - `POST /api/boreholes` (ADR-0031) is unchanged: `04_transform`'s `payload` is already shaped as
   `{borehole, layers}`, so `result.json` can be posted as-is per borehole.
@@ -90,7 +90,7 @@ erDiagram
 
 ## Cons
 
-- `data`/jsonb is free-form, same trade-off ADR-0030 already accepted for `output`/
+- `data`/jsonb is free-form, same trade-off bem's old tables already accepted for `output`/
   `extracted_fields`.
 - Append-only means no upsert-based idempotency: re-running a document's pipeline adds rows
   rather than replacing them; nothing here prunes old runs.
@@ -100,7 +100,7 @@ erDiagram
 
 ## Alternatives
 
-- Keep ADR-0030's tables and just repurpose `stage`'s allowed values: rejected, the
+- Keep bem's old tables and just repurpose `stage`'s allowed values: rejected, the
   latest-run-only/1:1-document model doesn't fit an append-only, per-borehole-linked pipeline.
 - A single `document_id` foreign key on `exec_stages` instead of a join table: simpler, but can't
   express a stage belonging to both the source document and its split-out borehole PDF.
@@ -108,11 +108,10 @@ erDiagram
 ## Consequences
 
 - `docs/data-model.md`'s "Pipeline stage tracking" section is replaced by this ADR's diagram.
-- `bem/API_INTEGRATION.md` and the bem-specific parts of ADR-0032/ADR-0033 (the `bem-serve`
-  worker) describe a pipeline that no longer runs; they stay as a record of what was built, not
-  removed, per the project's ADR convention of adding new decisions instead of rewriting old ones.
+- The old bem pipeline tracking tables/endpoints (`bem-serve`'s FastAPI worker and its
+  `PipelineController` write-back endpoints) are gone; nothing writes to or reads them anymore.
 
 ## References
 
-- ADR-0001, ADR-0013, ADR-0014, ADR-0030, ADR-0031, ADR-0032, ADR-0033
+- ADR-0013, ADR-0014, ADR-0031, ADR-0033
 - `claude_test/README.md`

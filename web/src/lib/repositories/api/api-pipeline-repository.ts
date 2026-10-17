@@ -1,5 +1,5 @@
 import type { PipelineConfig } from '#lib/domain/documents.ts';
-import type { Pipeline } from '#lib/domain/pipelines.ts';
+import type { JobDetail, Pipeline } from '#lib/domain/pipelines.ts';
 import { RepositoryError } from '../borehole-repository';
 import type { PipelineRepository, StartedPipeline } from '../pipeline-repository';
 import { ApiClient, type ApiClientOptions } from './api-client';
@@ -9,6 +9,17 @@ import { mapPipeline, toPipelineStatus, type ApiPipelineRun } from './pipeline-m
 interface ApiPipelineRunListItem {
 	id: string;
 	document_filename: string;
+}
+
+/** `GET /exec_stages/:id`. */
+interface ApiExecStageDetail {
+	id: string;
+	type: string;
+	run_id: string;
+	position: number | null;
+	data: unknown;
+	document_ids: string[];
+	inserted_at: string;
 }
 
 /**
@@ -53,6 +64,24 @@ export class ApiPipelineRepository implements PipelineRepository {
 			filename = document?.data.original_filename ?? 'Deleted document';
 		}
 		return mapPipeline(body.data, filename);
+	}
+
+	async getJob(id: string): Promise<JobDetail | null> {
+		const body = await this.client.getJson<{ data: ApiExecStageDetail }>(
+			`/exec_stages/${encodeURIComponent(id)}`,
+			[404]
+		);
+		if (!body) return null;
+		const { data } = body;
+		return {
+			id: data.id,
+			type: data.type,
+			position: data.position ?? undefined,
+			runId: data.run_id,
+			documentIds: data.document_ids,
+			createdAt: new Date(data.inserted_at),
+			data: data.data
+		};
 	}
 
 	async start(documentId: string, config: PipelineConfig): Promise<StartedPipeline> {

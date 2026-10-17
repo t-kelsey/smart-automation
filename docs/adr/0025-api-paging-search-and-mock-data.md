@@ -9,7 +9,7 @@ title: API-side paging, filtering and ranked search; place, client and document 
 
 ## Context
 
-ADR-0024 moved paging, sorting and filtering into the web's API repository because the first API endpoints returned every borehole unpaged. The frontend also lacked fields it shows (place, client, document pages and size), unknown ids returned HTML error pages, and the database had only 10 seeded boreholes. The project is a hackathon prototype; the dataset is capped at 10 000 boreholes, so production-grade scaling is not a goal.
+The first API endpoints returned every borehole unpaged, so the web app had briefly done its own paging, sorting and filtering client-side over the full response. The frontend also lacked fields it shows (place, client, document pages and size), unknown ids returned HTML error pages, and the database had only 10 seeded boreholes. The project is a hackathon prototype; the dataset is capped at 10 000 boreholes, so production-grade scaling is not a goal.
 
 ## Decision
 
@@ -20,7 +20,7 @@ ADR-0024 moved paging, sorting and filtering into the web's API repository becau
 - **Mock data.** `Api.MockData` generates up to 10 000 deterministic boreholes with layers and documents in the local languages of 11 countries (`mix boreholes.mock`, and from the seeds via `MOCK_BOREHOLES`). Seeded and generated rows are marked in `metadata.source` so seeds can be re-run without duplicates.
 - **No document download.** Serving source files would contradict the confidentiality rule in ADR-0014 and the pipeline doc; documents stay metadata-only in the API.
 
-The web's API repository passes all parameters through instead of filtering locally (supersedes the Decision of ADR-0024).
+The web's API repository passes all parameters through instead of filtering locally.
 
 ## Pros
 
@@ -48,5 +48,5 @@ The web's API repository passes all parameters through instead of filtering loca
 
 ## References
 
-- ADR-0009, ADR-0014, ADR-0023, ADR-0024
+- ADR-0009, ADR-0014, ADR-0023
 - docs/api-reference.md

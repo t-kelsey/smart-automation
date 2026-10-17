@@ -46,7 +46,6 @@ Ingestion is a **single pass**, done in one job/step:
 ## References
 
 - docs/elixir-backend-borehole-pipeline.md
-- ADR-0005 (same raw-provenance idea on the `bem/` pipeline side, also just for traceability, not a separate stage)
 - ADR-0011
 - ADR-0012
 

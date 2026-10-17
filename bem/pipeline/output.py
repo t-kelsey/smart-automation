@@ -51,3 +51,17 @@ class Recorder:
                 self.on_stage(stage, position, data, files or [])
             except Exception as e:  # tracking must not abort the extraction
                 log(f"{stage}{'' if position is None else f' #{position}'}: could not upload stage result: {e}")
+
+    def record_failure(self, stage: str, error: BaseException, *, position: int | None = None) -> None:
+        """Store a failed step as an exec_stage whose `data` holds the reason, so failed runs can be analysed.
+
+        Marks the exception as recorded so callers further up do not store it a second time.
+        """
+        if getattr(error, "stage_recorded", False):
+            return
+        try:
+            error.stage_recorded = True  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
+        data = {"status": "failed", "error_type": type(error).__name__, "error": str(error)}
+        self.record(stage, data, position=position)

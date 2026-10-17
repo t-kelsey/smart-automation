@@ -209,13 +209,17 @@
 				if (ensureIcon(id, () => patternIconSvg(layer, ring))) return id;
 			}
 			const id = `dot-color-${point.verified}`;
-			ensureIcon(id, () => colorIconSvg(point.verified ? mapColors.verified : mapColors.unverified, ring));
+			ensureIcon(id, () =>
+				colorIconSvg(point.verified ? mapColors.verified : mapColors.unverified, ring)
+			);
 			return id;
 		}
 		// The verified or unverified colour on a white rim, without the material fill
 		function resolvePlainIcon(point: MapPoint): string {
 			const id = `dot-plain-${point.verified}`;
-			ensureIcon(id, () => plainIconSvg(point.verified ? mapColors.verified : mapColors.unverified));
+			ensureIcon(id, () =>
+				plainIconSvg(point.verified ? mapColors.verified : mapColors.unverified)
+			);
 			return id;
 		}
 		// Loads the dominant material of a borehole once; the map points do not carry it
@@ -308,7 +312,12 @@
 						singles.push({
 							type: 'Feature',
 							geometry: item.geometry,
-							properties: { id: point.id, icon: showFill ? resolveIcon(point, materials.get(point.id)) : resolvePlainIcon(point) }
+							properties: {
+								id: point.id,
+								icon: showFill
+									? resolveIcon(point, materials.get(point.id))
+									: resolvePlainIcon(point)
+							}
 						});
 					}
 				}
@@ -399,7 +408,11 @@
 		map.on('click', 'boreholes', onEnter);
 		map.on('click', (e) => {
 			// Clicks on the card reach the map too (markers sit in its canvas container): they must not close it
-			if (e.originalEvent.target instanceof Element && e.originalEvent.target.closest('[role=tooltip]')) return;
+			if (
+				e.originalEvent.target instanceof Element &&
+				e.originalEvent.target.closest('[role=tooltip]')
+			)
+				return;
 			if (!map.queryRenderedFeatures(e.point, { layers: ['boreholes'] }).length) scheduleHide();
 		});
 

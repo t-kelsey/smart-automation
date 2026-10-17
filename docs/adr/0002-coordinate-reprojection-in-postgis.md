@@ -37,5 +37,4 @@ The pipeline sends the coordinates **as written in the source**, plus an EPSG co
 
 ## References
 
-- ADR-0001
 - PostGIS `ST_Transform`

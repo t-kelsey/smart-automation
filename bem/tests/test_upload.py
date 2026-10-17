@@ -111,3 +111,19 @@ class Service(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FailedStageTest(unittest.TestCase):
+    def test_failure_is_recorded_once_with_reason(self):
+        from pipeline.ai import PipelineError
+        from pipeline.output import Recorder
+
+        calls = []
+        recorder = Recorder(lambda stage, position, data, files: calls.append((stage, position, data)))
+        error = PipelineError("claude exited with 1")
+        recorder.record_failure("extract", error, position=2)
+        recorder.record_failure("extract", error)  # re-raised further up: must not be stored twice
+        self.assertEqual(len(calls), 1)
+        stage, position, data = calls[0]
+        self.assertEqual((stage, position), ("extract", 2))
+        self.assertEqual(data, {"status": "failed", "error_type": "PipelineError", "error": "claude exited with 1"})

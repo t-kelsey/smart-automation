@@ -15,7 +15,7 @@ Passwort: siehe email
 
 - Docker (for the local Postgres+PostGIS container)
 - Elixir/Erlang (see `api/mix.exs` for the required Elixir version)
-- Node.js + [pnpm](https://pnpm.io/)
+- Node.js >= 22.13 (see `web/.nvmrc`; `nvm use` picks it up automatically) + [pnpm](https://pnpm.io/)
 
 ## 1. Database (Postgres + PostGIS)
 

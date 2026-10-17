@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import {
 		countByStatus,
 		formatDuration,
@@ -6,8 +7,7 @@
 		type JobStatus,
 		type Pipeline
 	} from '#lib/domain/pipelines.ts';
-	import { ChevronRightIcon } from '@lucide/svelte';
-	import { resolve } from '$app/paths';
+	import { ChevronRightIcon, MapPinIcon } from '@lucide/svelte';
 	import StatusIcon from './StatusIcon.svelte';
 
 	/** GitLab-style flow graph: one card per stage with its jobs inside, joined by connector lines. */
@@ -30,15 +30,15 @@
 	}
 </script>
 
-{#snippet row(job: Pipeline['stages'][number]['jobs'][number])}
+{#snippet row(job: Pipeline['stages'][number]['jobs'][number], link: boolean)}
 	<StatusIcon status={job.status} class="size-7" />
 	<div class="min-w-0 flex-1">
-		<p class="truncate {job.boreholeId ? 'font-medium text-primary-600-400' : ''}">{job.name}</p>
+		<p class="truncate {link ? 'font-medium text-primary-600-400' : ''}">{job.name}</p>
 		{#if job.durationSeconds !== undefined}
 			<p class="text-xs opacity-60">{formatDuration(job.durationSeconds)}</p>
 		{/if}
 	</div>
-	{#if job.boreholeId}
+	{#if link}
 		<ChevronRightIcon class="size-4 shrink-0 text-primary-600-400" aria-hidden="true" />
 	{/if}
 {/snippet}
@@ -71,18 +71,31 @@
 
 				<ul class="space-y-1 rounded-xl bg-surface-50-950 p-1.5">
 					{#each stage.jobs as job (job.id)}
-						<li title={job.error ?? job.name}>
+						<li
+							class="flex items-center gap-1 rounded-lg hover:bg-primary-500/10"
+							title={job.error ?? job.name}
+						>
+							{#if job.execStageId}
+								<a
+									href={resolve('/jobs/[id]', { id: job.execStageId })}
+									class="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2"
+								>
+									{@render row(job, true)}
+								</a>
+							{:else}
+								<div class="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2">
+									{@render row(job, false)}
+								</div>
+							{/if}
 							{#if job.boreholeId}
 								<a
 									href={resolve('/borehole/[id]', { id: job.boreholeId })}
-									class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-primary-500/10"
+									class="mr-1.5 btn-icon preset-tonal-primary btn-icon-sm"
+									title="Open borehole"
+									aria-label="Open borehole of {job.name}"
 								>
-									{@render row(job)}
+									<MapPinIcon class="size-4" />
 								</a>
-							{:else}
-								<div class="flex items-center gap-2.5 rounded-lg px-2.5 py-2">
-									{@render row(job)}
-								</div>
 							{/if}
 						</li>
 					{:else}

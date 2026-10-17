@@ -6,6 +6,7 @@
 		ArrowLeftIcon,
 		ChevronRightIcon,
 		ListIcon,
+		MapPinIcon,
 		RefreshCwIcon,
 		WorkflowIcon
 	} from '@lucide/svelte';
@@ -98,15 +99,26 @@
 						<tr>
 							<td><StatusIcon status={job.status} class="size-7" /></td>
 							<td>
-								{#if job.boreholeId}
-									<a
-										class="inline-flex items-center gap-1 font-medium text-primary-600-400 hover:underline"
-										href={resolve('/borehole/[id]', { id: job.boreholeId })}
-										>{job.name}<ChevronRightIcon class="size-4" aria-hidden="true" /></a
-									>
-								{:else}
-									{job.name}
-								{/if}
+								<span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+									{#if job.execStageId}
+										<a
+											href={resolve('/jobs/[id]', { id: job.execStageId })}
+											class="inline-flex items-center gap-1 font-medium text-primary-600-400 hover:underline"
+										>
+											{job.name}<ChevronRightIcon class="size-4" aria-hidden="true" />
+										</a>
+									{:else}
+										{job.name}
+									{/if}
+									{#if job.boreholeId}
+										<a
+											href={resolve('/borehole/[id]', { id: job.boreholeId })}
+											class="chip preset-tonal-primary text-xs"
+										>
+											<MapPinIcon class="size-3" /> Borehole
+										</a>
+									{/if}
+								</span>
 								{#if job.error}<p class="text-xs text-error-500">{job.error}</p>{/if}
 							</td>
 							<td>

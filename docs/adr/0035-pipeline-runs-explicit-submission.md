@@ -78,7 +78,7 @@ Split upload and pipeline submission into two explicit steps:
 - `docs/api-reference.md`'s intro and the exec_stages/reports section are updated to describe the
   new two-step flow and drop the "draft, not implemented" wording for exec_stages/reports.
 - `docs/elixir-backend-borehole-pipeline.md`'s "Pipeline Stage Tracking" section is updated to
-  describe the current flow instead of ADR-0030's superseded one.
+  describe the current flow instead of bem's superseded tracking design.
 - `Api.Pipeline.submit/1` (ADR-0033's per-document, multipart-with-file submit function) had no
   remaining call sites once `pipeline_runs` became the only submission path, so it was removed
   rather than left as dead code; its test was rewritten to assert `submit_pipeline_run/1`'s

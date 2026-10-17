@@ -81,6 +81,5 @@ Fields that the API does not have (`client`, `location.place`, document `pages`/
 
 ## References
 
-- ADR-0001, ADR-0005
 - `api/lib/api/boreholes/` (Ecto schemas)
 - SvelteKit environment variables (https://svelte.dev/docs/kit/environment-variables)

@@ -9,7 +9,7 @@ title: Start pipelines and show pipeline pages from pipeline_runs
 
 ## Context
 
-ADR-0035 added `pipeline_runs` (`POST /api/pipeline_runs`, `GET /api/pipeline_runs/:id`) on top of the `exec_stages` and `reports` of ADR-0034. The web app so far only staged uploads (ADR-0038) and showed mock pipelines (ADR-0036).
+ADR-0035 added `pipeline_runs` (`POST /api/pipeline_runs`, `GET /api/pipeline_runs/:id`) on top of the `exec_stages` and `reports` of ADR-0034. The web app so far only staged uploads (ADR-0038) and showed pipelines backed by a mock repository.
 
 ## Decision
 
@@ -40,7 +40,7 @@ ADR-0035 added `pipeline_runs` (`POST /api/pipeline_runs`, `GET /api/pipeline_ru
 
 ## Consequences
 
-- Supersedes ADR-0036; the mock repository was removed.
+- The mock pipeline repository used for the `/pipeline` pages before this ADR was removed.
 - The run id fix in bem (use `pipeline_id` as `run_id`, as ADR-0037 describes) makes the stage results show up.
 
 ## References

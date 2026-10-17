@@ -11,7 +11,7 @@ title: Synchronous borehole creation endpoint instead of the upload-and-Oban des
 
 Task 2 ("Ingestion pipeline") in `docs/elixir-backend-borehole-pipeline.md` originally specified an async design: a file-upload endpoint creates a `documents` row with `status: :pending`, and an `Oban` background job calls an external extraction service, stores the raw response, and standardises it into `boreholes`/`borehole_layers`.
 
-In practice: there is no file-upload endpoint yet (per team decision, `bem/` currently works against documents already tracked via `mix documents.backfill`, see `bem/API_INTEGRATION.md`), and there is no external synchronous "extraction service" to poll — `bem/` runs OCR/translation/triage/extraction itself, locally, and is the one reporting results (ADR-0030). An async job with retries makes little sense when there's nothing external to wait on or retry.
+In practice: there is no file-upload endpoint yet (per team decision, `bem/` currently works against documents already tracked via `mix documents.backfill`, see `bem/API_INTEGRATION.md`), and there is no external synchronous "extraction service" to poll — `bem/` runs OCR/translation/triage/extraction itself, locally, and is the one reporting results. An async job with retries makes little sense when there's nothing external to wait on or retry.
 
 ## Decision
 
@@ -34,7 +34,7 @@ Built `POST /api/boreholes` as a plain synchronous endpoint instead:
 ## Pros
 
 - No background-job infrastructure needed for the hackathon scope — one less dependency (`Oban` stays an unused suggestion in `mix.exs` for now).
-- `bem/` gets a definitive success/failure and the created id in the same request it made, which it then reports via `sink_result` (ADR-0030) — simpler than correlating an async job's eventual outcome back to a specific section.
+- `bem/` gets a definitive success/failure and the created id in the same request it made, which it then reports back to the API — simpler than correlating an async job's eventual outcome back to a specific section.
 - Reuses `attach_documents/3` (and its "at most one original document" constraint, ADR-0028) instead of inventing new linking logic.
 
 ## Cons
@@ -53,7 +53,7 @@ Built `POST /api/boreholes` as a plain synchronous endpoint instead:
 
 ## References
 
-- ADR-0002, ADR-0012, ADR-0013, ADR-0023, ADR-0028, ADR-0030
+- ADR-0002, ADR-0012, ADR-0013, ADR-0023, ADR-0028
 - docs/elixir-backend-borehole-pipeline.md
 - docs/api-reference.md
 - bem/API_INTEGRATION.md
