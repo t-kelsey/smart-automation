@@ -36,7 +36,8 @@ def input_files(paths: list[Path]):
 def process(path: Path, api: str | None) -> list[Borehole]:
     """Run one input through every stage. Writes JSON records, and POSTs them if api is set."""
     md_path = ocr_file(path, OCR_DIR)
-    markdown = extract(translate(md_path.read_text(encoding="utf-8")))
+    translated, _ = translate(md_path.read_text(encoding="utf-8"))
+    markdown = extract(translated)
     boreholes = split(path.name, markdown)
 
     RECORD_DIR.mkdir(parents=True, exist_ok=True)
