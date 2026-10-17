@@ -43,12 +43,7 @@
 		padding={{ top: 80, bottom: 80, left: 340, right: 80 }}
 	/>
 	<!-- Left of the zoom controls. -->
-	<div class="absolute top-2.5 right-14 z-10">
-		<MapHelpDrawer />
-	</div>
-	<!-- Bottom right, above the locate button. -->
-	<div class="absolute right-2.5 bottom-20 z-10 flex flex-col items-end gap-2">
-		<MapLegend {showFill} />
+	<div class="absolute top-2.5 right-14 z-10 flex items-center gap-2">
 		<button
 			type="button"
 			class="btn shadow-md btn-sm {showFill
@@ -60,6 +55,11 @@
 			<PaintBucketIcon class="size-4" />
 			Fill: {showFill ? 'on' : 'off'}
 		</button>
+		<MapHelpDrawer />
+	</div>
+	<!-- Bottom right, above the locate button. -->
+	<div class="absolute right-2.5 bottom-20 z-10">
+		<MapLegend {showFill} />
 	</div>
 	{#if cover}
 		<img

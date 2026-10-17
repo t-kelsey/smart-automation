@@ -33,20 +33,15 @@
 		};
 	});
 
-	const verifiedEntries = [
-		{ fill: mapColors.verified, label: 'Manually verified data' },
-		{ fill: mapColors.unverified, label: 'Automatic data' }
-	];
-
 	const iconUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 </script>
 
 <!-- Passes pointer events through, so the map underneath stays fully usable. -->
-<ul
-	class="pointer-events-none space-y-1 rounded-md bg-surface-50-950/70 px-2.5 py-1.5 text-[0.8625rem] shadow-sm backdrop-blur-sm"
-	aria-label="Map legend"
->
-	{#if showFill}
+{#if showFill}
+	<ul
+		class="pointer-events-none space-y-1 rounded-md bg-surface-50-950/70 px-2.5 py-1.5 text-[0.8625rem] shadow-sm backdrop-blur-sm"
+		aria-label="Map legend"
+	>
 		{#each rockEntries as { key, label, color } (key)}
 			<li class="flex items-center gap-2">
 				<img
@@ -57,12 +52,5 @@
 				<span class="opacity-80">{label}</span>
 			</li>
 		{/each}
-	{:else}
-		{#each verifiedEntries as { fill, label } (label)}
-			<li class="flex items-center gap-2">
-				<img src={iconUrl(plainIconSvg(fill))} alt="" class="size-[1.725rem] shrink-0" />
-				<span class="opacity-80">{label}</span>
-			</li>
-		{/each}
-	{/if}
-</ul>
+	</ul>
+{/if}
