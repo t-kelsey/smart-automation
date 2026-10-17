@@ -1,0 +1,24 @@
+Copyright (c) 2026 Kasimir Uihlein, Julia Liu, Tyler Kelsey, Manuel Di Biase, Kai Malaka
+(the "Authors", as joint copyright holders in equal shares). All rights reserved.
+
+This software and associated documentation files (the "Software") are
+proprietary. No licence or other right to use, copy, modify, merge, publish,
+distribute, sublicense, sell, host, or create derivative works of the Software
+is granted, except with prior written permission from all of the Authors.
+
+Viewing the source code is permitted solely for evaluating the Software in the
+context of the hackathon for which it was created.
+
+Third-party components: the Software depends on third-party libraries and
+tools that are not owned by the Authors and remain under their own licences.
+This notice does not alter those licences.
+
+Data: the files in the `data/` directory and any content derived from them are
+confidential third-party data, are not owned by the Authors, and are not
+covered by this notice. They must not be copied, redistributed or published.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
