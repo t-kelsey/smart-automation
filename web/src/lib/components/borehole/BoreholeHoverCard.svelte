@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { CheckIcon, ExternalLinkIcon, Share2Icon } from '@lucide/svelte';
+	import { notify } from '#lib/components/toast/index.ts';
 	import type { BoreholeSummary, MapPoint } from '#lib/domain/borehole.ts';
 
 	interface Props {
@@ -27,7 +28,13 @@
 			}
 			return;
 		}
-		await navigator.clipboard.writeText(url);
+		try {
+			await navigator.clipboard.writeText(url);
+		} catch (e) {
+			notify.error('Could not copy link', e instanceof Error ? e.message : undefined);
+			return;
+		}
+		notify.success('Link copied');
 		copied = true;
 		setTimeout(() => (copied = false), 2000);
 	}

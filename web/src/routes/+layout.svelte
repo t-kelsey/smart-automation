@@ -2,6 +2,7 @@
 	import './layout.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import { Sidebar, defaultSidebarItems } from '#lib/components/sidebar/index.ts';
+	import { Toaster } from '#lib/components/toast/index.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
@@ -20,3 +21,4 @@
 		{@render children()}
 	</main>
 </div>
+<Toaster />

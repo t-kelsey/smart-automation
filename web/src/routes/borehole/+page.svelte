@@ -2,11 +2,16 @@
 	import { Pagination } from '@skeletonlabs/skeleton-svelte';
 	import { ArrowLeft, ArrowRight } from '@lucide/svelte';
 	import BoreholeTable from '#lib/components/borehole/BoreholeTable.svelte';
+	import { notify } from '#lib/components/toast/index.ts';
 	import { goto } from '$app/navigation';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
 	let result = $derived(data.result);
+
+	$effect(() => {
+		if (data.loadError) notify.fromError(data.loadError, 'Could not load boreholes');
+	});
 
 	const pageSizes = [10, 20, 50];
 

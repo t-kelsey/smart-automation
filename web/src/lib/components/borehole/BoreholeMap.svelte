@@ -1,5 +1,6 @@
 <script module lang="ts">
 	import type { BoreholeSummary, MapPoint } from '#lib/domain/borehole.ts';
+	import { notify } from '#lib/components/toast/index.ts';
 	import { createServices } from '#lib/services/index.ts';
 
 	// The last known position, so a freshly mounted map can show the user's dot immediately.
@@ -18,6 +19,7 @@
 			.then(({ boreholes }) => boreholes.listMapPoints())
 			.catch((error) => {
 				pointsPromise = undefined;
+				notify.fromError(error, 'Could not load boreholes');
 				throw error;
 			});
 		return pointsPromise;
@@ -232,8 +234,9 @@
 			try {
 				const summary = await loadSummary(id);
 				if (card.point?.id === id) card.summary = summary;
-			} catch {
+			} catch (e) {
 				// Leave the placeholders; hovering again retries.
+				notify.fromError(e, 'Could not load borehole details');
 			}
 		}
 		const onEnter = (e: maplibregl.MapLayerMouseEvent) => {
@@ -319,6 +322,7 @@
 				},
 				() => {
 					// Denied or unavailable: keep the fitted view and show no dot.
+					if (follow) notify.warning('Location unavailable', 'Showing the default map view.');
 				}
 			);
 		// Only ask for permission when the map should move there; otherwise reuse a granted one.
