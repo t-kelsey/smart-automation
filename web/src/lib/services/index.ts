@@ -6,6 +6,7 @@ import { SearchService } from './search-service';
 
 export { BoreholeService, BoreholeNotFoundError, DocumentNotFoundError } from './borehole-service';
 export type { BoreholeListQuery, PagedResult } from './borehole-service';
+export { RepositoryError } from '#lib/repositories/borehole-repository.ts';
 export { SearchService } from './search-service';
 
 export interface Services {
@@ -15,6 +16,8 @@ export interface Services {
 
 /**
  * Composition root: the only place that knows which repository implementation is used.
+ * All data comes from the API (ADR-0029). The mock repositories in `repositories/mock/` are kept
+ * but not wired in; to use them again, construct them here instead of the API repositories.
  * Pass SvelteKit's `fetch` from the load function.
  */
 export async function createServices({
@@ -22,24 +25,12 @@ export async function createServices({
 }: {
 	fetch: typeof globalThis.fetch;
 }): Promise<Services> {
-	let boreholes: BoreholeRepository;
-	let search: SearchRepository;
-	if (config.dataSource === 'api') {
-		const [{ ApiBoreholeRepository }, { ApiSearchRepository }] = await Promise.all([
-			import('#lib/repositories/api/api-borehole-repository.ts'),
-			import('#lib/repositories/api/api-search-repository.ts')
-		]);
-		const options = { baseUrl: config.apiUrl, fetch };
-		boreholes = new ApiBoreholeRepository(options);
-		search = new ApiSearchRepository(options);
-	} else {
-		// Dynamic import keeps faker and the mock data out of API-mode code paths.
-		const [{ MockBoreholeRepository }, { MockSearchRepository }] = await Promise.all([
-			import('#lib/repositories/mock/mock-borehole-repository.ts'),
-			import('#lib/repositories/mock/mock-search-repository.ts')
-		]);
-		boreholes = new MockBoreholeRepository();
-		search = new MockSearchRepository();
-	}
+	const [{ ApiBoreholeRepository }, { ApiSearchRepository }] = await Promise.all([
+		import('#lib/repositories/api/api-borehole-repository.ts'),
+		import('#lib/repositories/api/api-search-repository.ts')
+	]);
+	const options = { baseUrl: config.apiUrl, fetch };
+	const boreholes: BoreholeRepository = new ApiBoreholeRepository(options);
+	const search: SearchRepository = new ApiSearchRepository(options);
 	return { boreholes: new BoreholeService(boreholes), search: new SearchService(search) };
 }
