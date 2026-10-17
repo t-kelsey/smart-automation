@@ -29,5 +29,6 @@ RUN useradd --create-home app && mkdir -p /data/storage && chown -R app /app /da
 COPY --from=build --chown=app /app/_build/prod/rel/api ./
 USER app
 EXPOSE 4000
-# Apply migrations (creates the PostGIS extension too), then start the server
-CMD ["sh", "-c", "bin/api eval 'Api.Release.migrate()' && exec bin/api start"]
+# Apply migrations (creates the PostGIS extension too), optionally load the mock data
+# (SEED_MOCK_DATA=true, see .env.example), then start the server
+CMD ["sh", "-c", "bin/api eval 'Api.Release.migrate()' && { [ \"$SEED_MOCK_DATA\" != true ] || bin/api eval 'Api.Release.seed()'; } && exec bin/api start"]
