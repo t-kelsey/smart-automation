@@ -1,4 +1,4 @@
-import type { Handle } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 import { env } from 'node:process';
 
 // In the Docker deployment the browser reaches the API through the UI origin (PUBLIC_API_URL=/api),
