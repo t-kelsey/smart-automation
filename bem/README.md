@@ -45,6 +45,8 @@ Service endpoints:
 
 ### Remote models via OpenRouter
 
+> **Prototype.** The OpenRouter backend shows that the pipeline is not tied to one provider: the stages only talk to the `AI` interface, and a second backend plugged in without changing them. The architecture is modular an ai-provider agnostic. After the hackathon it can be further developed and enhanced for a real product.
+
 Set `BEM_AI=openrouter` and `OPENROUTER_API_KEY=...` in `.env` (the `claude` CLI is then not needed, `pdftoppm` still is; in Docker compose set the same variables in the root `.env`). Pages are rendered to images and sent with the prompt; the answer is requested as JSON matching the step's schema, and if a provider rejects the schema (e.g. too many nullable fields) the backend falls back to plain JSON mode, which is not schema-validated by the provider. The default step models `haiku`/`sonnet`/`opus` map to `anthropic/claude-*-4.5`; a per-run model containing a `/` (e.g. `google/gemini-2.5-flash`) is used as is, and `BEM_OPENROUTER_MODEL` forces one model for all steps. Effort is sent as OpenRouter's `reasoning.effort` (`xhigh`/`max` → `high`). Cost comes from OpenRouter's usage report.
 
 ## Technology
@@ -66,3 +68,8 @@ Every page of a processed PDF is sent to the selected AI model (e.g., OpenRouter
 - PDFs, images (PNG, JPEG, TIFF) and Word `.docx` files are processed (Word needs LibreOffice, `soffice`, which the Docker image includes; locally e.g. `brew install --cask libreoffice`).
 - The transform step uses a small model for translation and unit and coordinate conversion; check `validation_issues` and the metadata notes.
 - There is no accuracy evaluation against ground truth yet.
+- The OpenRouter backend is a prototype. Ideas for extending it:
+  - compare models and providers per stage against a ground-truth set and pick defaults from the results (cheaper models for filter and split, stronger ones for extract);
+  - validate every answer against the step's JSON schema ourselves, because the plain-JSON fallback is not validated by the provider;
+  - tune page rendering (resolution, page count per call) and add more backends behind the same `AI` interface, including self-hosted models for confidential data;
+  - add streaming and rate-limit handling, and track cost budgets per run.
