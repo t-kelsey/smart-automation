@@ -3,13 +3,13 @@
 ## Code Review
 
 - [ ] AI evaluation machen lassen
-- [ ] Repo vllt einmal frisch auf einem nicht mac herunterladen und readme befolgen und schauen ob es direkt klappt nur mit befolgen der readme
+- [x] Repo vllt einmal frisch auf einem nicht mac herunterladen und readme befolgen und schauen ob es direkt klappt nur mit befolgen der readme
 - [x] Readme für den KI kritiker anpassen, vor allem nur eine readme! (fusen)
 
 ## Features
 
-- [ ] Support api calls with openrouter (as alternative to claude)
 - [ ] Manual human review step for partially failed pipelines
+- [x] Support api calls with openrouter (as alternative to claude)
 - [x] image support, currently only pdfs are supported
 - [x] Update the /about page to reflect the latest features, changes and api
 - [x] Add a partially failed pipeline state (eg. when only a few jobs failed not all. Use yellow color instead of red)

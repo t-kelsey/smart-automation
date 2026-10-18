@@ -23,7 +23,7 @@ flowchart LR
     end
 
     subgraph bem["bem pipeline (Python / FastAPI, :8000)"]
-        exec["POST /execute<br/>job queue + worker thread"]
+        exec["POST /execute, /runs/:id/retry<br/>job queue + worker thread"]
         steps["1 filter → 2 split → 3 extract → 4 transform<br/>DIN 4023 conformance"]
         exec --> steps
     end
@@ -95,6 +95,7 @@ Notes:
 
 - The webhook call carries no file bytes; the pipeline pulls the file by `document_id` (ADR-0033).
 - Without `PIPELINE_URL` the run stays `new` and nothing is processed. If the pipeline cannot be reached the run is `failed`.
+- A failed or stopped extract/transform job can be retried on its own: `POST /api/exec_stages/:id/retry` reopens the run as `running` and calls the pipeline's `POST /runs/:id/retry`, which records a new `exec_stages` row for that borehole and sets the run's final status again (ADR-0044).
 - Only the stage results of a run whose `run_id` equals the `pipeline_runs.id` show up in the UI (ADR-0039).
 
 ## Flow 2: View a borehole in the UI

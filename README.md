@@ -14,7 +14,7 @@ Legacy borehole logs (scanned or digital PDFs, multilingual, many layouts) are t
 4. **Store** boreholes, layers and the source document in a central PostGIS database.
 5. **Search and explore** on an interactive world map, with a query language (name, place, date) and autocompletion, and view each borehole as a DIN 4023 profile column next to its source document.
 
-Every pipeline run is tracked per stage (status, model, tokens, cost) and visible in the web app. Boreholes generated for demos are marked `metadata.source = "mock"`.
+Every pipeline run is tracked per stage (status, model, tokens, cost) and visible in the web app. A whole run or a single failed extract/transform job can be retried. Boreholes generated for demos are marked `metadata.source = "mock"`.
 
 ## Production setup
 
@@ -23,11 +23,13 @@ Everything runs with Docker Compose (`db`, `api`, `web`, `pipeline`). Keep in mi
 ```bash
 cp .env.example .env
 # edit .env: set POSTGRES_PASSWORD and SECRET_KEY_BASE (openssl rand -base64 48),
-# and add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN for the pipeline
+# and add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN for the pipeline,
+# or set BEM_AI=openrouter and OPENROUTER_API_KEY to use OpenRouter instead of the claude CLI
 docker compose up --build
 # open http://localhost:3001
 ```
 
+- **AI backend:** `BEM_AI=claude_cli` (default, uses `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`) or `BEM_AI=openrouter` (uses `OPENROUTER_API_KEY`, optionally `BEM_OPENROUTER_MODEL` to force one model).
 - **Without LLM credentials** the stack still starts; uploads are stored, but extraction runs fail. To see the map and search with data, set `SEED_MOCK_DATA=true` (loads 10 example boreholes plus `MOCK_BOREHOLES` generated ones).
 - **Ports** (`.env`): web `WEB_PORT` (3001), API `API_PORT` (4001), pipeline `BEM_PORT` (8000), Postgres 5432. Only the web port needs to be reachable by users; remove the other `ports:` entries from `docker-compose.yml` if you do not need them.
 - **Data** lives in the Docker volumes `db_data` (database) and `document_storage` (source documents). `docker compose down -v` deletes both.
@@ -35,7 +37,7 @@ docker compose up --build
 
 ## Development setup
 
-Prerequisites: Docker, Elixir/Erlang, Node.js ≥ 22.13 with pnpm, and for the pipeline [uv](https://docs.astral.sh/uv/), poppler and the Claude Code CLI.
+Prerequisites: Docker, Elixir/Erlang, Node.js ≥ 22.13 with pnpm, and for the pipeline [uv](https://docs.astral.sh/uv/), poppler and either the Claude Code CLI or an OpenRouter API key.
 
 ```bash
 docker compose up -d db      # PostGIS on localhost:5432
@@ -59,9 +61,9 @@ flowchart LR
     user([Browser]) --> web
     web["web<br/>SvelteKit UI"] -->|/api| api
     api["api<br/>Phoenix JSON API"] --> db[("PostgreSQL + PostGIS")]
-    api -->|"POST /execute"| bem
+    api -->|"POST /execute, /runs/:id/retry"| bem
     bem["bem<br/>Python pipeline"] -->|"boreholes, stages, reports"| api
-    bem <--> llm{{"Claude (claude CLI)"}}
+    bem <--> llm{{"Claude (claude CLI)<br/>or OpenRouter"}}
 ```
 
 | Part           | Role                                                                                           | Docs                           |
