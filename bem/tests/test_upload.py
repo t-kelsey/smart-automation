@@ -38,6 +38,12 @@ class Din4023(unittest.TestCase):
         self.assertEqual(len(issues), 1)
         self.assertIn("clay", issues[0])
 
+    def test_conform_allows_missing_petrography(self):
+        out, issues = din4023.conform({"borehole": {}, "layers": [layer(None), layer("", 1, 2)]})
+        self.assertIsNone(out["layers"][0]["petrography"])
+        self.assertIsNone(out["layers"][1]["petrography"])
+        self.assertEqual(issues, [])
+
     def test_depth_rules(self):
         _, issues = din4023.conform({"layers": [layer("Sand", 0, 2), layer("Ton", 1, 3)]})
         self.assertEqual(len(issues), 1)

@@ -2,9 +2,10 @@
 
 A payload conforms when
 - it has at least one layer, and layers are ordered by depth without overlaps,
-- every layer's `petrography` is a DIN 4023 term: a main component (Table 1 name, hatch name or
-  short form, e.g. "Sand", "Sandstein", "S") optionally followed by secondary components
-  (Table 1 adjectives or short forms, e.g. "schluffig", "u"), comma separated: "Sand, schluffig".
+- every layer's `petrography` is empty (not in the source) or a DIN 4023 term: a main component
+  (Table 1 name, hatch name or short form, e.g. "Sand", "Sandstein", "S") optionally followed by
+  secondary components (Table 1 adjectives or short forms, e.g. "schluffig", "u"), comma separated:
+  "Sand, schluffig".
 
 `conform` rewrites each petrography to the standard's spelling ("sand,schluffig" -> "Sand, schluffig")
 and keeps a changed original in the layer's `metadata.petrography_original`. Terms that cannot be
@@ -117,13 +118,16 @@ def conform(payload: dict) -> tuple[dict, list[str]]:
     for i, layer in enumerate(layers, 1):
         pos = layer.get("position", i)
         original = layer.get("petrography")
-        canon = normalise_petrography(original)
-        if canon is None:
-            issues.append(f"layer {pos}: petrography {original!r} is not a DIN 4023 term")
+        if original and original.strip():
+            canon = normalise_petrography(original)
+            if canon is None:
+                issues.append(f"layer {pos}: petrography {original!r} is not a DIN 4023 term")
+            else:
+                if canon != original:
+                    layer.setdefault("metadata", {})["petrography_original"] = str(original)
+                layer["petrography"] = canon
         else:
-            if canon != original:
-                layer.setdefault("metadata", {})["petrography_original"] = str(original)
-            layer["petrography"] = canon
+            layer["petrography"] = None
         f, t = layer.get("depth_from_m"), layer.get("depth_to_m")
         if f is None or t is None or not t > f:
             issues.append(f"layer {pos}: invalid depth range {f}..{t}")
