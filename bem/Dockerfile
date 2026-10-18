@@ -2,9 +2,10 @@
 FROM python:3.12-slim-trixie
 
 # poppler-utils: pdftoppm, so Claude can render PDF pages (scans, colours, hatching).
+# libreoffice-writer: converts Word documents to PDF before the pipeline reads them.
 # nodejs/npm: the pipeline shells out to the Claude Code CLI (`claude -p`).
 RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends poppler-utils nodejs npm ca-certificates \
+    && apt-get install -y --no-install-recommends poppler-utils libreoffice-writer fonts-liberation nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force

@@ -58,6 +58,6 @@ Service endpoints:
 
 Every page of a processed PDF is sent to the selected AI model (e.g., OpenRouter, Claude). Do not run the pipeline on confidential files, including `../data/`. Also:
 
-- PDFs and images (PNG, JPEG, TIFF) are processed; images are converted to a PDF when the pipeline downloads them. `.docx` can be uploaded to the API but is not extracted yet.
+- PDFs, images (PNG, JPEG, TIFF) and Word `.docx` files are processed (Word needs LibreOffice, `soffice`, which the Docker image includes; locally e.g. `brew install --cask libreoffice`).
 - The transform step uses a small model for translation and unit and coordinate conversion; check `validation_issues` and the metadata notes.
 - There is no accuracy evaluation against ground truth yet.
