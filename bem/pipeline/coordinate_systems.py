@@ -120,7 +120,14 @@ _SOUTH_BANDS = set("CDEFGHJKLM")
 _COMPACT_ZONE_LETTER = re.compile(r"\b(\d{1,2})([c-hj-np-x])\b")
 # Looser form that does need a keyword nearby: "UTM zone 32 N", "UTM Sone 32", "UTM zona 31".
 _UTM_ZONE_HEMI = re.compile(r"\b(\d{1,2})\s+([ns]|[c-hj-np-x])\b")
-_UTM_ZONE_ONLY = re.compile(r"\butm\b.{0,15}?\b(\d{1,2})\b")
+# The zone number anchored on the zone keyword itself (not just "utm" generically) — "utm" alone
+# is too loose and can grab an unrelated nearby number, e.g. the "84" in "UTM WGS 84, Zone 32".
+# Keyword-then-number only ("Zone 32", "Sone 32"): the reverse order is both rare in practice and
+# too easily confused with an unrelated number shortly before the keyword (same "WGS 84" example).
+_UTM_ZONE_NEAR_KEYWORD = re.compile(r"\b(?:zone|sone|huso|zona)\b\D{0,4}(\d{1,2})\b")
+# Bare "UTM 32" (no "zone" word): only a tight gap counts, so a datum name in between ("UTM WGS 84")
+# can't be mistaken for this — "wgs "/"etrs89 " etc. are all longer than 3 characters.
+_UTM_TIGHT_NEAR = re.compile(r"\butm\b\D{0,3}(\d{1,2})\b")
 _UTM_KEYWORD = re.compile(r"\butm\b|\bsone\b|\bhuso\b|\bzona\b|\bzone\b")
 
 
@@ -146,7 +153,7 @@ def _resolve_utm(text: str) -> int | None:
     if m is not None:
         zone, hemi = int(m.group(1)), _hemisphere(m.group(2))
     elif _UTM_KEYWORD.search(text):
-        m = _UTM_ZONE_ONLY.search(text)
+        m = _UTM_ZONE_NEAR_KEYWORD.search(text) or _UTM_TIGHT_NEAR.search(text)
         if not m:
             return None
         zone, hemi = int(m.group(1)), "N"  # no hemisphere given: assume north (far more common)

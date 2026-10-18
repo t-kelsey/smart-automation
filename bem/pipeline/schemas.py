@@ -227,3 +227,13 @@ DB_PAYLOAD = {
     },
     "required": ["borehole", "layers"],
 }
+
+# Step 4 fallback: best-effort EPSG guess when coordinate_systems.resolve_epsg found nothing.
+GUESS_EPSG = {
+    "type": "object",
+    "properties": {
+        "epsg": _t("integer"),
+        "reasoning": _t("string"),
+    },
+    "required": ["epsg", "reasoning"],
+}

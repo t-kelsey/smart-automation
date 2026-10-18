@@ -21,6 +21,16 @@ class ResolveEpsg(unittest.TestCase):
     def test_utm_default_datum_is_wgs84(self):
         self.assertEqual(cs.resolve_epsg("UTM zone 31N"), 32631)
 
+    def test_utm_zone_not_confused_with_datum_year(self):
+        # Production bug: "84" from "WGS 84" was picked up as the zone instead of 32.
+        self.assertEqual(cs.resolve_epsg("UTM WGS 84, Zone 32"), 32632)
+        self.assertEqual(
+            cs.resolve_epsg(
+                "UTM WGS 84, Zone 32", "UTM Sone: 32; \u00d8V-koordinat: 0591097; NS-koordinat: 6648286"
+            ),
+            32632,
+        )
+
     def test_utm_other_datums(self):
         self.assertEqual(cs.resolve_epsg("ETRS89 UTM zone 32N"), 25832)
         self.assertEqual(cs.resolve_epsg("ED50 UTM zone 30N"), 23030)
