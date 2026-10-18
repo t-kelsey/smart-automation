@@ -11,7 +11,12 @@
 		Trash2Icon,
 		WorkflowIcon
 	} from '@lucide/svelte';
-	import { PipelineGraph, StatusBadge, StatusIcon } from '#lib/components/pipeline/index.ts';
+	import {
+		PipelineGraph,
+		PipelineReport,
+		StatusBadge,
+		StatusIcon
+	} from '#lib/components/pipeline/index.ts';
 	import { notify } from '#lib/components/toast/index.ts';
 	import { retryJob, retryPipeline } from '#lib/components/pipeline/retry.ts';
 	import {
@@ -98,6 +103,11 @@
 
 	<Tabs.Content value="pipeline" class="pt-6">
 		<PipelineGraph {pipeline} />
+		{#if pipeline.report && !isActive(pipeline)}
+			<div class="mt-8">
+				<PipelineReport steps={pipeline.report} />
+			</div>
+		{/if}
 	</Tabs.Content>
 
 	<Tabs.Content value="jobs" class="pt-6">

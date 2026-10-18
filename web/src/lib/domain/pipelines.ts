@@ -44,6 +44,26 @@ export interface Pipeline {
 	updatedAt: Date;
 	config: Partial<PipelineConfig>;
 	stages: PipelineStage[];
+	/** Per-step usage the pipeline reports once the run has ended; unset until then. */
+	report?: PipelineReportStep[];
+}
+
+/** One step of a run's report: wall time plus the summed usage of its model calls. */
+export interface PipelineReportStep {
+	/** Stage key (`filter`, `split`, …) when the step name could be matched to one. */
+	key?: string;
+	label: string;
+	model?: string;
+	effort?: string;
+	wallSeconds?: number;
+	apiSeconds?: number;
+	calls?: number;
+	inputTokens?: number;
+	outputTokens?: number;
+	cacheReadTokens?: number;
+	cacheCreateTokens?: number;
+	totalTokens?: number;
+	costUsd?: number;
 }
 
 /** Stages of the extraction pipeline in processing order (the `type` of `exec_stages`). */
