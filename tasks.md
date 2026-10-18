@@ -12,6 +12,7 @@
 - [ ] Update the /about page to reflect the latest features, changes and api
 - [ ] Support api calls with openrouter (as alternative to claude)
 - [ ] Add a partially failed pipeline state (eg. when only a few jobs failed not all. Use yellow color instead of red)
+- [ ] Manual human review step for partially failed pipelines
 
 ## Submission Preparation
 

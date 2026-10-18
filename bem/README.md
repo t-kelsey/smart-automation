@@ -1,125 +1,64 @@
-# claude_test
+# bem
 
-Experiment: turn a borehole PDF into payloads for `POST /api/boreholes`, using a
-pipeline of `claude -p` calls with different models and effort levels.
+Extraction pipeline: turns a borehole report (PDF) into standardised boreholes in the geodatabase.
+
+## Why it exists
+
+Borehole logs are unstructured, multilingual, differ by company and decade and carry meaning in colour and hatch patterns. Classic OCR plus rules does not cope with that variety. This component uses vision-capable LLMs to read the pages and brings the result into one standard: English, the DIN 4023 terms, WGS84-ready coordinates and the API's data model. It runs as an HTTP service that the API calls when a user starts a run.
 
 ## Pipeline
 
-| # | Step | Model | Effort | Input → output |
-|---|------|-------|--------|----------------|
-| 1 | Filter pages | haiku | high | PDF → PDF with only real borehole log pages (classified in chunks of 10 pages) |
-| 2 | Split boreholes | haiku | medium | filtered PDF → one PDF per borehole |
-| 3 | Extract | sonnet | high | one borehole PDF → all data in the original wording (JSON) |
-| 4 | Transform | haiku | high | extraction JSON → English, DB-shaped payload (no tools, text only) |
+Default pipeline steps and configurations:
 
-Step 3 also checks that the file holds exactly one borehole (`is_single_borehole`).
-Step 4 targets the `boreholes` / `borehole_layers` columns from `api/priv/repo/migrations`
-and the request shape in `docs/api-reference.md`; data without a column goes to `metadata`.
-It then runs the API's validation rules locally (`validation_issues`). Nothing is posted to the API.
+| #   | Step            | Model  | Effort | Input → output                                                     |
+| --- | --------------- | ------ | ------ | ------------------------------------------------------------------ |
+| 1   | Filter pages    | haiku  | high   | PDF → PDF with only real borehole log pages (chunks of 10 pages)   |
+| 2   | Split boreholes | haiku  | medium | filtered PDF → one PDF per borehole                                |
+| 3   | Extract         | sonnet | high   | one borehole PDF → all data in the original wording (JSON)         |
+| 4   | Transform       | haiku  | high   | extraction JSON → English, DB-shaped payload, DIN 4023 petrography |
 
-Code: `pipeline/steps.py` (steps and prompts), `pipeline/schemas.py` (JSON schemas),
-`pipeline/claude_cli.py` (CLI wrapper, token/cost accounting), `pipeline/pdfutil.py`.
+Models and effort are configurable per run (defaults in [config.py](pipeline/config.py)). Step 3 also checks that the file holds exactly one borehole. A borehole with a layer that cannot be mapped to DIN 4023 is not uploaded and its stage ends `failed`. Every stage is tracked in the API (status, model, tokens, cost) and the run ends `completed`, `failed` or `stopped`.
 
-## Requirements
+## Development setup
 
-- [uv](https://docs.astral.sh/uv/) and the [Claude Code CLI](https://claude.com/claude-code) on `PATH`, logged in
-- **poppler** (`brew install poppler`, checked at start): without `pdftoppm`, the Read tool cannot render PDF
-  pages, so Claude only sees the text layer. That works for digital PDFs but not for scans,
-  and colours and hatch patterns are lost.
+Prerequisites: [uv](https://docs.astral.sh/uv/), Python ≥ 3.12, **poppler** (`brew install poppler`; without `pdftoppm` scans, colours and hatching are lost) and the [Claude Code CLI](https://claude.com/claude-code) on `PATH`, logged in.
 
-## Usage
-
-```sh
+```bash
+cd bem
+cp .env.example .env                         # BEM_API_URL=http://localhost:4000 etc.
 uv sync
-uv run python -m pipeline path/to/report.pdf
-# options: --out DIR (default claude_test/out)  --chunk-size 10  --workers 4
+uv run python -m pipeline.server             # HTTP service on :8000 (POST /execute)
+
+# Optional commands
+uv run python -m pipeline path/to/report.pdf # one-off run, results under out/
+uv run python -m unittest discover tests     # tests
 ```
 
-Progress and the final report (time, tokens, cost per step) go to stderr.
+Service endpoints:
 
-## HTTP server (`POST /execute`)
+- `POST /execute` — `{document_id, pipeline_id, config?}`; answers `202` and queues the run. The worker downloads the PDF from the API, runs the stages and posts the boreholes to `POST /api/boreholes`.
+- `POST /runs/{pipeline_id}/stop` — cancels a queued or running run.
+- `GET /health` — queue length and active runs.
 
-The API sends uploaded documents here (`PIPELINE_URL=http://localhost:8000/execute`, ADR-0033).
+`BEM_ENV=dev` also writes results, a report and debug files under `out/` (gitignored); `prod` keeps nothing on disk. The queue is in memory, so a restart loses queued runs. Settings: `BEM_API_URL`, `BEM_PORT`, `BEM_WORKERS`, `BEM_CHUNK_SIZE`, `BEM_AI`, `BEM_WORKDIR`.
 
-```sh
-uv run python -m pipeline.server   # settings from bem/.env (copy .env.example), port BEM_PORT, default 8000
-```
+## Technology
 
-- `POST /execute`: JSON body with the document id, the API's `pipeline_runs.id` (as `pipeline_id`) and the run config.
-  It answers `202` at once and queues the run; invalid input returns `422`. The document must already exist in the API.
-  ```json
-  {"document_id": "<uuid>", "pipeline_id": "<pipeline_runs.id>, echoed back",
-   "config": {"filter": {"model": "haiku", "effort": "high"}, "split": {...}, "extract": {...}, "transform": {...}}}
-  ```
-  `config` is optional and so is every step in it; omitted steps use their defaults ([config.py](pipeline/config.py)).
-  One worker starts stage 1 (filter) by downloading the PDF with `GET /api/documents/:id/file` (a document that is
-  missing or not a PDF ends `failed`), runs the pipeline and posts each borehole to `POST /api/boreholes` (linked to the
-  document). It finishes with `PUT /api/pipeline_runs/:id/status` set to `completed`, `failed` (with `error`) or
-  `stopped` (ADR-0035, ADR-0040) — not a document status, `pipeline_runs` is the source of truth for a run's outcome.
-- `POST /runs/{pipeline_id}/stop`: cancels a queued or running run (`202`, `404` if unknown); the API calls it from
-  `POST /api/pipeline_runs/:id/stop`. A running run ends at its next stage, borehole or model call with `stopped`.
+| Choice                          | Why                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Python**                      | Best ecosystem for PDF handling and AI tooling; the work is I/O bound, so it needs no heavy framework.                                                                                                                                                                   |
+| **Claude via the `claude` CLI** | Reads page images directly (scans, colours, hatching) and returns schema-checked JSON. A small model (haiku) does cheap classification and splitting, a stronger one (sonnet) does the extraction. The `AI` base class in [ai.py](pipeline/ai.py) allows other backends. |
+| **Four small stages**           | Each stage is cheap to retry, measurable (tokens, cost) and uses the right model for its job.                                                                                                                                                                            |
+| **pypdf, poppler**              | Split and filter PDFs; render pages to images for the model.                                                                                                                                                                                                             |
+| **FastAPI + uvicorn**           | A small async HTTP surface (`/execute`, `/health`) with request validation.                                                                                                                                                                                              |
+| **httpx**                       | Client for the API ([api_service.py](pipeline/api_service.py)).                                                                                                                                                                                                          |
+| **uv**                          | Fast, reproducible installs from `uv.lock`.                                                                                                                                                                                                                              |
 
-```sh
-curl -X POST http://localhost:8000/execute \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "pipeline_id": "my-pipeline",
-    "config": {
-      "filter":    {"model": "haiku",  "effort": "high"},
-      "split":     {"model": "haiku",  "effort": "medium"},
-      "extract":   {"model": "sonnet", "effort": "high"},
-      "transform": {"model": "haiku",  "effort": "high"}
-    }
-  }'
-# -> 202 {"document_id": "...", "pipeline_id": "my-pipeline", "status": "queued", "config": {...}}
-```
+## Data confidentiality and limitations
 
-- Every stage is tracked as an exec_stage (ADR-0040): `filter`/`split` are created `new` when the run starts,
-  `extract`/`transform` per borehole (`position` = 1-based) once split has found them. Each turns `running` when it starts
-  (`PUT /api/exec_stages/:id`, with model and effort) and `success`/`failed`/`stopped` when it ends, with its JSON
-  `data`, `error` and `usage` (tokens, cost, calls; per borehole for extract/transform). Split uploads each borehole's
-  PDF as a document of its own. A transform stage stores its borehole with `POST /api/boreholes` before it counts as
-  `success` (`data.borehole_id`). Then `POST /api/reports` (`{"steps": [...]}`). Boreholes must satisfy DIN 4023
-  ([din4023.py](pipeline/din4023.py), checked against `standards/din-4023/din-4023.json`): petrography is normalised
-  to the standard's terms and a borehole with an unmappable layer is not uploaded (its transform stage and the run end
-  `failed`). Client: [api_service.py](pipeline/api_service.py), URL from `BEM_API_URL`
-  (`.env`, default `http://localhost:4000`).
-- `BEM_ENV=dev` (default) also writes results, report and debug files under `out/`; `BEM_ENV=prod` writes nothing locally
-  (intermediate PDFs go to a temp dir that is deleted, as is the uploaded file).
-- Tests: `uv run python -m unittest discover tests`.
-- `GET /health`: `{"status": "ok", "queued": n, "active_runs": [pipeline ids]}`.
-- Env: `BEM_API_URL`, `BEM_PORT`, `BEM_WORKDIR` (default `out/server`), `BEM_CHUNK_SIZE`, `BEM_WORKERS`, `BEM_AI`.
-- The queue is in memory: a restart loses queued files.
+Every page of a processed PDF is sent to the selected AI model (e.g., OpenRouter, Claude). Do not run the pipeline on confidential files, including `../data/`. Also:
 
-## Output
-
-Everything is written to `out/<pdf-name>/` (git-ignored). Every file name is prefixed with
-the run id (`YYYYMMDD-HHMMSS_`, the start time of the execution), the same for all files of one
-run, e.g. `20261017-173012_borehole_01.json`. The run id is printed at start:
-
-```
-01_filter/   classification.json, borehole_pages.pdf, chunks/
-02_split/    grouping.json, borehole_NN.pdf
-03_extract/  borehole_NN.json     raw extraction
-04_transform/ borehole_NN.json    {payload, validation_issues}
-report.json  per-step time, tokens, cost
-result.json  final payloads for all boreholes
-```
-
-Time per step is wall clock; calls inside a step run in parallel (`--workers`).
-Cost is what the CLI reports, so it includes Claude Code's own system prompt
-(roughly 40k cached tokens per call), which dominates small inputs.
-
-## Data confidentiality
-
-Every PDF page is sent to Claude. Do not run this on the confidential files in
-`../data/` (see the root `CLAUDE.md`). `out/` contains copies of the input pages
-and is git-ignored; delete it when done.
-
-## Known limitations
-
-- Step 4 uses a small model for translation and the unit/coordinate conversions
-  (e.g. Gauss-Krüger to EPSG); check `validation_issues` and the metadata notes.
-- Step 2 reads the whole filtered PDF in one call; very long ones need many Read calls.
-- The API requires `elevation_m >= 0`, so boreholes below sea level fail validation.
+- Only PDFs are processed; images and `.docx` can be uploaded to the API but are not extracted yet.
+- The transform step uses a small model for translation and unit and coordinate conversion; check `validation_issues` and the metadata notes.
+- There is no accuracy evaluation against ground truth yet.
+- The API currently rejects negative elevations.
