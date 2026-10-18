@@ -1,7 +1,7 @@
 """Backend-independent AI interface of the pipeline.
 
 Steps talk to one general `AI` object (`get_ai()`); which model/provider sits behind it is chosen
-by name (`--ai`, env `BEM_AI`, default `claude_cli`; `openrouter` needs OPENROUTER_API_KEY). To add a backend, subclass `AI`, implement
+by name (`--ai`, env `BEM_AI`, default `openrouter`, which needs OPENROUTER_API_KEY; `claude_cli` is for development). To add a backend, subclass `AI`, implement
 `run`, and register it in `_BACKENDS`.
 """
 
@@ -13,7 +13,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
 
-DEFAULT_BACKEND = "claude_cli"
+DEFAULT_BACKEND = "openrouter"
 
 
 def log(msg: str) -> None:
@@ -162,7 +162,7 @@ def _load(module: str, cls: str) -> AI:
 
 
 def get_ai(name: str | None = None) -> AI:
-    """The process-wide AI object. `name` (re)selects the backend; default env BEM_AI or claude_cli."""
+    """The process-wide AI object. `name` (re)selects the backend; default env BEM_AI or openrouter."""
     global _current
     if name is not None or _current is None:
         name = name or os.environ.get("BEM_AI", DEFAULT_BACKEND)

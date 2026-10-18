@@ -23,13 +23,12 @@ Everything runs with Docker Compose (`db`, `api`, `web`, `pipeline`). Keep in mi
 ```bash
 cp .env.example .env
 # edit .env: set POSTGRES_PASSWORD and SECRET_KEY_BASE (openssl rand -base64 48),
-# and add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN for the pipeline,
-# or set BEM_AI=openrouter and OPENROUTER_API_KEY to use OpenRouter instead of the claude CLI
+# and add OPENROUTER_API_KEY for the pipeline
 docker compose up --build
 # open http://localhost:3001
 ```
 
-- **AI backend:** `BEM_AI=claude_cli` (default, uses `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`) or `BEM_AI=openrouter` (uses `OPENROUTER_API_KEY`, optionally `BEM_OPENROUTER_MODEL` to force one model).
+- **AI backend:** OpenRouter is the default (`BEM_AI=openrouter`, uses `OPENROUTER_API_KEY`, optionally `BEM_OPENROUTER_MODEL` to force one model). The `claude` CLI backend (`BEM_AI=claude_cli`, with `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`) is meant for development only.
 - **Without LLM credentials** the stack still starts; uploads are stored, but extraction runs fail. To see the map and search with data, set `SEED_MOCK_DATA=true` (loads 10 example boreholes plus `MOCK_BOREHOLES` generated ones).
 - **Ports** (`.env`): web `WEB_PORT` (3001), API `API_PORT` (4001), pipeline `BEM_PORT` (8000), Postgres 5432. Only the web port needs to be reachable by users; remove the other `ports:` entries from `docker-compose.yml` if you do not need them.
 - **Data** lives in the Docker volumes `db_data` (database) and `document_storage` (source documents). `docker compose down -v` deletes both.
@@ -37,7 +36,7 @@ docker compose up --build
 
 ## Development setup
 
-Prerequisites: Docker, Elixir/Erlang, Node.js ≥ 22.13 with pnpm, and for the pipeline [uv](https://docs.astral.sh/uv/), poppler and either the Claude Code CLI or an OpenRouter API key.
+Prerequisites: Docker, Elixir/Erlang, Node.js ≥ 22.13 with pnpm, and for the pipeline [uv](https://docs.astral.sh/uv/), poppler and an OpenRouter API key (the Claude Code CLI works as a development-only alternative).
 
 ```bash
 docker compose up -d db      # PostGIS on localhost:5432
@@ -63,7 +62,7 @@ flowchart LR
     api["api<br/>Phoenix JSON API"] --> db[("PostgreSQL + PostGIS")]
     api -->|"POST /execute, /runs/:id/retry"| bem
     bem["bem<br/>Python pipeline"] -->|"boreholes, stages, reports"| api
-    bem <--> llm{{"Claude (claude CLI)<br/>or OpenRouter"}}
+    bem <--> llm{{"OpenRouter<br/>(claude CLI for development)"}}
 ```
 
 | Part           | Role                                                                                           | Docs                           |
@@ -91,7 +90,7 @@ flowchart LR
 - **Parallel and per borehole:** pages are classified in chunks, and extract and transform run once per borehole, in parallel.
 - **Tracked:** every stage is an `exec_stage` in the API with status, model, effort, result, error, tokens and cost, so the web app shows live progress for every run and borehole.
 - **Fail-safe:** a borehole is only stored when it passes the DIN 4023 check and its upload succeeds. A failed or stopped extract or transform job can be retried on its own without redoing the rest ([ADR-0044](docs/adr/0044-retry-single-pipeline-jobs.md)), and a run can be stopped at any time.
-- **Pluggable AI backend:** the `claude` CLI or OpenRouter (`BEM_AI`), so models can be swapped without touching the stages.
+- **Pluggable AI backend:** OpenRouter by default, with the `claude` CLI for development (`BEM_AI`), so models can be swapped without touching the stages.
 - **Decoupled:** the pipeline talks to the API only over HTTP, never to the database or the document storage.
 
 ### Standardisation: one vocabulary for all parts

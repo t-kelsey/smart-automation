@@ -30,7 +30,7 @@ flowchart LR
 
     db[("PostgreSQL + PostGIS<br/>boreholes, borehole_layers, documents,<br/>pipeline_runs, exec_stages, reports")]
     fs[("Document storage<br/>volume /data/storage<br/>(confidential PDFs)")]
-    claude{{"claude CLI<br/>(Claude models, OCR + LLM)"}}
+    claude{{"OpenRouter<br/>(vision LLMs; claude CLI for development)"}}
 
     user <--> ui
     proxy <-->|"HTTP/JSON, multipart"| router
@@ -53,7 +53,7 @@ sequenceDiagram
     participant A as API (Phoenix)
     participant S as Storage + DB
     participant P as bem pipeline
-    participant C as claude CLI
+    participant C as AI backend (OpenRouter)
 
     U->>W: Choose files (pdf, png, jpg, tif, docx)
     Note over W: Files are only queued in the browser<br/>(upload-queue), nothing is stored yet (ADR-0038)

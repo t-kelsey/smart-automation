@@ -70,11 +70,11 @@ services:
     environment:
       BEM_API_URL: http://api:4000
       BEM_ENV: ${BEM_ENV:-prod}
-      # Auth for the `claude` CLI: either an API key or a token from `claude setup-token`
+      # Only for BEM_AI=claude_cli (development): an API key or a token from `claude setup-token`
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
-      # AI backend: claude_cli (default) or openrouter (needs OPENROUTER_API_KEY)
-      BEM_AI: ${BEM_AI:-claude_cli}
+      # AI backend: openrouter (default, needs OPENROUTER_API_KEY) or claude_cli (development only)
+      BEM_AI: ${BEM_AI:-openrouter}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       BEM_OPENROUTER_MODEL: ${BEM_OPENROUTER_MODEL:-}
     ports:

@@ -127,7 +127,7 @@ def main() -> int:
     parser.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUT, help="output root (default: claude_test/out)")
     parser.add_argument("--chunk-size", type=int, default=10, help="pages per classification call in step 1")
     parser.add_argument("--workers", type=int, default=4, help="parallel claude calls per step")
-    parser.add_argument("--ai", choices=backend_names(), help="AI backend (default: env BEM_AI or claude_cli)")
+    parser.add_argument("--ai", choices=backend_names(), help="AI backend (default: env BEM_AI or openrouter)")
     args = parser.parse_args()
 
     if shutil.which("pdftoppm") is None:

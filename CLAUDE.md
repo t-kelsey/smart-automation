@@ -20,7 +20,7 @@ Hackathon project (Herrenknecht challenge): automated extraction and standardisa
 
 - `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, PostGIS, Bandit). Owns the data model, georeferencing, search and document storage. Endpoints (boreholes, documents, pipeline_runs, exec_stages, reports) are documented in `docs/api-reference.md`; `mix boreholes.mock --count N` (max 1000000) generates mock data.
 - `web/` — SvelteKit 3 / Svelte 5 frontend (TypeScript, Tailwind 4, Skeleton, MapLibre, pnpm): map, search with autocompletion, DIN 4023 borehole profile, upload with pipeline config, pipeline run monitoring and review pages. Some features (document management, sharing, auth) are deliberately left out of scope, see the root README.
-- `bem/` — Python pipeline (FastAPI) that runs a 4-stage LLM pipeline (filter → split → extract → transform) over a borehole document (PDF, images and Word are converted to PDF) and posts the result to `POST /api/boreholes`. AI backend is the `claude` CLI (default) or OpenRouter (`BEM_AI`). Endpoints: `POST /execute`, `POST /runs/{id}/retry`, `POST /runs/{id}/stop`, `GET /health`; see `bem/README.md`.
+- `bem/` — Python pipeline (FastAPI) that runs a 4-stage LLM pipeline (filter → split → extract → transform) over a borehole document (PDF, images and Word are converted to PDF) and posts the result to `POST /api/boreholes`. AI backend is OpenRouter (default) or, for development only, the `claude` CLI (`BEM_AI`). Endpoints: `POST /execute`, `POST /runs/{id}/retry`, `POST /runs/{id}/stop`, `GET /health`; see `bem/README.md`.
 - `docs/` — architecture overview, API reference, data model and Architecture Decision Records in `docs/adr/` (use `_template.md`).
 - `standards/` — the DIN 4023 definition shared by `web/` and `bem/`.
 - `data/` — Confidential real-project sample data (borehole PDFs/images/docx, format standards). Restricted to hackathon use and must be deleted after the event; never copy, commit, or send it to external services. Agents may read it locally. Note that the pipeline sends pages to an external LLM, so never run it on `data/`.
@@ -61,7 +61,7 @@ Web (run in `web/`):
 - `pnpm check` (svelte-check), `pnpm lint` (prettier + eslint), `pnpm format`
 - No test runner is configured.
 
-Pipeline (run in `bem/`; needs `uv`, poppler, and the `claude` CLI or an OpenRouter key):
+Pipeline (run in `bem/`; needs `uv`, poppler and an OpenRouter key; the `claude` CLI backend (`BEM_AI=claude_cli`) is development only):
 
 - `uv sync`, `cp .env.example .env`
 - `uv run python -m pipeline.server` — HTTP service on localhost:8000; `uv run python -m pipeline path/to/report.pdf` — one-off run
