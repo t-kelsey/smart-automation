@@ -25,6 +25,12 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
+			// hooks.server.ts proxies /api/* straight through to the (cookie-less, CSRF-agnostic) API,
+			// but CSRF is still checked first; without `paths.origin`, adapter-node assumes https and
+			// the self-origin never matches plain-http requests, rejecting every upload (ADR: see
+			// docker-compose.yml's ORIGIN env var, read here).
+			paths: { origin: process.env.ORIGIN },
+
 			// Node server for the Docker image (web/Dockerfile).
 			adapter: adapter(),
 			preprocess: [mdsvex({ extensions: ['.svx', '.md'] })],

@@ -44,11 +44,18 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
+      args:
+        # Baked into the build (web/Dockerfile, vite.config.ts `paths.origin`): without the real
+        # origin, SvelteKit's CSRF check rejects every upload as a cross-site form submission.
+        ORIGIN: http://${PHX_HOST:-localhost}:${WEB_PORT:-3001}
     restart: unless-stopped
     depends_on:
       - api
     environment:
       API_INTERNAL_URL: http://api:4000
+      # adapter-node's default is 512KB; match the API's own multipart limit (endpoint.ex) so the
+      # proxy in hooks.server.ts doesn't reject uploads before they ever reach it.
+      BODY_SIZE_LIMIT: 100M
     ports:
       - "${WEB_PORT:-3001}:3000"
 

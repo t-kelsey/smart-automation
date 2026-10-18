@@ -6,6 +6,9 @@ COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
 COPY standards/ /repo/standards/
+# Baked in at build time: vite.config.ts reads it into `paths.origin` for SvelteKit's CSRF check.
+ARG ORIGIN=http://localhost:3001
+ENV ORIGIN=$ORIGIN
 RUN pnpm build
 RUN pnpm prune --prod
 
