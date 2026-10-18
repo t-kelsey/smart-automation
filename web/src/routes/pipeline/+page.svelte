@@ -42,7 +42,7 @@
 			id: 'finished',
 			label: 'Finished',
 			pipelines: data.pipelines.filter((p) =>
-				['success', 'failed', 'skipped'].includes(pipelineStatus(p))
+				['success', 'partial', 'failed', 'skipped'].includes(pipelineStatus(p))
 			)
 		}
 	]);

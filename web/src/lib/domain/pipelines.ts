@@ -2,8 +2,8 @@ import type { PipelineConfig } from './documents';
 
 export type JobStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped';
 
-/** A stage's or a whole pipeline's status. */
-export type PipelineStatus = JobStatus;
+/** A stage's or a whole pipeline's status; `partial` means some jobs failed while others passed. */
+export type PipelineStatus = JobStatus | 'partial';
 
 export interface PipelineJob {
 	id: string;
@@ -52,10 +52,15 @@ export const PIPELINE_STAGES = [
 	{ key: 'transform', label: 'Transform' }
 ] as const;
 
-/** Failed beats running beats pending; all skipped counts as skipped, otherwise success. */
+/**
+ * Failed (or partial, when other jobs passed) beats running beats pending; all skipped counts as
+ * skipped, otherwise success.
+ */
 export function statusOf(jobs: Pick<PipelineJob, 'status'>[]): PipelineStatus {
 	if (jobs.length === 0) return 'pending';
-	if (jobs.some((j) => j.status === 'failed')) return 'failed';
+	if (jobs.some((j) => j.status === 'failed')) {
+		return jobs.some((j) => j.status === 'success') ? 'partial' : 'failed';
+	}
 	if (jobs.some((j) => j.status === 'running')) return 'running';
 	if (jobs.every((j) => j.status === 'pending')) return 'pending';
 	if (jobs.some((j) => j.status === 'pending')) return 'running';

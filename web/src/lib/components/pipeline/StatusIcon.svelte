@@ -1,22 +1,31 @@
 <script lang="ts">
-	import { CheckIcon, ChevronsRightIcon, LoaderCircleIcon, XIcon } from '@lucide/svelte';
-	import type { JobStatus } from '#lib/domain/pipelines.ts';
+	import {
+		CheckIcon,
+		ChevronsRightIcon,
+		LoaderCircleIcon,
+		TriangleAlertIcon,
+		XIcon
+	} from '@lucide/svelte';
+	import type { PipelineStatus } from '#lib/domain/pipelines.ts';
 
 	/** GitLab-style status mark: a filled circle on a soft halo. */
-	let { status, class: className = 'size-6' }: { status: JobStatus; class?: string } = $props();
+	let { status, class: className = 'size-6' }: { status: PipelineStatus; class?: string } =
+		$props();
 
-	const labels: Record<JobStatus, string> = {
+	const labels: Record<PipelineStatus, string> = {
 		pending: 'Pending',
 		running: 'Running',
 		success: 'Passed',
 		failed: 'Failed',
+		partial: 'Partially failed',
 		skipped: 'Skipped'
 	};
-	const halos: Record<JobStatus, string> = {
+	const halos: Record<PipelineStatus, string> = {
 		pending: 'bg-surface-300-700/60 text-surface-600-400',
 		running: 'bg-primary-500/20 text-primary-500',
 		success: 'bg-success-500/25',
 		failed: 'bg-error-500/25',
+		partial: 'bg-warning-500/25',
 		skipped: 'bg-surface-300-700/60 text-surface-600-400'
 	};
 </script>
@@ -36,6 +45,12 @@
 	{:else if status === 'failed'}
 		<span class="flex size-[76%] items-center justify-center rounded-full bg-error-600 text-white">
 			<XIcon class="size-[70%]" strokeWidth={3.5} />
+		</span>
+	{:else if status === 'partial'}
+		<span
+			class="flex size-[76%] items-center justify-center rounded-full bg-warning-500 text-white"
+		>
+			<TriangleAlertIcon class="size-[60%]" strokeWidth={3} />
 		</span>
 	{:else if status === 'running'}
 		<LoaderCircleIcon class="size-[76%] animate-spin" strokeWidth={3} />

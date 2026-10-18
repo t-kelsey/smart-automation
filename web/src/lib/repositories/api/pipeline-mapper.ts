@@ -170,11 +170,18 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 		};
 	});
 
+	// A failed run is only partially failed when some borehole still made it through the transform.
+	const transformJobs = stages.find((s) => s.key === 'transform')?.jobs ?? [];
+	const status =
+		run.status === 'failed' && transformJobs.some((j) => j.status === 'success')
+			? 'partial'
+			: toPipelineStatus(run.status);
+
 	return {
 		id: run.id,
 		documentId: run.document_id,
 		filename,
-		status: toPipelineStatus(run.status),
+		status,
 		createdAt: new Date(run.inserted_at),
 		updatedAt: new Date(run.updated_at),
 		config,
