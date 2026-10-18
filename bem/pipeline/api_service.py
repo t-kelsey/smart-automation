@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import din4023
+from . import din4023, pdfutil
 
 
 class ApiError(RuntimeError):
@@ -84,8 +84,8 @@ class ApiService:
         )
 
     def download_document(self, document_id: str, dest: pathlib.Path) -> pathlib.Path:
-        """`GET /documents/:id/file`: stream the stored PDF to `dest`. Raises ApiError if it is missing
-        or not a PDF."""
+        """`GET /documents/:id/file`: stream the stored file to `dest` as a PDF (images are converted).
+        Raises ApiError if it is missing or neither a PDF nor an image."""
         dest.parent.mkdir(parents=True, exist_ok=True)
         path = f"/documents/{document_id}/file"
         try:
@@ -99,9 +99,17 @@ class ApiService:
         except httpx.HTTPError as e:
             raise ApiError(f"GET {path} failed: {e}") from e
         with dest.open("rb") as f:
-            if f.read(5) != b"%PDF-":
-                dest.unlink(missing_ok=True)
-                raise ApiError(f"document {document_id} is not a PDF, only PDFs are supported")
+            if f.read(5) == b"%PDF-":
+                return dest
+        # not a PDF: the pipeline reads PDFs only, so images are converted to a one-or-more-page PDF
+        converted = dest.with_name(dest.name + ".converted.pdf")
+        try:
+            pdfutil.image_to_pdf(dest, converted)
+        except ValueError as e:
+            raise ApiError(f"document {document_id} is neither a PDF nor an image: {e}") from e
+        finally:
+            dest.unlink(missing_ok=True)
+        converted.rename(dest)
         return dest
 
     def upload_document(self, path: pathlib.Path, filename: str) -> str:

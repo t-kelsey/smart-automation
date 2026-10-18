@@ -239,5 +239,25 @@ class RunTrackerTest(unittest.TestCase):
         self.assertEqual(len(t.upload_errors), 1)
 
 
+class ImageToPdf(unittest.TestCase):
+    def test_converts_png_and_multiframe_tiff(self):
+        import pathlib, tempfile
+        from PIL import Image
+        from pipeline import pdfutil
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            a, b = Image.new("RGB", (50, 80), "white"), Image.new("L", (50, 80), 128)
+            a.save(tmp / "a.png")
+            a.save(tmp / "m.tif", save_all=True, append_images=[b])
+            pdfutil.image_to_pdf(tmp / "a.png", tmp / "a.pdf")
+            pdfutil.image_to_pdf(tmp / "m.tif", tmp / "m.pdf")
+            self.assertEqual(pdfutil.page_count(tmp / "a.pdf"), 1)
+            self.assertEqual(pdfutil.page_count(tmp / "m.pdf"), 2)
+            (tmp / "x.png").write_bytes(b"nope")
+            with self.assertRaises(ValueError):
+                pdfutil.image_to_pdf(tmp / "x.png", tmp / "x.pdf")
+
+
 if __name__ == "__main__":
     unittest.main()
