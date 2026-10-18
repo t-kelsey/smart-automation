@@ -2,7 +2,7 @@
 
 Automated extraction and standardisation of drilling data for a global geodatabase — a hackathon project for the Herrenknecht AG challenge ([Hackathon Portal](https://hackathon.badencampus.de/en/challenges/66f8c41f-b62a-4a84-a356-79546bc9c68b)).
 
-> **Research project, not production software.** This was built during a hackathon. There is **no authentication or authorisation whatsoever**: everyone who can reach the API can read, create and delete data, including the source documents. Do not expose it to the internet, do not run it in production and do not load confidential documents into an instance you do not control. Uploaded pages are possibly to an external LLM (OpenRouter, Claude) depending on the configuration.
+> **Research project, not production software.** This was built during a hackathon. There is **no authentication or authorisation whatsoever**: everyone who can reach the API can read, create and delete data, including the source documents. Do not expose it to the internet, do not run it in production and do not load confidential documents into an instance you do not control. Uploaded pages are processed with an external LLM (OpenRouter, Claude) depending on the configuration.
 
 ## What it does
 
