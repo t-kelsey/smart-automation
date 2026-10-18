@@ -66,6 +66,7 @@ def split_boreholes(
             schema=schemas.SPLIT_BOREHOLES,
             report=report,
             add_dirs=[out_dir],
+            files=[pages_pdf],
             max_turns=6 + n // MAX_READ_PAGES * 2,
         )
         _dump(step_dir / f"raw_response_attempt{attempt}.json", result)  # for debugging bad groupings

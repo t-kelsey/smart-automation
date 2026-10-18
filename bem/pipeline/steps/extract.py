@@ -59,6 +59,7 @@ def extract_boreholes(
                 report=part,
                 add_dirs=[out_dir],
                 max_turns=8 + n // MAX_READ_PAGES * 2,
+                files=[f],
             )
         except Exception as e:
             recorder.record_failure("extract", e, report=part, position=position)

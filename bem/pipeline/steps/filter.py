@@ -67,6 +67,7 @@ def filter_pages(
             schema=schemas.CLASSIFY_PAGES,
             report=report,
             add_dirs=[out_dir],
+            files=[chunk_pdf],
         )
         by_page = {p["page"]: p for p in result["pages"]}
         rows = []
