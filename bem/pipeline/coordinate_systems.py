@@ -165,6 +165,18 @@ def _resolve_utm(text: str) -> int | None:
     return base + zone if base is not None else None
 
 
+def utm_epsg(lon: float, lat: float, datum: str = "wgs84") -> int | None:
+    """The UTM EPSG code whose zone covers `lon`/`lat` (approximate geographic coordinates),
+    computed from the zone formula rather than guessed, so only the geography (which an AI can
+    reasonably estimate from place names) is fuzzy, not the zone arithmetic (which it is not
+    reliable at, see `steps/translate._maybe_guess_epsg`)."""
+    zone = int((lon + 180) // 6) + 1
+    if not 1 <= zone <= 60:
+        return None
+    base = _UTM_DATUM_BASE.get(datum, {}).get("N" if lat >= 0 else "S")
+    return base + zone if base is not None else None
+
+
 def _resolve_mga(text: str) -> int | None:
     m = re.search(r"gda[-\s]?2020.{0,20}(?:mga|zone)\s*(\d{2})", text)
     if m:

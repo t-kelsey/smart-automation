@@ -55,7 +55,7 @@ Rules:
 - Do not add facts that are not in the input."""
 
 GUESS_EPSG_PROMPT = """This borehole has coordinates but no coordinate system could be matched
-from an explicit label in the source. Guess the most likely EPSG code from context, so the point
+from an explicit label in the source. Estimate the approximate real-world location, so the point
 can still be shown on a map — an approximate location beats none, as long as it's flagged as a
 guess (which the caller already does).
 
@@ -68,12 +68,11 @@ x (easting/longitude): {x}
 y (northing/latitude): {y}
 
 Rules:
-- Infer the country/region from place/client/project and pick the coordinate reference system
-  most commonly used there for this kind of survey (e.g. the local UTM zone, or that country's
-  national grid), choosing the UTM zone from the x/y magnitude if it looks like a UTM easting/
-  northing pair.
-- epsg: your best-guess EPSG code, or null if you have no reasonable basis for one (e.g. place/
-  client/project give no location clue at all).
+- Infer the country/region/city from place/client/project (e.g. a project name often names a real
+  place even with no dedicated place field).
+- approx_lon/approx_lat: your best-guess decimal-degree coordinates of that place (not the EPSG
+  code or UTM zone — those are computed separately from your estimate), or both null if place/
+  client/project give no location clue at all.
 - reasoning: one short sentence naming the clue you used (country, coordinate magnitude, etc.)."""
 
 
@@ -103,12 +102,16 @@ def _maybe_guess_epsg(borehole: dict, report: StepReport) -> str | None:
     except Exception as e:
         log(f"step 4: epsg guess failed, leaving epsg null: {e}")
         return None
-    if guess.get("epsg") is None:
+    lon, lat = guess.get("approx_lon"), guess.get("approx_lat")
+    if lon is None or lat is None:
         return None
-    borehole["epsg"] = guess["epsg"]
+    epsg = coordinate_systems.utm_epsg(lon, lat)
+    if epsg is None:
+        return None
+    borehole["epsg"] = epsg
     reasoning = guess.get("reasoning") or "no reasoning given"
     borehole.setdefault("metadata", {})["epsg_guessed_by_ai"] = reasoning
-    return f"epsg {guess['epsg']} is an AI guess ({reasoning}), not from an explicit label in the source"
+    return f"epsg {epsg} is an AI guess ({reasoning}), not from an explicit label in the source"
 
 
 def transform_boreholes(

@@ -228,12 +228,16 @@ DB_PAYLOAD = {
     "required": ["borehole", "layers"],
 }
 
-# Step 4 fallback: best-effort EPSG guess when coordinate_systems.resolve_epsg found nothing.
+# Step 4 fallback: best-effort location guess when coordinate_systems.resolve_epsg found nothing.
+# Longitude/latitude rather than an EPSG code: the AI is reasonably good at placing a named
+# project/location on the globe, but not reliable at UTM zone arithmetic, which is computed
+# deterministically from the guessed coordinates instead (coordinate_systems.utm_epsg).
 GUESS_EPSG = {
     "type": "object",
     "properties": {
-        "epsg": _t("integer"),
+        "approx_lon": _t("number"),
+        "approx_lat": _t("number"),
         "reasoning": _t("string"),
     },
-    "required": ["epsg", "reasoning"],
+    "required": ["approx_lon", "approx_lat", "reasoning"],
 }

@@ -58,6 +58,19 @@ class ResolveEpsg(unittest.TestCase):
         self.assertIsNone(cs.resolve_epsg(None, None))
         self.assertIsNone(cs.resolve_epsg("Gauss-Krueger"))  # no zone number: ambiguous
 
+
+class UtmEpsg(unittest.TestCase):
+    def test_zone_from_lon_lat(self):
+        # Lankaran, Azerbaijan: zone 39N, not 40N (an AI guess for this exact case picked 40).
+        self.assertEqual(cs.utm_epsg(48.826, 38.813), 32639)
+        self.assertEqual(cs.utm_epsg(-3.86, 51.43), 32630)
+
+    def test_southern_hemisphere(self):
+        self.assertEqual(cs.utm_epsg(7.5, -33.9), 32732)
+
+    def test_out_of_range_lon_returns_none(self):
+        self.assertIsNone(cs.utm_epsg(200, 10))
+
     def test_resolve_fills_epsg_only_when_coordinates_present(self):
         b = {"x": 591097, "y": 6648286, "epsg": None, "source_coordinate_system": "WGS 84 UTM 32"}
         cs.resolve(b)
