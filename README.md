@@ -74,6 +74,26 @@ flowchart LR
 
 More detail: [docs/architecture.md](docs/architecture.md) (flows), [docs/api-reference.md](docs/api-reference.md) (endpoints), [docs/adr/](docs/adr/) (decisions).
 
+### Pipeline architecture
+
+The pipeline in [`bem/`](bem/) is a chain of four small stages instead of one big prompt, so each stage is cheap to retry, measurable and can use the model that fits its job:
+
+```mermaid
+flowchart LR
+    doc[/"PDF, image or Word"/] --> filter
+    filter["1 Filter<br/>keep real log pages<br/>(small model)"] --> split
+    split["2 Split<br/>one PDF per borehole<br/>(small model)"] --> extract
+    extract["3 Extract<br/>all data, original wording<br/>(strong model)"] --> transform
+    transform["4 Transform<br/>English, DIN 4023,<br/>API payload (small model)"] --> store[("POST /api/boreholes")]
+```
+
+- **Triggered by the API:** a run is started with `POST /execute` (document id, model and effort per stage). The pipeline downloads the document from the API, converts images and Word to PDF, and works through the stages in the background.
+- **Parallel and per borehole:** pages are classified in chunks, and extract and transform run once per borehole, in parallel.
+- **Tracked:** every stage is an `exec_stage` in the API with status, model, effort, result, error, tokens and cost, so the web app shows live progress for every run and borehole.
+- **Fail-safe:** a borehole is only stored when it passes the DIN 4023 check and its upload succeeds. A failed or stopped extract or transform job can be retried on its own without redoing the rest ([ADR-0044](docs/adr/0044-retry-single-pipeline-jobs.md)), and a run can be stopped at any time.
+- **Pluggable AI backend:** the `claude` CLI or OpenRouter (`BEM_AI`), so models can be swapped without touching the stages.
+- **Decoupled:** the pipeline talks to the API only over HTTP, never to the database or the document storage.
+
 ### Standardisation: one vocabulary for all parts
 
 Every borehole is brought into the same standard, based on the German norm **DIN 4023** (drawing of soil and rock in borehole logs): soil and rock names, short forms, hatch patterns and colours. The norm is kept as a single data file, [`standards/din-4023/din-4023.json`](standards/din-4023/din-4023.json), which is the source of truth for the whole system ([ADR-0022](docs/adr/0022-shared-din-4023-standard-file.md)):
