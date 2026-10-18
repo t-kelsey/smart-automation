@@ -96,8 +96,13 @@ defmodule Api.PipelineTest do
 
       Req.Test.stub(Api.Pipeline, &Plug.Conn.send_resp(&1, 500, "boom"))
 
-      assert {:ok, %{status: "failed", error: "pipeline could not be reached" <> _}} =
-               Api.Pipeline.submit_pipeline_run(pipeline_run)
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:ok, %{status: "failed", error: "pipeline could not be reached" <> _}} =
+                   Api.Pipeline.submit_pipeline_run(pipeline_run)
+        end)
+
+      assert log =~ "pipeline run submit failed"
     end
   end
 

@@ -28,8 +28,9 @@ end
 
 # Pipeline (bem) endpoint that pipeline runs are sent to, e.g. http://pipeline:8000/execute.
 # Overrides the dev default from config/dev.exs; an empty value turns processing off (runs stay
-# "new"). Unset in other environments: uploads are stored but not processed.
-case System.get_env("PIPELINE_URL") do
+# "new"). Ignored in tests (stubbed, see config/test.exs). Unset in other environments: uploads are stored but not processed.
+case config_env() != :test && System.get_env("PIPELINE_URL") do
+  false -> :ok
   nil -> :ok
   "" -> config :api, :pipeline_url, nil
   pipeline_url -> config :api, :pipeline_url, pipeline_url
