@@ -45,19 +45,19 @@
 	const infrastructure = [
 		{
 			name: 'Database',
-			text: 'PostgreSQL with PostGIS. Boreholes, layers, documents and pipeline runs are stored with a WGS84 point, so the map can query by bounding box. Coordinates are reprojected in the database, and the raw extraction of every stage is kept next to the standardised values.'
+			text: 'PostgreSQL with PostGIS. Boreholes, layers, documents and pipeline runs are stored with a WGS84 point, so the map can query by bounding box. Coordinates in local systems (for example Gauss-Krüger) are reprojected to WGS84 in the database, and the raw extraction of every stage is kept next to the standardised values.'
 		},
 		{
 			name: 'API',
-			text: 'A Phoenix (Elixir) JSON API. It stores the uploaded documents, starts pipeline runs, tracks every stage, and validates and georeferences the boreholes the pipeline sends back. It owns the data model, and it is the only thing that touches the database and the file storage.'
+			text: 'A Phoenix (Elixir) JSON API. It stores the uploaded documents, starts and stops pipeline runs, tracks every stage, and validates and georeferences the boreholes the pipeline sends back. It also serves paged borehole lists, a search with its own query language and autocompletion, and the source files. It owns the data model, and it is the only thing that touches the database and the file storage.'
 		},
 		{
 			name: 'UI',
-			text: 'A SvelteKit app with an upload and pipeline view, a MapLibre map, a searchable table and borehole cross sections drawn after DIN 4023. It talks only to the API, through a service and repository layer.'
+			text: 'A SvelteKit app with an upload and pipeline monitor, a clustered MapLibre map, search by name, place and date with autocompletion, and borehole profile columns drawn after DIN 4023 next to the source document. It talks only to the API, through a service and repository layer.'
 		},
 		{
 			name: 'BEM',
-			text: 'The borehole extraction pipeline in Python. It gets a document from the API, runs four Claude stages over it and posts the finished boreholes back. Like the UI, it only uses the API.'
+			text: 'The borehole extraction pipeline in Python, run as a small HTTP service. It gets a document from the API, runs four Claude stages over it and posts the finished boreholes back. Like the UI, it only uses the API. The AI backend is pluggable.'
 		}
 	];
 
@@ -81,12 +81,12 @@
 	];
 
 	const runSteps = [
-		'Files are queued in the browser. The user picks a model and effort per stage, then starts the extraction.',
+		'Files are queued in the browser, nothing is stored yet. The user picks a model and effort per stage, then starts the extraction.',
 		'The UI uploads each file to the API, which stores it and creates a pipeline run.',
-		'The API tells BEM to execute the run. BEM answers at once and queues the job.',
+		'The API tells BEM to execute the run. BEM answers at once and queues the job. A queued or running run can be stopped from the UI.',
 		'A BEM worker downloads the document from the API and runs the four stages.',
 		'After every stage, BEM uploads its output to the API, so the UI can show live progress.',
-		'Each valid borehole is posted to the API and linked to its source document. The run ends as completed or failed.'
+		'Each valid borehole is posted to the API and linked to its source document. The run ends as completed, failed or stopped.'
 	];
 
 	const diagram = `flowchart LR
@@ -211,7 +211,10 @@
 
 		<div class="space-y-4">
 			<h3 class="h3">Infrastructure</h3>
-			<p>Four parts work together, from the raw file to the map. They run as separate services.</p>
+			<p>
+				Four parts work together, from the raw file to the map. They run as separate services,
+				started together with Docker Compose.
+			</p>
 			<dl class="grid gap-3 sm:grid-cols-2">
 				{#each infrastructure as part (part.name)}
 					<div class="card preset-tonal-surface p-4">
@@ -258,6 +261,22 @@
 					</li>
 				{/each}
 			</ol>
+		</div>
+
+		<div class="space-y-4">
+			<h3 class="h3">Limitations</h3>
+			<ul class="list-inside list-disc space-y-1">
+				<li>
+					This is a research prototype. There is no authentication: anyone who can reach the API can
+					read, create and delete data, including source documents.
+				</li>
+				<li>There is no accuracy evaluation against ground truth yet.</li>
+				<li>
+					The transform stage uses a small model for translation and unit conversion, so check the
+					validation issues and metadata notes of each borehole.
+				</li>
+				<li>The pipeline queue is in memory, so a restart of BEM loses queued runs.</li>
+			</ul>
 		</div>
 	</section>
 </div>
