@@ -60,7 +60,8 @@ can still be shown on a map — an approximate location beats none, as long as i
 guess (which the caller already does).
 
 place: {place}
-client/project: {client}
+client: {client}
+project: {project}
 source_coordinate_system (as written, possibly empty): {system}
 source_coordinate_raw: {raw}
 x (easting/longitude): {x}
@@ -72,7 +73,7 @@ Rules:
   national grid), choosing the UTM zone from the x/y magnitude if it looks like a UTM easting/
   northing pair.
 - epsg: your best-guess EPSG code, or null if you have no reasonable basis for one (e.g. place/
-  client give no location clue at all).
+  client/project give no location clue at all).
 - reasoning: one short sentence naming the clue you used (country, coordinate magnitude, etc.)."""
 
 
@@ -86,6 +87,7 @@ def _maybe_guess_epsg(borehole: dict, report: StepReport) -> str | None:
             GUESS_EPSG_PROMPT.format(
                 place=borehole.get("place"),
                 client=borehole.get("client"),
+                project=borehole.get("metadata", {}).get("project"),
                 system=borehole.get("source_coordinate_system"),
                 raw=borehole.get("source_coordinate_raw"),
                 x=borehole["x"],
