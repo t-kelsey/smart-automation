@@ -259,5 +259,31 @@ class ImageToPdf(unittest.TestCase):
                 pdfutil.image_to_pdf(tmp / "x.png", tmp / "x.pdf")
 
 
+class DocxToPdf(unittest.TestCase):
+    def test_detects_docx(self):
+        import pathlib, tempfile, zipfile
+        from pipeline import pdfutil
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            with zipfile.ZipFile(tmp / "a.docx", "w") as z:
+                z.writestr("word/document.xml", "<w/>")
+            with zipfile.ZipFile(tmp / "b.zip", "w") as z:
+                z.writestr("x.txt", "x")
+            (tmp / "c.png").write_bytes(b"\x89PNG")
+            self.assertTrue(pdfutil.is_docx(tmp / "a.docx"))
+            self.assertFalse(pdfutil.is_docx(tmp / "b.zip"))
+            self.assertFalse(pdfutil.is_docx(tmp / "c.png"))
+
+    def test_missing_libreoffice_is_a_clear_error(self):
+        import pathlib, tempfile
+        from unittest import mock
+        from pipeline import pdfutil
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch("shutil.which", return_value=None):
+            with self.assertRaisesRegex(ValueError, "LibreOffice"):
+                pdfutil.docx_to_pdf(pathlib.Path(tmp) / "a.docx", pathlib.Path(tmp) / "a.pdf")
+
+
 if __name__ == "__main__":
     unittest.main()

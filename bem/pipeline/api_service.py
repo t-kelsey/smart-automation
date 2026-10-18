@@ -84,8 +84,8 @@ class ApiService:
         )
 
     def download_document(self, document_id: str, dest: pathlib.Path) -> pathlib.Path:
-        """`GET /documents/:id/file`: stream the stored file to `dest` as a PDF (images are converted).
-        Raises ApiError if it is missing or neither a PDF nor an image."""
+        """`GET /documents/:id/file`: stream the stored file to `dest` as a PDF (Word documents and images are converted).
+        Raises ApiError if it is missing or cannot be converted."""
         dest.parent.mkdir(parents=True, exist_ok=True)
         path = f"/documents/{document_id}/file"
         try:
@@ -101,12 +101,15 @@ class ApiService:
         with dest.open("rb") as f:
             if f.read(5) == b"%PDF-":
                 return dest
-        # not a PDF: the pipeline reads PDFs only, so images are converted to a one-or-more-page PDF
+        # not a PDF: the pipeline reads PDFs only, so Word documents and images are converted
         converted = dest.with_name(dest.name + ".converted.pdf")
         try:
-            pdfutil.image_to_pdf(dest, converted)
+            if pdfutil.is_docx(dest):
+                pdfutil.docx_to_pdf(dest, converted)
+            else:
+                pdfutil.image_to_pdf(dest, converted)
         except ValueError as e:
-            raise ApiError(f"document {document_id} is neither a PDF nor an image: {e}") from e
+            raise ApiError(f"document {document_id} could not be converted to PDF: {e}") from e
         finally:
             dest.unlink(missing_ok=True)
         converted.rename(dest)
