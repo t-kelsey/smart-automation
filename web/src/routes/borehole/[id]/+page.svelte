@@ -6,9 +6,6 @@
 		FileTextIcon,
 		FileTypeIcon,
 		PencilLine,
-		PencilIcon,
-		TrashIcon,
-		UploadIcon,
 		Download
 	} from '@lucide/svelte';
 	import BoreholePageHeader from '#lib/components/borehole/BoreholePageHeader.svelte';
@@ -38,13 +35,8 @@
 		docx: FileTypeIcon
 	};
 
-	// TODO: wire up New Version, Rename and Delete once the API supports them.
-	const documentActions = [
-		{ label: 'Download', icon: Download },
-		{ label: 'New Version', icon: UploadIcon },
-		{ label: 'Rename', icon: PencilIcon },
-		{ label: 'Delete', icon: TrashIcon, danger: true }
-	];
+	// Document management (new version, rename, delete, upload) is out of scope for now, see the root README.
+	const documentActions = [{ label: 'Download', icon: Download }];
 
 	function onDocumentAction(doc: BoreholeDocument, action: string) {
 		// The API sends the file as an attachment with ?download=1 (ADR-0026).
@@ -117,11 +109,6 @@
 				<section class="card border border-surface-200-800 bg-surface-50-950 p-4">
 					<div class="mb-3 flex items-center justify-between gap-2">
 						<h2 class="h5">Documents</h2>
-						<!-- TODO: implement document upload. -->
-						<button type="button" class="btn preset-tonal btn-sm">
-							<UploadIcon class="size-4" />
-							Upload
-						</button>
 					</div>
 					<ul class="divide-y divide-surface-200-800">
 						{#each borehole.documents as doc (doc.id)}
@@ -166,9 +153,7 @@
 														<Menu.Item
 															value={action.label}
 															disabled={action.label === 'Download' && !doc.url}
-															class="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm hover:preset-tonal {action.danger
-																? 'text-error-500'
-																: ''}"
+															class="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm hover:preset-tonal"
 														>
 															<action.icon class="size-4" />
 															<Menu.ItemText>{action.label}</Menu.ItemText>

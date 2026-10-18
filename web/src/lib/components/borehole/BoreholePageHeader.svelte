@@ -1,15 +1,14 @@
 <!--
 @component
 Header shared by the views of one borehole: title and place at the left, a switch between the
-views in the middle, and the share button plus page-specific actions at the right.
+views in the middle, and page-specific actions at the right.
 
 @param borehole - Borehole the page is about.
 @param view - The view that is currently shown.
-@param [children] - Actions shown after the share button.
+@param [children] - Page-specific actions at the right.
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Share2Icon } from '@lucide/svelte';
 	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -67,11 +66,6 @@ views in the middle, and the share button plus page-specific actions at the righ
 	</SegmentedControl>
 
 	<div class="flex flex-wrap items-center gap-2 md:justify-end">
-		<!-- TODO: implement sharing (e.g. copy link to this borehole). -->
-		<button type="button" class="btn preset-tonal">
-			<Share2Icon class="size-4" />
-			Share
-		</button>
 		{@render children?.()}
 	</div>
 </header>

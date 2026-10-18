@@ -1,4 +1,12 @@
-import { InfoIcon, MapIcon, SearchIcon, ListIcon, UploadIcon, WorkflowIcon, Drill } from '@lucide/svelte';
+import {
+	InfoIcon,
+	MapIcon,
+	SearchIcon,
+	ListIcon,
+	UploadIcon,
+	WorkflowIcon,
+	Drill
+} from '@lucide/svelte';
 
 import type { SidebarItem } from './types';
 
