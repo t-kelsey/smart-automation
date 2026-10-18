@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { mapColors } from './map-colors.ts';
-	import { patternIconSvg, plainIconSvg } from './dot-icons.ts';
+	import { patternIconSvg } from './dot-icons.ts';
 	import { dinColors, materials } from '#lib/din4023/index.ts';
 	import type { MaterialKey } from '#lib/din4023/index.ts';
 
