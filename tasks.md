@@ -10,6 +10,13 @@
 
 - [ ] image support, currently only pdfs are supported
 - [ ] Update the /about page to reflect the latest features, changes and api
+- [ ] Support api calls with openrouter (as alternative to claude)
+- [ ] Add a partially failed pipeline state (eg. when only a few jobs failed not all. Use yellow color instead of red)
+
+## Submission Preparation
+
+- [ ] Remove tasks.md from repo
+- [ ] Remove herrenknecht slides
 
 ## Presentation Preparation
 
