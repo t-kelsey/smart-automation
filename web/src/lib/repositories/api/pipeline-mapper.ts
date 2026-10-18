@@ -4,6 +4,7 @@ import {
 	type JobStatus,
 	type Pipeline,
 	type PipelineJob,
+	type PipelineReportStep,
 	type PipelineStage,
 	type PipelineStatus
 } from '#lib/domain/pipelines.ts';
@@ -32,6 +33,14 @@ export interface ApiReportStep {
 	model_requested?: string;
 	effort?: string;
 	wall_seconds?: number;
+	api_seconds?: number;
+	calls?: number;
+	input_tokens?: number;
+	output_tokens?: number;
+	cache_read_tokens?: number;
+	cache_create_tokens?: number;
+	total_tokens?: number;
+	cost_usd?: number;
 }
 
 /** `GET /api/pipeline_runs/:id`. */
@@ -159,6 +168,7 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 					model: row?.model ?? report?.model_requested ?? configured?.model,
 					error: row?.error ?? undefined,
 					boreholeId: job.done ? job.boreholeId : undefined,
+					position: job.position ?? undefined,
 					durationSeconds:
 						row?.duration_ms != null
 							? row.duration_ms / 1000
@@ -185,6 +195,39 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 		createdAt: new Date(run.inserted_at),
 		updatedAt: new Date(run.updated_at),
 		config,
-		stages
+		stages,
+		report: steps.length > 0 ? steps.map(toReportStep) : undefined
 	};
+}
+
+/** `1 filter pages` → the `filter` stage; unknown names keep their text as the label. */
+function toReportStep(step: ApiReportStep): PipelineReportStep {
+	const stage = PIPELINE_STAGES[Number.parseInt(step.step, 10) - 1];
+	return {
+		key: stage?.key,
+		label: stage?.label ?? step.step,
+		model: step.model_requested,
+		effort: step.effort,
+		wallSeconds: step.wall_seconds,
+		apiSeconds: step.api_seconds,
+		calls: step.calls,
+		inputTokens: step.input_tokens,
+		outputTokens: step.output_tokens,
+		cacheReadTokens: step.cache_read_tokens,
+		cacheCreateTokens: step.cache_create_tokens,
+		totalTokens:
+			step.total_tokens ??
+			sumDefined([
+				step.input_tokens,
+				step.output_tokens,
+				step.cache_read_tokens,
+				step.cache_create_tokens
+			]),
+		costUsd: step.cost_usd
+	};
+}
+
+function sumDefined(values: (number | undefined)[]): number | undefined {
+	const defined = values.filter((v): v is number => v !== undefined);
+	return defined.length > 0 ? defined.reduce((a, b) => a + b, 0) : undefined;
 }

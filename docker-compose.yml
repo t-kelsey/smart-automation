@@ -73,6 +73,10 @@ services:
       # Auth for the `claude` CLI: either an API key or a token from `claude setup-token`
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      # AI backend: claude_cli (default) or openrouter (needs OPENROUTER_API_KEY)
+      BEM_AI: ${BEM_AI:-claude_cli}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      BEM_OPENROUTER_MODEL: ${BEM_OPENROUTER_MODEL:-}
     ports:
       - "${BEM_PORT:-8000}:8000"
 

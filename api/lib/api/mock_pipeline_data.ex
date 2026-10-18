@@ -231,14 +231,27 @@ defmodule Api.MockPipelineData do
       |> Enum.take(finished_stages)
       |> Enum.with_index(1)
       |> Enum.map(fn {step, n} ->
+        # Same shape as the pipeline's `StepReport.to_dict/0` (bem/pipeline/ai.py).
+        input = :rand.uniform(30_000)
+        output = :rand.uniform(4_000)
+        cache_read = :rand.uniform(60_000)
+        cache_create = :rand.uniform(15_000)
+        wall = Float.round(2 + :rand.uniform() * 40, 2)
+
         %{
           "step" => "#{n} #{step}",
           "model_requested" => config[step]["model"],
           "effort" => config[step]["effort"],
-          "wall_seconds" => Float.round(2 + :rand.uniform() * 40, 1),
-          "input_tokens" => :rand.uniform(30_000),
-          "output_tokens" => :rand.uniform(4_000),
-          "cost_usd" => Float.round(:rand.uniform() * 0.4, 4)
+          "wall_seconds" => wall,
+          "calls" => :rand.uniform(6),
+          "input_tokens" => input,
+          "output_tokens" => output,
+          "cache_read_tokens" => cache_read,
+          "cache_create_tokens" => cache_create,
+          "total_tokens" => input + output + cache_read + cache_create,
+          "cost_usd" => Float.round(:rand.uniform() * 0.4, 4),
+          "api_seconds" => Float.round(wall * 0.8, 2),
+          "models" => ["claude-#{config[step]["model"]}"]
         }
       end)
 

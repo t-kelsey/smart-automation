@@ -152,4 +152,99 @@ defmodule Api.PipelineTest do
       refute_received {:stop_request, _, _}
     end
   end
+
+  describe "POST /api/exec_stages/:id/retry" do
+    setup do
+      Application.put_env(:api, :pipeline_url, "http://pipeline.test/execute")
+      {:ok, document} = Boreholes.create_uploaded_document(upload("a.pdf"))
+
+      {:ok, run} =
+        Boreholes.create_pipeline_run(%{"document_id" => document.id, "config" => %{"x" => 1}})
+
+      {:ok, run} = Boreholes.update_pipeline_run_status(run, "running")
+      {:ok, run} = Boreholes.update_pipeline_run_status(run, "failed", %{"error" => "boom"})
+
+      stage = fn type, position, status ->
+        {:ok, s} =
+          Boreholes.create_exec_stage(%{
+            "type" => type,
+            "run_id" => run.id,
+            "position" => position,
+            "status" => status,
+            "document_ids" => [document.id]
+          })
+
+        s
+      end
+
+      %{run: run, document: document, stage: stage}
+    end
+
+    test "reopens the run and asks the pipeline to redo the job", %{conn: conn, run: run} = ctx do
+      ctx.stage.("split", nil, "success")
+      ctx.stage.("extract", 1, "success")
+      failed = ctx.stage.("transform", 1, "failed")
+      test_pid = self()
+
+      Req.Test.stub(Api.Pipeline, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        send(test_pid, {:retry_request, conn.request_path, Jason.decode!(body)})
+        Plug.Conn.send_resp(conn, 202, "")
+      end)
+
+      assert %{"data" => %{"status" => "running", "error" => nil, "finished_at" => nil}} =
+               conn |> post(~p"/api/exec_stages/#{failed.id}/retry") |> json_response(202)
+
+      assert_received {:retry_request, path, body}
+      assert path == "/runs/#{run.id}/retry"
+
+      assert body == %{
+               "document_id" => run.document_id,
+               "stage" => "transform",
+               "position" => 1,
+               "config" => %{"x" => 1}
+             }
+
+      # the run is active again, so a second retry is refused
+      assert conn |> post(~p"/api/exec_stages/#{failed.id}/retry") |> json_response(409)
+    end
+
+    test "restores the run if the pipeline cannot be reached", %{conn: conn} = ctx do
+      ctx.stage.("split", nil, "success")
+      failed = ctx.stage.("extract", 1, "failed")
+      Req.Test.stub(Api.Pipeline, &Plug.Conn.send_resp(&1, 500, "boom"))
+
+      assert conn |> post(~p"/api/exec_stages/#{failed.id}/retry") |> json_response(400)
+
+      assert %{status: "failed", error: "boom", finished_at: %DateTime{}} =
+               Boreholes.get_pipeline_run(failed.run_id)
+    end
+
+    test "refuses jobs that cannot be retried", %{conn: conn} = ctx do
+      filter = ctx.stage.("filter", nil, "failed")
+      success = ctx.stage.("extract", 2, "success")
+      no_split = ctx.stage.("extract", 1, "failed")
+      no_extract = ctx.stage.("transform", 3, "stopped")
+
+      for stage <- [filter, success, no_split, no_extract] do
+        assert conn |> post(~p"/api/exec_stages/#{stage.id}/retry") |> json_response(409)
+      end
+
+      assert conn
+             |> post(~p"/api/exec_stages/#{Ecto.UUID.generate()}/retry")
+             |> json_response(404)
+    end
+
+    test "refuses a job that was already retried", %{conn: conn, run: run} = ctx do
+      ctx.stage.("split", nil, "success")
+      old = ctx.stage.("extract", 1, "failed")
+      ctx.stage.("extract", 1, "failed")
+      Req.Test.stub(Api.Pipeline, &Plug.Conn.send_resp(&1, 202, ""))
+
+      assert %{"errors" => %{"detail" => "this job was already retried"}} =
+               conn |> post(~p"/api/exec_stages/#{old.id}/retry") |> json_response(409)
+
+      assert Boreholes.get_pipeline_run(run.id).status == "failed"
+    end
+  end
 end

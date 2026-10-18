@@ -18,7 +18,7 @@ ADR-0035 added `pipeline_runs` (`POST /api/pipeline_runs`, `GET /api/pipeline_ru
 - **Stages and jobs** (`pipeline-mapper.ts`): the four stages are the `exec_stages` types. Filter and split are one job each; extract and transform have one job per borehole, named from the split result (`data.boreholes[].label`). A stage's model, effort and wall time come from the report's steps (the config before the report exists).
 - **Status:** the pipeline only reports a stage when it has finished, so what is missing is derived from the run: while `running`, the unfinished jobs of the first unfinished stage run and later stages are pending; when `failed`, those jobs failed and later stages are skipped; `new` is all pending; `completed` is all done. The run status maps to the pipeline status (`new` pending, `completed` success).
 - **Live updates:** the pages poll with `invalidate('app:pipelines')` every 3 s while a pipeline is pending or running.
-- **Retry:** submits the same document with the same config again (a new run). There are no per-job retries.
+- **Retry:** submits the same document with the same config again (a new run). Single failed extract/transform jobs are retried on their own, see ADR-0044.
 - The "Store" stage and the "Created by" column of the mock are gone (nothing records them).
 
 ## Pros

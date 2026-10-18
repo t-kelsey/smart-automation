@@ -19,6 +19,8 @@ export interface PipelineRepository {
 	getJob(id: string): Promise<JobDetail | null>;
 	/** Deletes the pipeline run with its jobs and report; boreholes it created are kept. */
 	delete(id: string): Promise<void>;
+	/** Redoes a failed or stopped extract/transform job; the run goes back to `running`. */
+	retryJob(execStageId: string): Promise<void>;
 	/** Submits an uploaded document to the pipeline with the given per step config. */
 	start(documentId: string, config: PipelineConfig): Promise<StartedPipeline>;
 }

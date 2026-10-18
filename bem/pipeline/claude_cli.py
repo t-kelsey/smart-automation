@@ -36,6 +36,7 @@ class ClaudeCLI(AI):
         tools: str = "Read",
         add_dirs: list[pathlib.Path] | None = None,
         max_turns: int = 8,
+        files: list[pathlib.Path] | None = None,  # unused: the CLI reads files itself via the Read tool
     ) -> dict:
         """Run one `claude -p` call, add its usage to `report`, return the structured output.
 

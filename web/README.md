@@ -4,7 +4,7 @@ Web frontend of the geodatabase: explore, search and review boreholes and start 
 
 ## Why it exists
 
-The extracted data is only useful if people can find and judge it. The web app shows boreholes on an interactive world map, searches them (name, place, date with autocompletion), draws each borehole as a DIN 4023 profile column next to its source document, and lets users upload reports, configure and watch pipeline runs and review the results.
+The extracted data is only useful if people can find and judge it. The web app shows boreholes on an interactive world map, searches them (name, place, date with autocompletion), draws each borehole as a DIN 4023 profile column next to its source document, and lets users upload reports, configure and watch pipeline runs (retrying a whole run or a single failed extract/transform job) and review the results.
 
 ## Development setup
 

@@ -36,6 +36,21 @@ defmodule ApiWeb.ExecStageController do
     end
   end
 
+  @doc """
+  Retries a failed or stopped `extract`/`transform` job (see `Api.Boreholes.retry_exec_stage/1`):
+  the run becomes `running` again and the pipeline redoes that borehole as a new job. Answers with
+  the run like `GET /api/pipeline_runs/:id`. 404 if unknown, 409 if the job cannot be retried.
+  """
+  def retry(conn, %{"id" => id}) do
+    with %ExecStage{} = exec_stage <- Boreholes.get_exec_stage(id) || {:error, :not_found},
+         {:ok, pipeline_run} <- Boreholes.retry_exec_stage(exec_stage) do
+      conn
+      |> put_status(:accepted)
+      |> put_view(json: ApiWeb.PipelineRunJSON)
+      |> render(:show, pipeline_run: pipeline_run)
+    end
+  end
+
   @doc "One exec_stage by id; 404 if unknown."
   def show(conn, %{"id" => id}) do
     case Boreholes.get_exec_stage(id) do

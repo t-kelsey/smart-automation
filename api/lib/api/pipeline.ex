@@ -82,6 +82,37 @@ defmodule Api.Pipeline do
     end
   end
 
+  @doc """
+  Asks the pipeline to redo one failed/stopped job of a finished run (`extract` or `transform` of
+  one borehole): `POST /runs/:pipeline_id/retry` next to `PIPELINE_URL` with `document_id`,
+  `stage`, `position` and the run's `config`. `:ok` once the pipeline accepted it.
+  """
+  @spec submit_job_retry(PipelineRun.t(), Api.Boreholes.ExecStage.t()) :: :ok | {:error, term()}
+  def submit_job_retry(%PipelineRun{} = pipeline_run, %Api.Boreholes.ExecStage{} = exec_stage) do
+    if url() do
+      options =
+        [
+          url: url() |> URI.merge("runs/#{pipeline_run.id}/retry") |> URI.to_string(),
+          json: %{
+            document_id: pipeline_run.document_id,
+            stage: exec_stage.type,
+            position: exec_stage.position,
+            config: pipeline_run.config || %{}
+          },
+          retry: false,
+          receive_timeout: 30_000
+        ] ++ Application.get_env(:api, :pipeline_req_options, [])
+
+      case Req.post(options) do
+        {:ok, %Req.Response{status: status}} when status in 200..299 -> :ok
+        {:ok, %Req.Response{status: status}} -> {:error, {:status, status}}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, "no pipeline is configured"}
+    end
+  end
+
   defp submit_run(%PipelineRun{} = pipeline_run) do
     options =
       [

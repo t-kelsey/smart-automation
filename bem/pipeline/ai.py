@@ -1,7 +1,7 @@
 """Backend-independent AI interface of the pipeline.
 
 Steps talk to one general `AI` object (`get_ai()`); which model/provider sits behind it is chosen
-by name (`--ai`, env `BEM_AI`, default `claude_cli`). To add a backend, subclass `AI`, implement
+by name (`--ai`, env `BEM_AI`, default `claude_cli`; `openrouter` needs OPENROUTER_API_KEY). To add a backend, subclass `AI`, implement
 `run`, and register it in `_BACKENDS`.
 """
 
@@ -137,17 +137,20 @@ class AI(ABC):
         tools: str = "Read",
         add_dirs: list[pathlib.Path] | None = None,
         max_turns: int = 8,
+        files: list[pathlib.Path] | None = None,
     ) -> dict:
         """Return the model's answer as a dict matching the JSON `schema`.
 
         `model` and `effort` are hints interpreted by the backend (for claude_cli: haiku/sonnet/opus
         and low..max). `tools`/`add_dirs`/`max_turns` describe file access for agentic backends;
-        `tools=""` means a pure text-in/text-out call. Raise `PipelineError` on failure.
+        `tools=""` means a pure text-in/text-out call. `files` are the PDFs the prompt refers to by path;
+        backends without file access (openrouter) attach their pages as images. Raise `PipelineError` on failure.
         """
 
 
 _BACKENDS = {
     "claude_cli": lambda: _load("claude_cli", "ClaudeCLI"),
+    "openrouter": lambda: _load("openrouter", "OpenRouter"),
 }
 _current: AI | None = None
 

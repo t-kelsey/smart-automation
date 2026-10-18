@@ -41,6 +41,11 @@ export class PipelineService {
 		return this.repository.delete(id);
 	}
 
+	/** Redoes one failed or stopped extract/transform job as a new job of the same run. */
+	retryJob(execStageId: string): Promise<void> {
+		return this.repository.retryJob(execStageId);
+	}
+
 	/** Submits an uploaded document to the pipeline with the chosen per step config. */
 	start(documentId: string, config: PipelineConfig): Promise<StartedPipeline> {
 		return this.repository.start(documentId, config);

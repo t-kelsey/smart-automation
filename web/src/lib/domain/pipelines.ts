@@ -17,6 +17,8 @@ export interface PipelineJob {
 	error?: string;
 	/** The borehole a transform job produced, once it has finished. */
 	boreholeId?: string;
+	/** 1-based borehole index of an extract/transform job; unset for whole-document jobs. */
+	position?: number;
 }
 
 export interface PipelineStage {
@@ -42,6 +44,26 @@ export interface Pipeline {
 	updatedAt: Date;
 	config: Partial<PipelineConfig>;
 	stages: PipelineStage[];
+	/** Per-step usage the pipeline reports once the run has ended; unset until then. */
+	report?: PipelineReportStep[];
+}
+
+/** One step of a run's report: wall time plus the summed usage of its model calls. */
+export interface PipelineReportStep {
+	/** Stage key (`filter`, `split`, …) when the step name could be matched to one. */
+	key?: string;
+	label: string;
+	model?: string;
+	effort?: string;
+	wallSeconds?: number;
+	apiSeconds?: number;
+	calls?: number;
+	inputTokens?: number;
+	outputTokens?: number;
+	cacheReadTokens?: number;
+	cacheCreateTokens?: number;
+	totalTokens?: number;
+	costUsd?: number;
 }
 
 /** Stages of the extraction pipeline in processing order (the `type` of `exec_stages`). */
@@ -70,6 +92,22 @@ export function statusOf(jobs: Pick<PipelineJob, 'status'>[]): PipelineStatus {
 
 export function stageStatus(stage: PipelineStage): PipelineStatus {
 	return statusOf(stage.jobs);
+}
+
+/**
+ * Whether the job can be redone on its own: a failed or stopped extract/transform job of a
+ * finished run whose input exists (the split result, or the borehole's extraction). Failed
+ * filter/split jobs are retried by retrying the whole pipeline.
+ */
+export function canRetryJob(pipeline: Pipeline, stage: PipelineStage, job: PipelineJob): boolean {
+	if (isActive(pipeline) || !job.execStageId || job.position === undefined) return false;
+	if (job.status !== 'failed' && job.status !== 'skipped') return false;
+	const jobsOf = (key: string) => pipeline.stages.find((s) => s.key === key)?.jobs ?? [];
+	if (stage.key === 'extract') return jobsOf('split').every((j) => j.status === 'success');
+	if (stage.key === 'transform') {
+		return jobsOf('extract').some((j) => j.position === job.position && j.status === 'success');
+	}
+	return false;
 }
 
 export function pipelineStatus(pipeline: Pipeline): PipelineStatus {

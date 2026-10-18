@@ -41,6 +41,7 @@ def extract_boreholes(
     report: StepReport,
     workers: int,
     recorder: Recorder = Recorder(),
+    first_position: int = 1,
 ) -> list[tuple[pathlib.Path, dict]]:
     step_dir = out_dir / "03_extract"
     log(f"step 3: extracting {len(files)} borehole(s)")
@@ -58,6 +59,7 @@ def extract_boreholes(
                 schema=schemas.EXTRACT_BOREHOLE,
                 report=part,
                 add_dirs=[out_dir],
+                files=[f],
                 max_turns=8 + n // MAX_READ_PAGES * 2,
             )
         except Exception as e:
@@ -69,4 +71,4 @@ def extract_boreholes(
         return f, data
 
     with ThreadPoolExecutor(workers) as pool:
-        return list(pool.map(extract, enumerate(files, 1)))
+        return list(pool.map(extract, enumerate(files, first_position)))

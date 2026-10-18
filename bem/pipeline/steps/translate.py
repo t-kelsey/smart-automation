@@ -120,6 +120,7 @@ def transform_boreholes(
     report: StepReport,
     workers: int,
     recorder: Recorder = Recorder(),
+    first_position: int = 1,
 ) -> list[dict]:
     step_dir = out_dir / "04_transform"
     log(f"step 4: transforming {len(extracted)} borehole(s) to the database schema")
@@ -161,7 +162,7 @@ def transform_boreholes(
         return {"payload": payload, "validation_issues": issues, "source_file": f.name}
 
     with ThreadPoolExecutor(workers) as pool:
-        return list(pool.map(transform, enumerate(extracted, 1)))
+        return list(pool.map(transform, enumerate(extracted, first_position)))
 
 
 def validate_payload(p: dict) -> list[str]:

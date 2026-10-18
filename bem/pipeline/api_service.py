@@ -39,6 +39,18 @@ class ApiService:
             raise ApiError(f"{method} {path} failed: {e}") from e
         return r.json() if r.content else {}
 
+    def get_pipeline_run(self, pipeline_id: str) -> dict:
+        """`GET /pipeline_runs/:id`: the run with its `exec_stages` (newest first, `data` included)."""
+        path = f"/pipeline_runs/{pipeline_id}"
+        try:
+            r = self._client.get(f"{self.base_url}{path}")
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise ApiError(f"GET {path} -> {e.response.status_code}") from e
+        except httpx.HTTPError as e:
+            raise ApiError(f"GET {path} failed: {e}") from e
+        return r.json()["data"]
+
     def create_exec_stage(
         self,
         stage: str,
