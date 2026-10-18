@@ -61,4 +61,3 @@ Every page of a processed PDF is sent to the selected AI model (e.g., OpenRouter
 - PDFs and images (PNG, JPEG, TIFF) are processed; images are converted to a PDF when the pipeline downloads them. `.docx` can be uploaded to the API but is not extracted yet.
 - The transform step uses a small model for translation and unit and coordinate conversion; check `validation_issues` and the metadata notes.
 - There is no accuracy evaluation against ground truth yet.
-- The API currently rejects negative elevations.

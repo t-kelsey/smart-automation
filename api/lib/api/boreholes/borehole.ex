@@ -55,7 +55,6 @@ defmodule Api.Boreholes.Borehole do
     |> validate_required([:name])
     |> validate_number(:total_depth_m, greater_than_or_equal_to: 0)
     |> validate_number(:borehole_length_m, greater_than_or_equal_to: 0)
-    |> validate_number(:elevation_m, greater_than_or_equal_to: 0)
     |> validate_number(:groundwater_level_m, greater_than_or_equal_to: 0)
   end
 end

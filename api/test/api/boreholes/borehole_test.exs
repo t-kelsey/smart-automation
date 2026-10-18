@@ -31,11 +31,10 @@ defmodule Api.Boreholes.BoreholeTest do
     assert %{total_depth_m: ["must be greater than or equal to 0"]} = errors_on(changeset)
   end
 
-  test "changeset rejects negative elevation_m" do
+  test "changeset accepts negative elevation_m (below sea level)" do
     changeset = Borehole.changeset(%Borehole{}, Map.put(@valid_attrs, :elevation_m, -1))
 
-    refute changeset.valid?
-    assert %{elevation_m: ["must be greater than or equal to 0"]} = errors_on(changeset)
+    assert changeset.valid?
   end
 
   test "changeset accepts non-negative total_depth_m and elevation_m" do
