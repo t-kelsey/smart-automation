@@ -74,6 +74,16 @@ flowchart LR
 
 More detail: [docs/architecture.md](docs/architecture.md) (flows), [docs/api-reference.md](docs/api-reference.md) (endpoints), [docs/adr/](docs/adr/) (decisions).
 
+### Standardisation: one vocabulary for all parts
+
+Every borehole is brought into the same standard, based on the German norm **DIN 4023** (drawing of soil and rock in borehole logs): soil and rock names, short forms, hatch patterns and colours. The norm is kept as a single data file, [`standards/din-4023/din-4023.json`](standards/din-4023/din-4023.json), which is the source of truth for the whole system ([ADR-0022](docs/adr/0022-shared-din-4023-standard-file.md)):
+
+- **`bem`** normalises the extracted petrography to the norm's terms (`"sand,schluffig"` → `"Sand, schluffig"`, keeping the original wording in the metadata). A borehole with a layer that cannot be mapped is not uploaded; nothing is guessed.
+- **`api`** stores the standardised values (English, metric, WGS84), so every borehole has the same shape whatever its source looked like.
+- **`web`** draws the profile column from the same file: hatch patterns, colours and short forms follow the norm.
+
+Because all three parts read the same file, a log from any company, language or decade ends up comparable and searchable in one database.
+
 ## Scope and room to grow
 
 The hard part of this challenge is not the web app, it is turning messy, multilingual, scanned borehole logs into trustworthy standardised data. That is where the hackathon time went: the four-stage pipeline (filter → split → extract → transform) with DIN 4023 conformance, per-stage tracking and retries, the PostGIS data model with georeferencing, and the API that ties them together. The web app is deliberately a thin layer on top of that architecture, and a lot of product work is left on purpose, because the architecture makes it cheap to add:
