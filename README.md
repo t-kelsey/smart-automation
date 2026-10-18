@@ -46,7 +46,13 @@ cd bem && uv sync && uv run python -m pipeline.server   # optional, pipeline on 
 
 Each part has its own setup details: [api](api/README.md#development-setup), [bem](bem/README.md#development-setup), [web](web/README.md#development-setup).
 
-## Architecture
+## Documentation
+
+Read the readme of each component: [api](api/README.md), [bem](bem/README.md), [web](web/README.md) for detailed setup and usage instructions.
+
+See [docs/](docs/) for detailed documentation on architecture, API reference, and design decisions.
+
+### Architecture
 
 ```mermaid
 flowchart LR
