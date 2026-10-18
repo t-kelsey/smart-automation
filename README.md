@@ -74,6 +74,17 @@ flowchart LR
 
 More detail: [docs/architecture.md](docs/architecture.md) (flows), [docs/api-reference.md](docs/api-reference.md) (endpoints), [docs/adr/](docs/adr/) (decisions).
 
+## Scope and room to grow
+
+The hard part of this challenge is not the web app, it is turning messy, multilingual, scanned borehole logs into trustworthy standardised data. That is where the hackathon time went: the four-stage pipeline (filter → split → extract → transform) with DIN 4023 conformance, per-stage tracking and retries, the PostGIS data model with georeferencing, and the API that ties them together. The web app is deliberately a thin layer on top of that architecture, and a lot of product work is left on purpose, because the architecture makes it cheap to add:
+
+- **Users and access:** authentication, roles, per-project data separation and audit logs (today there is none, see the warning above).
+- **Document management:** uploading additional documents to a borehole, new versions, renaming, deleting, sharing links.
+- **Human review:** editing extracted values, approving results and feeding corrections back as evaluation data.
+- **Quality measurement:** a ground-truth set and per-field accuracy and confidence scores for the extraction.
+- **Scale and operations:** a persistent job queue instead of the in-memory one, self-hosted models for confidential data, monitoring.
+- **Richer geology:** stratigraphic lookup tables, groundwater and sample symbols in the profile, cross sections between neighbouring boreholes, export to standard formats.
+
 ## Licence
 
 Proprietary, all rights reserved (see [LICENSE](LICENSE) and [ADR-0041](docs/adr/0041-proprietary-all-rights-reserved-licence.md)). The data in `data/` and all dependencies are owned by third parties and are not covered.

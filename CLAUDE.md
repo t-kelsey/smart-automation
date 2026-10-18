@@ -16,13 +16,16 @@ Success metric: The solution demonstrates reliable extraction, standardisation, 
 
 ## Project
 
-Hackathon project (Herrenknecht challenge): automated extraction and standardisation of drilling/borehole data into a global geodatabase. Monorepo with two independent apps:
+Hackathon project (Herrenknecht challenge): automated extraction and standardisation of drilling/borehole data into a global geodatabase. Research code, not production software: there is no authentication (the READMEs say so). Monorepo with three apps plus docs and data, run together by the root `docker-compose.yml` (`db`, `api`, `web`, `pipeline`):
 
-- `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, PostGIS, Bandit). Borehole list/search/detail endpoints are documented in `docs/api-reference.md`; `mix boreholes.mock --count N` (max 1000000) generates mock data.
-- `web/` — SvelteKit 3 / Svelte 5 frontend (TypeScript, Tailwind 4, pnpm). Currently scaffold only (`src/routes/`).
-- `bem/` — Python pipeline that runs a 4-stage `claude -p` pipeline (filter → split → extract → transform) over a borehole PDF and posts the result to `POST /api/boreholes`, exposed over HTTP (`bem/pipeline/server.py`, `POST /execute`); see `bem/README.md`.
-- `docs/` — Architecture Decision Records in `docs/adr/` (use `_template.md`).
-- `data/` — Confidential real-project sample data (borehole PDFs/images/docx, format standards). Restricted to hackathon use and must be deleted after the event; never copy, commit, or send it to external services. Agents may read it locally.
+- `api/` — Phoenix 1.8 JSON API (Elixir, Ecto, PostGIS, Bandit). Owns the data model, georeferencing, search and document storage. Endpoints (boreholes, documents, pipeline_runs, exec_stages, reports) are documented in `docs/api-reference.md`; `mix boreholes.mock --count N` (max 1000000) generates mock data.
+- `web/` — SvelteKit 3 / Svelte 5 frontend (TypeScript, Tailwind 4, Skeleton, MapLibre, pnpm): map, search with autocompletion, DIN 4023 borehole profile, upload with pipeline config, pipeline run monitoring and review pages. Some features (document management, sharing, auth) are deliberately left out of scope, see the root README.
+- `bem/` — Python pipeline (FastAPI) that runs a 4-stage LLM pipeline (filter → split → extract → transform) over a borehole document (PDF, images and Word are converted to PDF) and posts the result to `POST /api/boreholes`. AI backend is the `claude` CLI (default) or OpenRouter (`BEM_AI`). Endpoints: `POST /execute`, `POST /runs/{id}/retry`, `POST /runs/{id}/stop`, `GET /health`; see `bem/README.md`.
+- `docs/` — architecture overview, API reference, data model and Architecture Decision Records in `docs/adr/` (use `_template.md`).
+- `standards/` — the DIN 4023 definition shared by `web/` and `bem/`.
+- `data/` — Confidential real-project sample data (borehole PDFs/images/docx, format standards). Restricted to hackathon use and must be deleted after the event; never copy, commit, or send it to external services. Agents may read it locally. Note that the pipeline sends pages to an external LLM, so never run it on `data/`.
+
+Each part has its own `README.md` (purpose, development setup, technology choices); the root `README.md` covers what the application does, the architecture and the production setup. Keep them in sync when behaviour changes.
 
 ## Domain context
 
@@ -43,7 +46,7 @@ Architecture Decision Records capture important architectural decisions (e.g. ch
 
 ## Commands
 
-A Postgres instance is required (docker or local).
+A Postgres/PostGIS instance is required (`docker compose up -d db`). Full stack: `cp .env.example .env`, set `SECRET_KEY_BASE` and the AI credentials, then `docker compose up --build` (UI on `localhost:3001`).
 
 API (run in `api/`):
 
@@ -58,11 +61,19 @@ Web (run in `web/`):
 - `pnpm check` (svelte-check), `pnpm lint` (prettier + eslint), `pnpm format`
 - No test runner is configured.
 
+Pipeline (run in `bem/`; needs `uv`, poppler, and the `claude` CLI or an OpenRouter key):
+
+- `uv sync`, `cp .env.example .env`
+- `uv run python -m pipeline.server` — HTTP service on localhost:8000; `uv run python -m pipeline path/to/report.pdf` — one-off run
+- `uv run python -m unittest discover tests`
+
 ## Conventions
 
 - `api/AGENTS.md` holds the Phoenix/Elixir/Ecto rules; follow it. Notable: use `Req` for HTTP (not HTTPoison/Tesla/httpc); generate migrations with `mix ecto.gen.migration`; don't put programmatically-set fields like `user_id` in `cast`.
-- Web data access follows ADR-0009: UI → service (`web/src/lib/services`) → repository interface (`web/src/lib/repositories`, API or mock). UI code must not import repositories (ESLint enforces it). All data comes from the API (ADR-0029; `pnpm dev` needs the API on localhost:4000, reached via the Vite proxy at `/api`). The faker-based borehole/search mock repositories in `repositories/mock/` are kept but not wired in.
+- Web data access follows ADR-0009: UI → service (`web/src/lib/services`) → repository interface (`web/src/lib/repositories`, API or mock), wired in one composition root (`createServices` in `services/index.ts`). UI code must not import repositories (ESLint enforces it). All data comes from the API (ADR-0029; `pnpm dev` needs the API on localhost:4000, reached via the Vite proxy at `/api`). The faker-based borehole/search mock repositories in `repositories/mock/` are kept but not wired in.
 - `web/AGENTS.md` expects the Svelte MCP tools (`list-sections`, `get-documentation`, `svelte-autofixer`) to be used when writing Svelte code; Svelte skills live in `web/.github/skills/`.
+
+- `bem/` talks to the API only over HTTP (never the database or storage directly); stage status, retries and run outcome live in `pipeline_runs` / `exec_stages` (ADR-0034, ADR-0035, ADR-0040, ADR-0044).
 
 ## Source of truth
 
