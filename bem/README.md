@@ -37,6 +37,7 @@ uv run python -m unittest discover tests     # tests
 Service endpoints:
 
 - `POST /execute` — `{document_id, pipeline_id, config?}`; answers `202` and queues the run. The worker downloads the PDF from the API, runs the stages and posts the boreholes to `POST /api/boreholes`.
+- `POST /runs/{pipeline_id}/retry` — `{document_id, stage: extract|transform, position, config?}`; answers `202` and queues the redo of one failed or stopped borehole job of a finished run as a new stage (extract continues with transform). It reads the run's earlier results from the API; the run ends `completed` only if every borehole's newest extract/transform succeeded (ADR-0044). `409` while the run is queued or running.
 - `POST /runs/{pipeline_id}/stop` — cancels a queued or running run.
 - `GET /health` — queue length and active runs.
 

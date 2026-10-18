@@ -22,6 +22,7 @@ defmodule ApiWeb.Router do
     post "/exec_stages", ExecStageController, :create
     get "/exec_stages/:id", ExecStageController, :show
     put "/exec_stages/:id", ExecStageController, :update
+    post "/exec_stages/:id/retry", ExecStageController, :retry
     get "/documents/:document_id/exec_stages", ExecStageController, :index
 
     post "/reports", ReportController, :create

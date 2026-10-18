@@ -41,5 +41,5 @@ export const load: PageLoad = async ({ params, fetch }) => {
 			.sort((a, b) => a.boreholes.length - b.boreholes.length)[0];
 		if (linked?.boreholes.length === 1) borehole = linked.boreholes[0];
 	}
-	return { job, pipeline, borehole };
+	return { job, pipeline, borehole, service: pipelines };
 };

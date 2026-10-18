@@ -558,6 +558,12 @@ Reports progress on a stage (ADR-0040). Body `{ "status": "running" | "success" 
 
 One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "status", "data", "error", "model", "effort", "usage", "started_at", "finished_at", "duration_ms", "document_ids", "inserted_at", "updated_at" } }`. `404` if it does not exist or the id is not a UUID.
 
+### `POST /api/exec_stages/:id/retry`
+
+Redoes one failed or stopped `extract`/`transform` job of a finished run (ADR-0044). No body. The run goes back to `running` (its `error` is cleared) and the pipeline redoes that borehole as a **new** stage row; extract is followed by transform. Answers `202` with the run like `GET /api/pipeline_runs/:id` (without stages).
+
+`409` (`errors.detail` says why) if the job is not extract/transform, is not `failed`/`stopped`, was already retried, its run is still `new`/`running`, its input is missing (no successful split for extract, no successful extract at that position for transform), or no pipeline is configured. `400` if the pipeline cannot be reached (the run keeps its previous status). `404` if the stage does not exist.
+
 ### `GET /api/documents/:document_id/exec_stages`
 
 Every stage execution linked to a document, newest first (a document can have several — append-only history). Optional `?type=` / `?run_id=` filters.

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { ArrowLeftIcon, MapPinIcon } from '@lucide/svelte';
-	import { PIPELINE_STAGES } from '#lib/domain/pipelines.ts';
+	import { RefreshCwIcon } from '@lucide/svelte';
+	import { retryJob } from '#lib/components/pipeline/retry.ts';
+	import { PIPELINE_STAGES, canRetryJob } from '#lib/domain/pipelines.ts';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -14,6 +16,14 @@
 		timeStyle: 'medium'
 	});
 	let stageLabel = $derived(PIPELINE_STAGES.find((s) => s.key === job.type)?.label ?? job.type);
+	/** The run's current job at this position; only the newest attempt of a job can be retried. */
+	let runJob = $derived.by(() => {
+		for (const stage of pipeline?.stages ?? []) {
+			const found = stage.jobs.find((j) => j.execStageId === job.id);
+			if (found) return { stage, job: found };
+		}
+		return null;
+	});
 	let title = $derived(job.position === undefined ? stageLabel : `${stageLabel} #${job.position}`);
 
 	/** Top level attributes of the result, or the whole value if it is not an object. */
@@ -54,6 +64,15 @@
 		<h1 class="h2">{title}</h1>
 		<p class="text-sm opacity-70">#{job.id.slice(-6)} · {formatter.format(job.createdAt)}</p>
 	</div>
+	{#if pipeline && runJob && canRetryJob(pipeline, runJob.stage, runJob.job)}
+		<button
+			type="button"
+			class="ml-auto btn preset-tonal"
+			onclick={() => retryJob(data.service, runJob.job)}
+		>
+			<RefreshCwIcon class="size-4" /> Retry
+		</button>
+	{/if}
 	{#if borehole}
 		<a href={resolve('/borehole/[id]', { id: borehole.id })} class="ml-auto btn preset-filled">
 			<MapPinIcon class="size-4" /> Borehole {borehole.name}

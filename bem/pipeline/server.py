@@ -25,16 +25,21 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
+from typing import Literal
+
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .__main__ import run_pipeline
+from .ai import StepReport, Timer
 from .config import PipelineConfig
 from .ai import PipelineError, PipelineStopped, get_ai, log
 from .api_service import ApiError, ApiService
 from .din4023 import Din4023Error
 from .output import Recorder, Tracker, persist_enabled
 from .naming import new_run, run_id
+from .steps.extract import extract_boreholes
+from .steps.translate import transform_boreholes
 
 WORKDIR = pathlib.Path(os.environ.get("BEM_WORKDIR", pathlib.Path(__file__).resolve().parent.parent / "out" / "server"))
 CHUNK_SIZE = int(os.environ.get("BEM_CHUNK_SIZE", "10"))
@@ -47,6 +52,8 @@ class Job:
     pipeline_id: str | None
     config: PipelineConfig
     stop: threading.Event = field(default_factory=threading.Event)
+    # (stage, position) when only one failed/stopped extract or transform job of the run is redone
+    retry: tuple[str, int] | None = None
 
 
 _jobs: queue.Queue[Job] = queue.Queue()
@@ -193,6 +200,85 @@ def process(job: Job, api: ApiService) -> tuple[str, str | None]:
     return "completed", None
 
 
+def _latest_rows(run: dict) -> dict[tuple[str, int | None], dict]:
+    """The newest exec_stage per (type, position); the API lists them newest first."""
+    latest: dict[tuple[str, int | None], dict] = {}
+    for row in run.get("exec_stages") or []:
+        latest.setdefault((row["type"], row.get("position")), row)
+    return latest
+
+
+def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
+    """Redo one extract or transform job of a finished run as a new exec_stage.
+
+    Extract is followed by transform for the same borehole. Inputs come from the run's earlier
+    stages: the split-out PDF (extract) or the stored extraction result (transform). Returns the
+    whole run's final status, judged from the newest row of every extract/transform job.
+    """
+    stage, position = job.retry
+    new_run()
+    run_id_ = job.pipeline_id
+    document_id = job.document_id
+    c = job.config
+    try:
+        run = api.get_pipeline_run(run_id_)
+    except ApiError as e:
+        return "failed", f"could not load the run: {e}"
+    latest = _latest_rows(run)
+    split = latest.get(("split", None))
+    boreholes = ((split or {}).get("data") or {}).get("boreholes") or []
+    if split is None or split.get("status") != "success" or not 1 <= position <= len(boreholes):
+        return "failed", f"cannot retry {stage} #{position}: the split result is missing"
+
+    tracker = RunTracker(api, run_id_, document_id)
+    tracker.split_documents = {i: b["document_id"] for i, b in enumerate(boreholes, 1) if b.get("document_id")}
+    for (type_, pos), row in latest.items():  # keep the borehole ids of jobs that already stored theirs
+        if type_ == "transform" and row.get("status") == "success" and pos is not None:
+            tracker.boreholes[pos] = (row.get("data") or {}).get("borehole_id")
+    recorder = Recorder(tracker)
+    label = _safe_name(boreholes[position - 1].get("label") or f"borehole_{position}")
+    out_dir = WORKDIR / document_id / "out"
+    get_ai().debug_dir = out_dir / "debug" if persist_enabled() else None
+    r3 = StepReport("3 extract", c.extract.model, c.extract.effort, stop=job.stop)
+    r4 = StepReport("4 transform to db", c.transform.model, c.transform.effort, stop=job.stop)
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="bem-") as tmp:
+            if not persist_enabled():
+                out_dir = pathlib.Path(tmp)
+            pdf = out_dir / "retry" / f"{label}.pdf"
+            if stage == "extract":
+                split_document = tracker.split_documents.get(position)
+                if split_document is None:
+                    return "failed", f"cannot retry extract #{position}: its split-out PDF is missing"
+                api.download_document(split_document, pdf)
+                with Timer(r3):
+                    (_, data), = extract_boreholes([pdf], out_dir, r3, 1, recorder, position)
+            else:
+                extract_row = latest.get(("extract", position)) or {}
+                data = extract_row.get("data")
+                if data is None or extract_row.get("status") != "success":
+                    return "failed", f"cannot retry transform #{position}: its extraction result is missing"
+            with Timer(r4):
+                transform_boreholes([(pdf, data)], out_dir, r4, 1, recorder, position)
+    except PipelineStopped:
+        return "stopped", "stopped by user"
+    except (PipelineError, ApiError) as e:
+        log(f"{document_id}: retry of {stage} #{position} failed: {e}")  # recorded on the job itself
+    if tracker.upload_errors:
+        log(f"{document_id}: {'; '.join(tracker.upload_errors)}")
+
+    try:  # the other jobs keep their results, so judge the run by the newest row of every job
+        latest = _latest_rows(api.get_pipeline_run(run_id_))
+    except ApiError as e:
+        return "failed", f"could not reload the run: {e}"
+    bad = sorted(
+        f"{t} #{p}" for (t, p), row in latest.items() if t in ("extract", "transform") and row.get("status") != "success"
+    )
+    # planned rows that never ran (`new`) belong to boreholes whose extract failed
+    return ("failed", f"{len(bad)} job(s) not successful: {', '.join(bad)}"[:4000]) if bad else ("completed", None)
+
+
 def _worker() -> None:
     api = ApiService()
     while True:
@@ -202,9 +288,12 @@ def _worker() -> None:
             if job.stop.is_set():  # stopped while queued; the API has already marked it stopped
                 log(f"{document_id}: pipeline {pipeline_id} stopped before it started")
                 continue
-            log(f"{document_id}: pipeline {pipeline_id or '-'} starts with stage 1 (filter)")
+            if job.retry:
+                log(f"{document_id}: pipeline {pipeline_id} retries {job.retry[0]} #{job.retry[1]}")
+            else:
+                log(f"{document_id}: pipeline {pipeline_id or '-'} starts with stage 1 (filter)")
             try:
-                status, error = process(job, api)
+                status, error = process_retry(job, api) if job.retry else process(job, api)
             except Exception as e:  # keep the worker alive whatever one document does
                 log(f"{document_id}: unexpected error")
                 traceback.print_exc()
@@ -269,6 +358,27 @@ def execute(request: ExecuteRequest) -> dict:
         "status": "queued",
         "config": request.config.model_dump(),
     }
+
+
+class RetryRequest(BaseModel):
+    document_id: uuid.UUID
+    stage: Literal["extract", "transform"]
+    position: int = Field(ge=1)  # 1-based borehole index within the run
+    config: PipelineConfig = PipelineConfig()
+
+
+@app.post("/runs/{pipeline_id}/retry", status_code=202)
+def retry(pipeline_id: str, request: RetryRequest) -> dict:
+    """Queue the redo of one failed or stopped extract/transform job of an existing run (called by
+    the API's `POST /exec_stages/:id/retry`). The attempt is recorded as a new exec_stage; extract
+    is followed by transform for that borehole."""
+    with _active_lock:
+        if pipeline_id in _active:
+            raise HTTPException(409, f"run {pipeline_id} is still queued or running")
+        job = Job(str(request.document_id), pipeline_id, request.config, retry=(request.stage, request.position))
+        _active[pipeline_id] = job
+    _jobs.put(job)
+    return {"pipeline_id": pipeline_id, "stage": request.stage, "position": request.position, "status": "queued"}
 
 
 @app.post("/runs/{pipeline_id}/stop", status_code=202)

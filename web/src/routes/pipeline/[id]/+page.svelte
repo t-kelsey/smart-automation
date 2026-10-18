@@ -13,8 +13,9 @@
 	} from '@lucide/svelte';
 	import { PipelineGraph, StatusBadge, StatusIcon } from '#lib/components/pipeline/index.ts';
 	import { notify } from '#lib/components/toast/index.ts';
-	import { retryPipeline } from '#lib/components/pipeline/retry.ts';
+	import { retryJob, retryPipeline } from '#lib/components/pipeline/retry.ts';
 	import {
+		canRetryJob,
 		formatDuration,
 		isActive,
 		pipelineDuration,
@@ -109,6 +110,7 @@
 						<th>Stage</th>
 						<th>Model</th>
 						<th class="text-right">Duration</th>
+						<th><span class="sr-only">Actions</span></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -147,6 +149,19 @@
 							<td>{job.model ?? '–'}</td>
 							<td class="text-right">
 								{job.durationSeconds === undefined ? '–' : formatDuration(job.durationSeconds)}
+							</td>
+							<td class="text-right">
+								{#if canRetryJob(pipeline, job.stage, job)}
+									<button
+										type="button"
+										class="btn-icon preset-tonal btn-icon-sm"
+										aria-label="Retry {job.name}"
+										title="Retry this job"
+										onclick={() => retryJob(data.service, job)}
+									>
+										<RefreshCwIcon class="size-4" />
+									</button>
+								{/if}
 							</td>
 						</tr>
 					{/each}

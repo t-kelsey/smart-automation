@@ -122,6 +122,29 @@ export class ApiPipelineRepository implements PipelineRepository {
 		}
 	}
 
+	async retryJob(execStageId: string): Promise<void> {
+		const path = `/exec_stages/${encodeURIComponent(execStageId)}/retry`;
+		let response: Response;
+		try {
+			response = await this.options.fetch(`${this.options.baseUrl}${path}`, {
+				method: 'POST',
+				headers: { accept: 'application/json' }
+			});
+		} catch (cause) {
+			throw new RepositoryError(`API request failed: ${path}`, undefined, { cause });
+		}
+		if (!response.ok) {
+			// 409/400 carry the reason (already retried, run still active, pipeline unreachable, ...)
+			const body = (await response.json().catch(() => null)) as {
+				errors?: { detail?: unknown };
+			} | null;
+			const detail = body?.errors?.detail;
+			throw new RepositoryError(`API ${path} returned ${response.status}`, response.status, {
+				detail: typeof detail === 'string' ? detail : undefined
+			});
+		}
+	}
+
 	async start(documentId: string, config: PipelineConfig): Promise<StartedPipeline> {
 		const path = '/pipeline_runs';
 		let response: Response;

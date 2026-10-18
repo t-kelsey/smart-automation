@@ -592,6 +592,91 @@ defmodule Api.Boreholes do
     end
   end
 
+  @retryable_types ~w(extract transform)
+
+  @doc """
+  Retries one failed or stopped `extract`/`transform` job of a finished run: reopens the run as
+  `running` and asks the pipeline to redo just that borehole (`Api.Pipeline.submit_job_retry/2`);
+  the pipeline records the new attempt as a new exec_stage row, the old row stays. Extract is
+  followed by transform for that borehole. If the pipeline cannot be reached the run keeps its
+  previous status. `{:error, {:conflict, message}}` if the job cannot be retried: wrong type or
+  status, already retried, run still active, no pipeline configured, or its input is missing
+  (the split result for extract, a successful extract for transform).
+  """
+  def retry_exec_stage(%ExecStage{} = exec_stage) do
+    with :ok <- check_retryable(exec_stage),
+         %PipelineRun{} = run <- get_pipeline_run(exec_stage.run_id) || {:error, :not_found},
+         :ok <- check_run_finished(run),
+         :ok <- check_retry_input(exec_stage),
+         {:ok, reopened} <- reopen_pipeline_run(run) do
+      case Api.Pipeline.submit_job_retry(reopened, exec_stage) do
+        :ok ->
+          {:ok, reopened}
+
+        {:error, reason} ->
+          restore_pipeline_run(reopened, run)
+          {:error, "pipeline could not be reached: #{inspect(reason)}"}
+      end
+    end
+  end
+
+  defp check_retryable(%ExecStage{type: type}) when type not in @retryable_types,
+    do: {:error, {:conflict, "only extract and transform jobs can be retried"}}
+
+  defp check_retryable(%ExecStage{status: status}) when status not in ["failed", "stopped"],
+    do: {:error, {:conflict, "only failed or stopped jobs can be retried, this one is #{status}"}}
+
+  defp check_retryable(%ExecStage{} = e) do
+    retried =
+      from(o in ExecStage,
+        where:
+          o.run_id == ^e.run_id and o.type == ^e.type and o.position == ^e.position and
+            o.id != ^e.id and o.inserted_at >= ^e.inserted_at
+      )
+      |> Repo.exists?()
+
+    if retried, do: {:error, {:conflict, "this job was already retried"}}, else: :ok
+  end
+
+  defp check_run_finished(%PipelineRun{status: status}) when status in ["new", "running"],
+    do: {:error, {:conflict, "the pipeline run is still #{status}"}}
+
+  defp check_run_finished(_run), do: :ok
+
+  defp check_retry_input(%ExecStage{type: type} = e) do
+    needed = if type == "extract", do: {"split", nil}, else: {"extract", e.position}
+    {needed_type, needed_position} = needed
+
+    ok =
+      from(o in ExecStage,
+        where: o.run_id == ^e.run_id and o.type == ^needed_type and o.status == "success"
+      )
+      |> then(fn q ->
+        if needed_position, do: where(q, [o], o.position == ^needed_position), else: q
+      end)
+      |> Repo.exists?()
+
+    if ok,
+      do: :ok,
+      else:
+        {:error, {:conflict, "its input (#{needed_type}) did not succeed, retry the pipeline"}}
+  end
+
+  # a finished run goes back to running while a job is redone; the old failure no longer applies
+  defp reopen_pipeline_run(%PipelineRun{} = run) do
+    run |> Ecto.Changeset.change(status: "running", error: nil, finished_at: nil) |> Repo.update()
+  end
+
+  defp restore_pipeline_run(%PipelineRun{} = reopened, %PipelineRun{} = original) do
+    reopened
+    |> Ecto.Changeset.change(
+      status: original.status,
+      error: original.error,
+      finished_at: original.finished_at
+    )
+    |> Repo.update()
+  end
+
   @doc """
   Deletes a pipeline run together with its `exec_stages` and `reports` (matched by `run_id`), e.g.
   when it is stuck. A run that is still `new`/`running` is asked to cancel first (best effort).

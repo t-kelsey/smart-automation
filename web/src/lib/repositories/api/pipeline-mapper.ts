@@ -159,6 +159,7 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 					model: row?.model ?? report?.model_requested ?? configured?.model,
 					error: row?.error ?? undefined,
 					boreholeId: job.done ? job.boreholeId : undefined,
+					position: job.position ?? undefined,
 					durationSeconds:
 						row?.duration_ms != null
 							? row.duration_ms / 1000
