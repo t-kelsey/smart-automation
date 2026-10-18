@@ -47,6 +47,21 @@
 
 	const itemClass =
 		'flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-sm hover:preset-tonal';
+
+	// Easter egg: clicking the profile quickly four times in a row turns the avatar into a
+	// spinning grinning face.
+	const EGG_CLICKS = 4;
+	const EGG_WINDOW_MS = 1500;
+	let eggFound = $state(false);
+	let eggClicks = 0;
+	let eggLastClick = 0;
+
+	function countEggClick() {
+		const now = Date.now();
+		eggClicks = now - eggLastClick > EGG_WINDOW_MS ? 1 : eggClicks + 1;
+		eggLastClick = now;
+		if (eggClicks >= EGG_CLICKS) eggFound = true;
+	}
 </script>
 
 <Navigation
@@ -91,13 +106,22 @@
 	<Navigation.Footer class="border-t border-surface-200-800 pt-2">
 		<Menu positioning={{ placement: 'top-start' }}>
 			<Menu.Trigger
+				onclick={countEggClick}
 				class="flex h-14 w-full items-center gap-3 rounded-2xl px-2 text-left hover:preset-tonal {collapsed
 					? 'justify-center'
 					: ''}"
 			>
 				<Avatar class="size-9 shrink-0">
 					{#if user.avatarSrc}<Avatar.Image src={user.avatarSrc} alt={user.name} />{/if}
-					<Avatar.Fallback class="preset-filled-primary-500 text-xs">{initials}</Avatar.Fallback>
+					<Avatar.Fallback class="preset-filled-primary-500 {eggFound ? 'text-xl' : 'text-xs'}">
+						{#if eggFound}
+							<span class="animate-spin motion-reduce:animate-none" role="img" aria-label={initials}
+								>😁</span
+							>
+						{:else}
+							{initials}
+						{/if}
+					</Avatar.Fallback>
 				</Avatar>
 				{#if !collapsed}
 					<span class="min-w-0 flex-1">
