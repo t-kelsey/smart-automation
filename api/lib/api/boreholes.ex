@@ -216,6 +216,7 @@ defmodule Api.Boreholes do
   defp locate(borehole, attrs) do
     case set_location(borehole, attrs) do
       {:error, :unknown_epsg} -> flag_unknown_epsg(borehole, attrs)
+      {:error, :off_the_globe} -> flag_off_the_globe(borehole, attrs)
       :ok -> :ok
     end
   end
@@ -236,7 +237,8 @@ defmodule Api.Boreholes do
       {x, y, epsg} when not is_nil(x) and not is_nil(y) and not is_nil(epsg) ->
         with {:ok, srid} <- known_epsg(epsg),
              {:ok, x} <- to_float(x),
-             {:ok, y} <- to_float(y) do
+             {:ok, y} <- to_float(y),
+             :ok <- on_earth(x, y, srid) do
           from(b in Borehole, where: b.id == ^borehole.id)
           |> update(
             set: [
@@ -255,6 +257,25 @@ defmodule Api.Boreholes do
       _ ->
         :ok
     end
+  end
+
+  # x/y in another system than the given EPSG (e.g. UTM metres as 4326) land off the globe; such a
+  # point would break every map, so it is refused.
+  defp on_earth(x, y, srid) do
+    case Repo.query(
+           "SELECT ST_X(p), ST_Y(p) FROM (SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), $3), 4326) AS p) t",
+           [x, y, srid]
+         ) do
+      {:ok, %{rows: [[lon, lat]]}}
+      when is_float(lon) and is_float(lat) and lon >= -180 and lon <= 180 and lat >= -90 and
+             lat <= 90 ->
+        :ok
+
+      _ ->
+        {:error, :off_the_globe}
+    end
+  rescue
+    Postgrex.Error -> {:error, :off_the_globe}
   end
 
   defp to_float(n) when is_number(n), do: {:ok, n * 1.0}
@@ -288,17 +309,34 @@ defmodule Api.Boreholes do
   def known_epsg?(epsg), do: match?({:ok, _}, known_epsg(epsg))
 
   # POST /api/boreholes: the borehole is kept without location, flagged for a human
+  defp flag_off_the_globe(borehole, attrs) do
+    attrs = stringify_keys(attrs)
+
+    location_flag(
+      borehole,
+      "location_off_the_globe",
+      "x #{attrs["x"]}, y #{attrs["y"]} do not fit EPSG #{inspect_epsg(attrs["epsg"])} (the point would lie off the globe); probably another coordinate system, location not set"
+    )
+  end
+
   defp flag_unknown_epsg(borehole, attrs) do
     epsg = attrs |> stringify_keys() |> Map.get("epsg")
 
+    location_flag(
+      borehole,
+      "unknown_epsg",
+      "EPSG #{inspect_epsg(epsg)} is unknown; coordinates x/y kept in source_coordinate_raw"
+    )
+  end
+
+  defp location_flag(borehole, code, message) do
     %FieldFlag{borehole_id: borehole.id}
     |> FieldFlag.changeset(%{
       "field" => "location",
       "severity" => "error",
       "origin" => "rule",
-      "code" => "unknown_epsg",
-      "message" =>
-        "EPSG #{inspect_epsg(epsg)} is unknown; coordinates x/y kept in source_coordinate_raw"
+      "code" => code,
+      "message" => message
     })
     |> Repo.insert()
     |> case do

@@ -171,9 +171,20 @@ restores the values.
 	</datalist>
 	{#if error}
 		<p class="px-2 text-xs text-error-600-400" role="alert">{error}</p>
-	{:else if location && epsg.trim() !== WGS84}
-		<p class="px-2 text-xs opacity-60">
-			= {deg(location.lat, 'N', 'S')}, {deg(location.lon, 'E', 'W')} (GPS)
-		</p>
 	{/if}
+	<!-- Second row: the position the map uses, always computed by the API from the row above. -->
+	<p
+		class="mt-1 flex items-baseline gap-2 px-2 text-xs"
+		title="Converted by the API from x, y and EPSG above"
+	>
+		<span class="opacity-60">Map (GPS):</span>
+		{#if location}
+			<span class="tabular-nums">{deg(location.lat, 'N', 'S')} · {deg(location.lon, 'E', 'W')}</span
+			>
+		{:else if stored.trim()}
+			<span class="text-warning-700-300">not on the map – check x, y and EPSG</span>
+		{:else}
+			<span class="opacity-60">–</span>
+		{/if}
+	</p>
 </div>

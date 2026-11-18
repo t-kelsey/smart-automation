@@ -195,6 +195,9 @@
 		const features: PointFeature[] = [];
 		const bounds = new maplibregl.LngLatBounds();
 		for (const point of points) {
+			// a point off the globe (e.g. metres stored as degrees) would make MapLibre throw and
+			// break the whole map; skip it, the review shows the borehole's location flag
+			if (!(Math.abs(point.lat) <= 90 && Math.abs(point.lon) <= 180)) continue;
 			byId.set(point.id, point);
 			bounds.extend([point.lon, point.lat]);
 			features.push({

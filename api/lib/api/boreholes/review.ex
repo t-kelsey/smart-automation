@@ -38,12 +38,12 @@ defmodule Api.Boreholes.Review do
 
       with :ok <- check_coordinates(attrs),
            :ok <- check_epsg(borehole, attrs),
-           {:ok, _} <- Repo.update(changeset) do
+           {:ok, _} <- Repo.update(changeset),
+           :ok <- set_location(borehole, attrs) do
         edits =
           for {field, new} <- changeset.changes,
               do: {Atom.to_string(field), json(Map.get(borehole, field)), json(new)}
 
-        :ok = Boreholes.set_location(borehole, attrs)
         new_value = Map.new(~w(x y epsg), &{&1, attrs[&1]})
         location = current_location(borehole.id)
 
@@ -130,10 +130,10 @@ defmodule Api.Boreholes.Review do
           nil
       end
 
-    with :ok <- check_epsg(borehole, old || %{}) do
-      if old,
-        do: :ok = Boreholes.set_location(borehole, old),
-        else:
+    with :ok <- check_epsg(borehole, old || %{}),
+         :ok <- if(old, do: set_location(borehole, old), else: :ok) do
+      if !old,
+        do:
           Repo.update_all(from(b in Borehole, where: b.id == ^borehole.id),
             set: [location: nil, source_x: nil, source_y: nil, source_epsg: nil]
           )
@@ -356,6 +356,23 @@ defmodule Api.Boreholes.Review do
        do: %{"x" => x, "y" => y, "epsg" => epsg}
 
   defp source_location(_borehole), do: nil
+
+  # x/y that do not fit the EPSG code (off the globe) are a validation error (422) on x
+  defp set_location(borehole, attrs) do
+    case Boreholes.set_location(borehole, attrs) do
+      {:error, :off_the_globe} ->
+        {:error,
+         borehole
+         |> Ecto.Changeset.change()
+         |> Ecto.Changeset.add_error(
+           :x,
+           "x/y do not fit this EPSG code (off the globe); another coordinate system?"
+         )}
+
+      other ->
+        other
+    end
+  end
 
   # unknown EPSG is a validation error (422) on the epsg field
   defp check_epsg(borehole, %{"epsg" => epsg}) when not is_nil(epsg) do
