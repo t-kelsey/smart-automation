@@ -1,7 +1,8 @@
 import type { Attachment } from 'svelte/attachments';
 import { notify } from '#lib/components/toast/index.ts';
 import type { Borehole, FieldEdit, FieldFlag, SourceRef } from '#lib/domain/borehole.ts';
-import { ValidationError, type BoreholeService } from '#lib/services/index.ts';
+import { invalidate } from '$app/navigation';
+import { RepositoryError, ValidationError, type BoreholeService } from '#lib/services/index.ts';
 
 /**
  * Review state of one borehole (ADR-0006): flags, edits and sources per field, and the writes. A
@@ -73,6 +74,11 @@ export class Review {
 			this.onupdate(await write(this.service));
 			return null;
 		} catch (e) {
+			// Already done (e.g. a flag resolved in another tab): just show the current state.
+			if (e instanceof RepositoryError && e.status === 409) {
+				await invalidate('app:borehole');
+				return null;
+			}
 			const message = e instanceof ValidationError && field ? e.messageFor(field) : null;
 			if (message) return message;
 			notify.fromError(e, e instanceof ValidationError ? e.message : 'Could not save');

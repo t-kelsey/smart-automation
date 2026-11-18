@@ -62,6 +62,8 @@
 	function update(next: Borehole) {
 		const before = openFlags.length;
 		borehole = next;
+		// Keep the layout's copy in step: any later reload of the page data would bring it back.
+		void invalidate('app:borehole');
 		if (before && !next.flags.some((f) => !f.resolvedAt) && !next.verified) promptFor = next.id;
 	}
 

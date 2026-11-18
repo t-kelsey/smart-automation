@@ -16,6 +16,20 @@ restores the values.
 	let { review }: { review: Review } = $props();
 
 	const WGS84 = '4326';
+	/** Common systems of borehole logs, offered in the EPSG field; any other code works too. */
+	const EPSG_CODES = [
+		['4326', 'GPS / WGS84 (degrees)'],
+		['25832', 'ETRS89 / UTM 32N (Germany)'],
+		['25833', 'ETRS89 / UTM 33N (East Germany)'],
+		['31467', 'Gauss-Krüger zone 3'],
+		['31468', 'Gauss-Krüger zone 4'],
+		['2056', 'Swiss LV95'],
+		['32629', 'WGS84 / UTM 29N (Morocco, Portugal)'],
+		['32630', 'WGS84 / UTM 30N (Spain)'],
+		['32631', 'WGS84 / UTM 31N'],
+		['32632', 'WGS84 / UTM 32N'],
+		['32633', 'WGS84 / UTM 33N']
+	];
 	const deg = (value: number, pos: string, neg: string) =>
 		`${Math.abs(value).toFixed(5)}° ${value < 0 ? neg : pos}`;
 
@@ -48,14 +62,22 @@ restores the values.
 	}
 
 	async function commit() {
+		// x/y given in degrees without a system: that is GPS (WGS84)
+		const [nx, ny] = [x, y].map((v) => Number(v.trim().replace(',', '.')));
+		if (!epsg.trim() && x.trim() && y.trim() && Math.abs(nx) <= 180 && Math.abs(ny) <= 90)
+			epsg = WGS84;
 		const values = [x, y, epsg].map((v) => v.trim().replace(',', '.'));
 		const [vx, vy, ve] = values;
 		if (values.join() === storedValues().join()) {
 			error = null;
 			return;
 		}
-		if (!vx || !vy || !ve) {
-			error = 'Give x, y and EPSG code.';
+		if (!vx || !vy) {
+			error = 'Give x and y.';
+			return;
+		}
+		if (!ve) {
+			error = 'Which coordinate system? Pick an EPSG code (4326 = GPS degrees).';
 			return;
 		}
 		if (values.some((v) => Number.isNaN(Number(v)))) {
@@ -127,6 +149,7 @@ restores the values.
 			type="text"
 			inputmode="numeric"
 			bind:value={epsg}
+			list="epsg-codes"
 			aria-label="EPSG code of x and y"
 			title="EPSG code of x and y: 4326 = GPS (WGS84), 25832 = UTM 32N, 31467 = Gauss-Krüger"
 			placeholder="e.g. 4326"
@@ -141,6 +164,11 @@ restores the values.
 			/>
 		{/if}
 	</div>
+	<datalist id="epsg-codes">
+		{#each EPSG_CODES as [code, name] (code)}
+			<option value={code}>{name}</option>
+		{/each}
+	</datalist>
 	{#if error}
 		<p class="px-2 text-xs text-error-600-400" role="alert">{error}</p>
 	{:else if location && epsg.trim() !== WGS84}
