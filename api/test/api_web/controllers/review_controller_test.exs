@@ -488,6 +488,19 @@ defmodule ApiWeb.ReviewControllerTest do
       end
     end
 
+    test "x/y off the globe in their EPSG are refused, never stored", %{conn: conn} do
+      # UTM metres given as GPS degrees
+      utm_as_gps = %{"x" => 416_067.84, "y" => 3_388_397.88, "epsg" => 4326}
+      data = create(conn, %{"borehole" => Map.put(utm_as_gps, "name", "BH")})
+      assert data["location"] == nil
+      assert Enum.any?(data["flags"], &(&1["code"] == "location_off_the_globe"))
+
+      assert %{"errors" => %{"x" => [_]}} =
+               conn
+               |> patch(~p"/api/boreholes/#{data["id"]}", %{"borehole" => utm_as_gps})
+               |> json_response(422)
+    end
+
     test "an unknown EPSG on PATCH or revert is a 422", %{conn: conn} do
       data = create(conn)
       id = data["id"]
