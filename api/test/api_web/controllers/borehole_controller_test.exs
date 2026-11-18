@@ -35,6 +35,17 @@ defmodule ApiWeb.BoreholeControllerTest do
       post(conn, ~p"/api/boreholes", body)
     end
 
+    test "accepts layer descriptions longer than 255 characters", %{conn: conn} do
+      long = String.duplicate("Slightly weathered, beige, silty SANDSTONE. ", 20)
+
+      conn =
+        post_borehole(conn, %{
+          "layers" => [%{"depth_from_m" => 0, "depth_to_m" => 1, "raw_text" => long}]
+        })
+
+      assert %{"data" => %{"layers" => [%{"raw_text" => ^long}]}} = json_response(conn, 201)
+    end
+
     test "links the original and additional documents", %{conn: conn} do
       original = insert_document(%{original_filename: "source.pdf", storage_path: "source.pdf"})
       split = insert_document(%{original_filename: "split.pdf", storage_path: "split.pdf"})
