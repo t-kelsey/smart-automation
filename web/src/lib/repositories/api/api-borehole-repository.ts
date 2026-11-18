@@ -12,7 +12,7 @@ import type {
 	MapPoint,
 	Page
 } from '#lib/domain/borehole.ts';
-import type { BoreholeRepository } from '../borehole-repository';
+import type { BoreholeRepository, EpsgGuess } from '../borehole-repository';
 import { ApiClient, type ApiClientOptions } from './api-client';
 import type {
 	ApiBoreholeDetail,
@@ -98,6 +98,23 @@ export class ApiBoreholeRepository implements BoreholeRepository {
 			`/boreholes${qs}`
 		))!;
 		return collection.features.flatMap(featureToColumn);
+	}
+
+	async guessEpsg(
+		id: string,
+		x: number,
+		y: number,
+		area?: { lon: number; lat: number }
+	): Promise<EpsgGuess[]> {
+		const qs = new URLSearchParams({ x: String(x), y: String(y) });
+		if (area) {
+			qs.set('lon', String(area.lon));
+			qs.set('lat', String(area.lat));
+		}
+		const body = await this.client.getJson<{
+			data: { epsg: number; distance_m: number; near: string }[];
+		}>(`/boreholes/${encodeURIComponent(id)}/epsg_guess?${qs}`);
+		return (body?.data ?? []).map((g) => ({ epsg: g.epsg, distanceM: g.distance_m, near: g.near }));
 	}
 
 	async getById(id: string): Promise<Borehole | null> {

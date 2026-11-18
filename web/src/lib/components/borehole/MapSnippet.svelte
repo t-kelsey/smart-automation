@@ -3,11 +3,14 @@
 	import * as maplibregl from 'maplibre-gl';
 
 	interface Props {
-		lat: number;
-		lon: number;
+		/** The point to mark; without it the whole world is shown. */
+		lat?: number;
+		lon?: number;
+		/** Makes the map a picker: a click reports its position (and marks it). */
+		onpick?: (lon: number, lat: number) => void;
 	}
 
-	let { lat, lon }: Props = $props();
+	let { lat, lon, onpick }: Props = $props();
 
 	let container: HTMLDivElement;
 
@@ -26,12 +29,20 @@
 				},
 				layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
 			},
-			center: [lon, lat],
-			zoom: 13,
+			center: lat === undefined || lon === undefined ? [0, 20] : [lon, lat],
+			zoom: lat === undefined || lon === undefined ? 1 : 13,
 			attributionControl: { compact: true }
 		});
 		map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-		const marker = new maplibregl.Marker({ color: '#dc2626' }).setLngLat([lon, lat]).addTo(map);
+		const marker = new maplibregl.Marker({ color: '#dc2626' });
+		if (lat !== undefined && lon !== undefined) marker.setLngLat([lon, lat]).addTo(map);
+		if (onpick) {
+			map.getCanvas().style.cursor = 'crosshair';
+			map.on('click', (event) => {
+				marker.setLngLat(event.lngLat).addTo(map);
+				onpick(event.lngLat.lng, event.lngLat.lat);
+			});
+		}
 
 		return () => {
 			marker.remove();
@@ -44,5 +55,7 @@
 	bind:this={container}
 	class="aspect-video overflow-hidden rounded-lg border border-surface-300-700"
 	role="img"
-	aria-label="Map showing the borehole location"
+	aria-label={onpick
+		? 'Map: click the rough area of the borehole'
+		: 'Map showing the borehole location'}
 ></div>

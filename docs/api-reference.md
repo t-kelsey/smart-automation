@@ -232,6 +232,19 @@ curl -X POST "http://localhost:4000/api/boreholes" \
 
 ---
 
+## `GET /api/boreholes/:id/epsg_guess`
+
+Which coordinate system `x`/`y` written without one are probably in (ADR-0006). Numbers alone cannot tell the 120 UTM zones apart, so a reference point decides, in this order:
+
+1. `lon`/`lat` (optional, degrees): a rough area, e.g. a click on a map; the UTM zone there.
+2. Other boreholes: every system they were written in is tried; a system wins if it puts the point within 100 km of a borehole written in it.
+3. The borehole's own current location (e.g. the pipeline's guess): the UTM zone there.
+
+For 1 and 3 the point must land within 400 km of the reference, which catches a wrong zone or hemisphere.
+
+- `200` `{"data": [{"epsg": 32629, "distance_m": 56, "near": "S-7"}]}`, best first; `near` is the neighbour's name, `"the area you picked"` or `"its earlier position"`. `[]` if nothing fits.
+- `400` if `x`/`y` are not numbers or `lon`/`lat` are not degrees; `404` for a malformed id.
+
 ## `DELETE /api/boreholes/:id`
 
 Deletes the borehole with its layers, flags, edit history and document links. The documents themselves stay (they belong to pipeline runs and may hold other boreholes). There is no undo.
