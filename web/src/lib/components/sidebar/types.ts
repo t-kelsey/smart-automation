@@ -10,6 +10,8 @@ export interface SidebarLinkItem {
 	icon?: LucideIcon;
 	/** Open the link at the last map position (`/map?lat=&lon=&zoom=`) instead of the plain page. */
 	keepMapView?: boolean;
+	/** Number shown next to the label (e.g. boreholes to review); hidden when 0 or absent. */
+	badge?: number | null;
 }
 
 export interface SidebarTitleItem {

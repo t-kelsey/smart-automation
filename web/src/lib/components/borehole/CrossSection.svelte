@@ -6,6 +6,7 @@ page that shows a cross section gets the same control.
 
 @param borehole - Borehole whose layers are drawn.
 @param [selection] - Shared hover and click highlighting of the layers.
+@param [flagOf] - Worst open review flag of a layer, marked in the column.
 @param [class] - Extra classes for the root element. The component fills the height of its parent, so
   the parent needs a height.
 -->
@@ -17,10 +18,11 @@ page that shows a cross section gets the same control.
 	interface Props {
 		borehole: Pick<Borehole, 'layers' | 'totalDepth'>;
 		selection?: LayerSelection;
+		flagOf?: (layerId: string) => 'warning' | 'error' | null;
 		class?: string;
 	}
 
-	let { borehole, selection, class: className = '' }: Props = $props();
+	let { borehole, selection, flagOf, class: className = '' }: Props = $props();
 
 	let colored = $state(true);
 	let columnHeight = $state(0);
@@ -38,6 +40,7 @@ page that shows a cross section gets the same control.
 			totalDepth={borehole.totalDepth ?? 0}
 			{colored}
 			{selection}
+			{flagOf}
 			availableHeight={columnHeight}
 		/>
 	</div>

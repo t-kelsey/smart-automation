@@ -4,7 +4,7 @@ Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Ty
 
 This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0001), the document upload endpoints (ADR-0002), and the `bem/` pipeline submission/tracking endpoints (ADR-0002; see the "Pipeline runs" section below). Uploading a document (`POST /api/documents`) no longer starts processing by itself (ADR-0002) — the frontend uploads a file, lets the user pick a per-stage model/effort `config`, then calls `POST /api/pipeline_runs` to actually submit the run and polls `GET /api/pipeline_runs/:id` for progress. See [ADR-0002](adr/0002-document-intake-and-pipeline-runs.md) for the consolidated, current account of this whole flow end to end (supersedes reading ADR-0002 in sequence).
 
-> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0002). Never publish or commit these files.
+> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes`, `sha256` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0002). Never publish or commit these files.
 
 > **Prototype scale**: the dataset is capped at 10 000 boreholes. Without `limit` every match is returned in one response; `limit` may be at most 10 000.
 
@@ -21,12 +21,13 @@ List boreholes as a GeoJSON `FeatureCollection`, with optional filters, sorting 
 | `bbox` | `minLon,minLat,maxLon,maxLat` | Only boreholes whose `location` intersects this envelope. |
 | `q` | text | Search in the [query language](#search-query-language), same as [`/search`](#get-apiboreholessearch); adds `score` and sorts by score. |
 | `verified` | `true` / `false` | Only verified / unverified boreholes. |
+| `flagged` | `true` / `false` | Only boreholes with / without open flags (ADR-0006). |
 | `drilled_from`, `drilled_to` | `YYYY-MM-DD` | Inclusive range on `drilled_at`. |
 | `min_depth`, `max_depth` | number (m) | Inclusive range on `total_depth_m`. |
-| `sort` | `name`, `drilled_at`, `total_depth_m`, `inserted_at`, `score`; prefix `-` for descending | Default: `name` (or `-score` when `q` is given). Missing values sort last. |
+| `sort` | `name`, `drilled_at`, `total_depth_m`, `inserted_at`, `score`, `open_flags`; prefix `-` for descending | Default: `name` (or `-score` when `q` is given). Missing values sort last. Exception: `open_flags` is most flags first and `-open_flags` fewest first. |
 | `limit` | 1–10000 | Page size. Omit to get every match. |
 | `offset` | ≥ 0 | Number of matches to skip. |
-| `view` | `points`, `columns` | `points`: only `id`, `name`, `verified` in `properties` (small response for the map). `columns`: additionally `total_depth_m` and `layers` (`id`, `position`, `depth_from_m`, `depth_to_m`, `petrography`, `color`, ordered by `position`), for the map's 3D detail view; requires `bbox` (`400` "bbox is required for view=columns" otherwise). |
+| `view` | `points`, `columns` | `points`: only `id`, `name`, `verified`, `open_flag_count` in `properties` (small response for the map). `columns`: additionally `total_depth_m` and `layers` (`id`, `position`, `depth_from_m`, `depth_to_m`, `petrography`, `color`, ordered by `position`), for the map's 3D detail view; requires `bbox` (`400` "bbox is required for view=columns" otherwise). |
 
 ### Response `200 OK`
 
@@ -103,6 +104,26 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
     "name": "B 1/59 Schönberg",
     "...": "all properties as in the list",
     "location": { "type": "Point", "coordinates": [9.177, 48.776] },
+    "source_x": 3513220.5,
+    "source_y": 5404530.2,
+    "source_epsg": 31467,
+    "verified_at": null,
+    "sources": { "elevation_m": { "document_id": "c7a2...", "page": 1, "box": [0.1, 0.2, 0.3, 0.25] } },
+    "open_flag_count": 1,
+    "flags": [
+      {
+        "id": "f1a0...", "field": "depth_to_m", "layer_id": "b3f1...", "severity": "warning",
+        "message": "...", "origin": "validator", "code": null, "suggestion": 12.5,
+        "resolved_at": null, "resolved_by": null, "inserted_at": "2026-11-18T10:00:00.000000Z"
+      }
+    ],
+    "edits": [
+      {
+        "id": "e9c3...", "field": "depth_to_m", "layer_id": "b3f1...",
+        "old_value": 3.2, "new_value": 3.4, "source": "validator", "reason": "...",
+        "inserted_at": "2026-11-18T10:00:00.000000Z"
+      }
+    ],
     "layers": [
       {
         "id": "b3f1...",
@@ -113,7 +134,9 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
         "petrography": "Kies [gerundet] (steinig, schwach grobsandig)",
         "color": "grau",
         "raw_text": "0,0-3,5 Kies...",
-        "metadata": {}
+        "metadata": {},
+        "source": { "document_id": "c7a2...", "page": 2, "box": [0.05, 0.3, 0.9, 0.34] },
+        "sources": { "depth_to_m": { "document_id": "c7a2...", "page": 2, "box": [0.06, 0.33, 0.1, 0.34] } }
       }
     ],
     "documents": [
@@ -134,6 +157,8 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
 ```
 
 `layers` is always ordered by `position` ascending. `documents` reflects the many-to-many `documents` ↔ `boreholes` relationship (see ADR-0001) — zero, one, or many entries.
+
+`sources` maps a borehole field (`location` stands for the coordinates) to where it stands in a document; a layer's `source` is its whole row and its `sources` map single layer fields (depths, description, stratigraphy, colour) where they are written; `box` is `[x0, y0, x1, y1]` in 0–1 of the page, origin top left, or `null` (page only). `flags` are the open ones first, then the resolved ones; `edits` are newest first. `source_x`/`source_y`/`source_epsg` are the coordinates as written in the document (source CRS), set together with `location` whenever it is set from x/y/epsg, else `null`. List features and `view=points` carry `open_flag_count` and `verified_at` is part of the list properties too (ADR-0006).
 
 `role` is `original` for the one document the borehole was extracted from (at most one per borehole) and `additional` for any further information file (ADR-0001). The original comes first, then the rest by file name.
 
@@ -163,14 +188,20 @@ Creates a borehole with its layers, optionally linked to an existing document (A
     { "depth_from_m": 0.0, "depth_to_m": 3.5, "stratigraphy": "...", "petrography": "...", "color": "..." }
   ],
   "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "additional_document_ids": ["9b2c1a4e-0d53-4c5e-8d0a-6f1f3c7a2b10"]
+  "additional_document_ids": ["9b2c1a4e-0d53-4c5e-8d0a-6f1f3c7a2b10"],
+  "flags": [{ "field": "depth_to_m", "layer_position": 3, "severity": "warning", "message": "...", "origin": "validator", "code": null, "suggestion": 12.5 }],
+  "edits": [{ "field": "depth_to_m", "layer_position": 3, "old_value": 3.2, "new_value": 3.4, "reason": "..." }]
 }
 ```
 
+- An `epsg` that is not an integer known to PostGIS (`spatial_ref_sys`) never fails the request: the borehole is stored **without** location, `x`/`y` stay in `source_coordinate_raw`, and an open flag `{"field": "location", "severity": "error", "origin": "rule", "code": "unknown_epsg", "message": "EPSG <n> is unknown; coordinates x/y kept in source_coordinate_raw"}` is added (the checks do not touch this code; a human location edit resolves it).
 - `"x"`/`"y"`/`"epsg"` are reprojected to WGS84 via `ST_Transform` (ADR-0001) — omit all three (or send `"location"` directly) if coordinates aren't known yet.
 - `layers[].position` defaults to the 1-based list order if not given.
 - `document_id` is optional; if given, the borehole is attached as that document's `"original"` (ADR-0001, at most one per borehole).
 - `additional_document_ids` is optional (list of document UUIDs); each is linked with role `"additional"`, e.g. the split-out per-borehole PDF the pipeline uploaded. Duplicates and the original are ignored; it also works without `document_id`.
+- `borehole.sources`, `layers[].source` and `layers[].sources` say where a value stands in a document (see above).
+- `flags` (optional; `field`, `severity` `warning`/`error`, `message`, `origin` `rule`/`validator`, optional `code`, optional `suggestion`: any JSON, the proposed value; accepting it is a normal `PATCH` of that field, which resolves the open flags on it) and `edits` (validator corrections: `field`, `old_value`, `new_value`, `reason`; stored with `source: "validator"`) refer to a layer by `layer_position` (the position the layer was sent with); `null`/absent is a borehole-level field. A `layer_position` that matches no layer is a `400`. Values are any JSON; `location` values are `{"x", "y", "epsg"}`.
+- Afterwards layer `position` is renumbered by `depth_from_m` and the [plausibility checks](#plausibility-checks) run, opening `rule` flags.
 - Everything runs in one transaction — any failure leaves nothing half-created.
 
 ### Response `201 Created`
@@ -201,6 +232,63 @@ curl -X POST "http://localhost:4000/api/boreholes" \
 
 ---
 
+## `DELETE /api/boreholes/:id`
+
+Deletes the borehole with its layers, flags, edit history and document links. The documents themselves stay (they belong to pipeline runs and may hold other boreholes). There is no undo.
+
+- `204 No Content` on success, `404 Not Found` for an unknown or malformed id.
+
+## Editing and review (ADR-0006)
+
+Human edits, undo, flags and release. Every write endpoint answers with the full borehole like [`GET /api/boreholes/:id`](#get-apiboreholesid) (`200`, `201` for a new layer), runs in one transaction and ends the same way: for every field that **actually changed** one `field_edits` row (`source: "human"`) is written (unchanged values are skipped), the open flags on that field are resolved (`resolved_by: "human"`), layer `position` is renumbered by `depth_from_m`, and the [plausibility checks](#plausibility-checks) run. `404` for an unknown borehole/layer/edit/flag (a layer or edit of another borehole is unknown too), `422` with changeset errors, `400` with `errors.detail` for a malformed body.
+
+History values (`old_value`/`new_value`, any JSON): decimals are numbers, dates ISO 8601 strings, `location` an object `{"x", "y", "epsg"}` (what was written, in the source CRS; the previous location is taken from `source_x`/`source_y`/`source_epsg`, or, for a borehole stored before those existed, given in WGS84 as `{"x": lon, "y": lat, "epsg": 4326}`), `layer` the layer's fields `{depth_from_m, depth_to_m, stratigraphy, petrography, color, raw_text, metadata, source, sources}` (no id, no position; `old_value: null` is a creation, `new_value: null` a deletion). `field` is the column name, `location` for the coordinates, `layer` for a whole layer.
+
+### `PATCH /api/boreholes/:id`
+
+Body `{ "borehole": { ... } }` with any of `name`, `external_id`, `purpose`, `place`, `client`, `drilling_method`, `drilled_at`, `end_date`, `source_coordinate_system`, `source_coordinate_raw`, `total_depth_m`, `borehole_length_m`, `elevation_m`, `groundwater_level_m`. The location is edited with `x`, `y` and `epsg` together (reprojected like on create; giving only some of them is a `400`; an unknown `epsg` is a `422` `{"errors": {"epsg": ["unknown EPSG code"]}}`).
+
+### `POST /api/boreholes/:id/layers`
+
+Body `{ "layer": { "depth_from_m", "depth_to_m", "stratigraphy", "petrography", "color", "raw_text", "metadata", "source", "sources" } }` (`depth_from_m`/`depth_to_m` required). `201`. One edit with `field: "layer"`.
+
+### `PATCH /api/boreholes/:id/layers/:layer_id`
+
+Body `{ "layer": { ... } }` with any of `depth_from_m`, `depth_to_m`, `stratigraphy`, `petrography`, `color`, `raw_text`.
+
+### `DELETE /api/boreholes/:id/layers/:layer_id`
+
+Deletes the layer; its flags stay but are hidden (not in `flags`, `open_flag_count`, `sort=open_flags`, `flagged`) until the layer is restored by reverting the deletion; one `field: "layer"` edit holds the snapshot, the history keeps its `layer_id`.
+
+### `POST /api/boreholes/:id/edits/:edit_id/revert`
+
+Undo: writes the edit's `old_value` back as a **new** human edit (history is never rewritten). Reverting a layer deletion re-inserts the layer with its old id, reverting a layer creation deletes it, reverting a `location` edit re-applies `old_value` through the `x`/`y`/`epsg` reprojection (no old location, or `{"x": null, "y": null, "epsg": null}`: it is cleared and recorded as an edit). `422` if the old value is no longer valid, `400` if the edit cannot be reverted.
+
+### `POST /api/flags/:id/resolve`
+
+A human confirms a flagged value ("looks right"): `resolved_by: "human"`. No checks run; a confirmed `rule` finding is not reopened until that field is edited again. `409` if the flag is already resolved.
+
+### `POST /api/boreholes/:id/verify`
+
+Body `{ "verified": true | false }`. Sets `verified` and `verified_at` (now), or clears both. Allowed with open flags.
+
+### Plausibility checks
+
+`Api.Boreholes.Checks` keeps the open `origin: "rule"` flags of its own codes in sync after create and after every edit: it opens flags for new findings, resolves (`resolved_by: "rule"`) those that no longer apply and leaves still-firing ones open (their `message` and `severity` are updated in place when they changed). Rule flags of a layer that no longer exists are resolved (`resolved_by: "rule"`); validator flags of such a layer stay as they were, hidden. Flags with other codes (e.g. `epsg_guessed`) are never touched.
+
+| `code` | `field` (layer) | `severity` | Fires when |
+|---|---|---|---|
+| `no_layers` | `layer` | error | the borehole has no layers |
+| `layer_gap` | `depth_from_m` (the lower layer) | warning | a layer starts more than 1 cm below the end of the layer above |
+| `layer_overlap` | `depth_from_m` (the lower layer) | error | a layer starts more than 1 cm above the end of the layer above |
+| `total_depth_mismatch` | `total_depth_m` | warning | total depth differs by more than 5 cm from the largest `depth_to_m` |
+| `groundwater_below_bottom` | `groundwater_level_m` | error | the groundwater level is below the total depth (or the last layer bottom) |
+| `missing_elevation` | `elevation_m` | warning | no elevation |
+| `missing_location` | `location` | warning | no location |
+| `missing_petrography` | `petrography` (the layer) | warning | a layer has no petrography (the message quotes `metadata.petrography_original`) |
+
+---
+
 ## `GET /api/boreholes/search`
 
 Search by name, place and date (ADR-0003). Takes the same parameters as `GET /api/boreholes` (with `q` defaulting to the empty string, matching everything) and returns the same shape, plus:
@@ -226,6 +314,7 @@ Terms are separated by spaces; a borehole must match every term.
 | `date:>1990`, `date:>=1990`, `date:<2000`, `date:<=2000` | comparisons; `>1990` means from 1991, `<2000` up to 1999 |
 | `after:1990`, `before:2000` | `date:>1990`, `date:<2000` |
 | `1959`, `1950..1960` (bare) | a bare year, date or range is a date term; quote it (`"1959"`) to search it as text |
+| `verified:yes`, `flagged:no` | verified boreholes, boreholes with open flags (ADR-0006); `yes`/`no` or `true`/`false`, anything else is a `400` |
 | `a,b` | either value, e.g. `place:Bern,Basel` |
 | `-term` | must not match, e.g. `-place:Bern`. Boreholes without a place or date count as not matching the negated value. |
 
@@ -285,7 +374,27 @@ curl -G "http://localhost:4000/api/boreholes/complete" --data-urlencode 'q=1959 
 
 Uploads a raw document (ADR-0002). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and the document inserted with `status: "pending"` — uploading no longer starts processing by itself (ADR-0002); call [`POST /api/pipeline_runs`](#post-apipipeline_runs) separately once you have a `config` to submit.
 
-`202` with `{ "data": <document> }` (same fields as in a borehole's `documents`), `status` always `pending`. `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
+The SHA-256 of the file is computed while streaming it and stored (`sha256`, lowercase hex). `202` with `{ "data": <document> }` (same fields as in a borehole's `documents`, including `sha256`), `status` always `pending`. `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
+
+## `GET /api/documents?sha256=<hex>`
+
+Duplicate upload detection: documents whose file has this SHA-256 (case-insensitive), newest first. `400` if `sha256` is missing.
+
+```json
+{
+  "data": [
+    {
+      "id": "c7a2...",
+      "original_filename": "B1-59_Schichtenverzeichnis.pdf",
+      "inserted_at": "2026-11-18T10:00:00Z",
+      "borehole_count": 2,
+      "pipeline_runs": [{ "id": "a1b2...", "status": "completed", "inserted_at": "2026-11-18T10:01:00Z" }]
+    }
+  ]
+}
+```
+
+`borehole_count` counts the boreholes that have the document as their original; `pipeline_runs` are newest first. Documents uploaded before this feature have no `sha256`.
 
 ## `GET /api/documents/:id`
 
@@ -301,6 +410,7 @@ Metadata of a single document, for the document viewer page. Same fields as the 
     "status": "pending",
     "page_count": 3,
     "size_bytes": 1269760,
+    "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
     "has_file": true,
     "boreholes": [{ "id": "5f1e...", "name": "B1/59" }]
   }
@@ -351,7 +461,7 @@ curl -OJ "http://localhost:4000/api/documents/c7a2.../file?download=1"
 
 ## Pipeline runs (`pipeline_runs` / `exec_stages` / `reports`)
 
-Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `bem/` pipeline (see ADR-0002) runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
+Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `bem/` pipeline (see ADR-0002) runs `01_filter` → `02_split` → `03_extract` → `04_transform` → `05_validate` on a document (ADR-0006), reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
 
 ### `GET /api/pipeline_runs`
 
@@ -521,7 +631,7 @@ curl -X POST "http://localhost:4000/api/pipeline_runs/6b1e.../stop"
 
 ### `POST /api/exec_stages`
 
-Records one step execution. Rerunning a step adds a new row rather than replacing the previous one, so every attempt stays comparable. The pipeline creates a stage as soon as it knows it will run it (`new`; filter/split at the start of a run, extract/transform per borehole once split has found them) and reports its progress with [`PUT /api/exec_stages/:id`](#put-apiexec_stagesid) (ADR-0002).
+Records one step execution. Rerunning a step adds a new row rather than replacing the previous one, so every attempt stays comparable. The pipeline creates a stage as soon as it knows it will run it (`new`; filter/split at the start of a run, extract/transform/validate per borehole once split has found them) and reports its progress with [`PUT /api/exec_stages/:id`](#put-apiexec_stagesid) (ADR-0002).
 
 ```json
 {
@@ -535,13 +645,13 @@ Records one step execution. Rerunning a step adds a new row rather than replacin
 
 | Field | Description |
 |---|---|
-| `type` | `filter`, `split`, `extract` or `transform`. |
+| `type` | `filter`, `split`, `extract`, `transform` or `validate` (ADR-0006). |
 | `run_id` | Shared id string grouping every stage (and the `report`) of one pipeline run — this is the `pipeline_runs` row's `id` when the run was started via `POST /api/pipeline_runs`. |
-| `position` | Borehole index within the run (1, 2, …) for `extract`/`transform`; omit/`null` for the whole-document `filter`/`split` steps. |
+| `position` | Borehole index within the run (1, 2, …) for `extract`/`transform`/`validate`; omit/`null` for the whole-document `filter`/`split` steps. |
 | `status` | Optional, default `new`. `new` (planned), `running`, `success`, `failed` or `stopped` (the run ended before the stage could finish). `running` stamps `started_at` and makes the stage its run's `current_stage`; `success`/`failed`/`stopped` stamp `finished_at`. |
 | `data` | Optional free-form JSON, the step's output as-is; `null` until the stage has a result. |
 | `error`, `model`, `effort`, `usage` | Optional: why the stage failed or stopped; the model and effort it ran with; its usage (`calls`, `input_tokens`, `output_tokens`, `total_tokens`, `cost_usd`, `api_seconds`, `models`, … as the pipeline reports them). |
-| `document_ids` | At least one document UUID this stage's output belongs to — the original source document, and/or (for `extract`/`transform`) the split-out per-borehole PDF once that is itself a tracked document. Creates the `stage_document_links` rows. |
+| `document_ids` | At least one document UUID this stage's output belongs to — the original source document, and/or (for `extract`/`transform`/`validate`) the split-out per-borehole PDF once that is itself a tracked document. Creates the `stage_document_links` rows. |
 
 `201` with `{ "data": <exec_stage, plus "document_ids"> }`. `422` if `type` or `run_id` is missing or `type`/`status` is invalid (changeset validation). `400` if `document_ids` is missing/empty, or any entry doesn't reference an existing document.
 
@@ -557,13 +667,13 @@ Reports progress on a stage (ADR-0002). Body `{ "status": "running" | "success" 
 
 ### `GET /api/exec_stages/:id`
 
-One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "status", "data", "error", "model", "effort", "usage", "started_at", "finished_at", "duration_ms", "document_ids", "inserted_at", "updated_at" } }`. `404` if it does not exist or the id is not a UUID.
+One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "status", "data", "error", "model", "effort", "usage", "started_at", "finished_at", "duration_ms", "document_ids", "inserted_at", "updated_at" } }`. `inserted_at`/`updated_at` have microsecond precision (ISO 8601, e.g. `2026-11-18T10:00:00.123456Z`), so the newest row per `(type, position)` is unambiguous. `404` if it does not exist or the id is not a UUID.
 
 ### `POST /api/exec_stages/:id/retry`
 
-Redoes one failed or stopped `extract`/`transform` job of a finished run (ADR-0002). No body. The run goes back to `running` (its `error` is cleared) and the pipeline redoes that borehole as a **new** stage row; extract is followed by transform. Answers `202` with the run like `GET /api/pipeline_runs/:id` (without stages).
+Redoes one failed or stopped `extract`/`transform`/`validate` job of a finished run (ADR-0002). No body. The run goes back to `running` (its `error` is cleared) and the pipeline redoes that borehole as a **new** stage row; extract is followed by transform and validate. Answers `202` with the run like `GET /api/pipeline_runs/:id` (without stages).
 
-`409` (`errors.detail` says why) if the job is not extract/transform, is not `failed`/`stopped`, was already retried, its run is still `new`/`running`, its input is missing (no successful split for extract, no successful extract at that position for transform), or no pipeline is configured. `400` if the pipeline cannot be reached (the run keeps its previous status). `404` if the stage does not exist.
+`409` (`errors.detail` says why) if the job is not extract/transform/validate, is not `failed`/`stopped`, was already retried, its run is still `new`/`running`, its input is missing (no successful split for extract, no successful extract at that position for transform, no successful transform at that position for validate), or no pipeline is configured. `400` if the pipeline cannot be reached (the run keeps its previous status). `404` if the stage does not exist.
 
 ### `GET /api/documents/:document_id/exec_stages`
 

@@ -83,7 +83,7 @@ defmodule Api.Pipeline do
   end
 
   @doc """
-  Asks the pipeline to redo one failed/stopped job of a finished run (`extract` or `transform` of
+  Asks the pipeline to redo one failed/stopped job of a finished run (`extract`, `transform` or `validate` of
   one borehole): `POST /runs/:pipeline_id/retry` next to `PIPELINE_URL` with `document_id`,
   `stage`, `position` and the run's `config`. `:ok` once the pipeline accepted it.
   """

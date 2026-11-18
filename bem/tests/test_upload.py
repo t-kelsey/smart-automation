@@ -31,12 +31,14 @@ class Din4023(unittest.TestCase):
         for bad in (None, "", "clay", "Sand, glittery", "schluffig", "Sand, Kies"):
             self.assertIsNone(n(bad), bad)
 
-    def test_conform_keeps_original_and_flags_issues(self):
-        out, issues = din4023.conform({"borehole": {}, "layers": [layer("sand, schluffig"), layer("clay", 1, 2)]})
+    def test_conform_keeps_original_and_nulls_unknown_terms(self):
+        out, notes = din4023.conform({"borehole": {}, "layers": [layer("sand, schluffig"), layer("clay", 1, 2)]})
         self.assertEqual(out["layers"][0]["petrography"], "Sand, schluffig")
         self.assertEqual(out["layers"][0]["metadata"]["petrography_original"], "sand, schluffig")
-        self.assertEqual(len(issues), 1)
-        self.assertIn("clay", issues[0])
+        self.assertIsNone(out["layers"][1]["petrography"])
+        self.assertEqual(out["layers"][1]["metadata"]["petrography_original"], "clay")
+        self.assertEqual(len(notes), 1)
+        self.assertIn("clay", notes[0])
 
     def test_conform_allows_missing_petrography(self):
         out, issues = din4023.conform({"borehole": {}, "layers": [layer(None), layer("", 1, 2)]})
@@ -44,11 +46,9 @@ class Din4023(unittest.TestCase):
         self.assertIsNone(out["layers"][1]["petrography"])
         self.assertEqual(issues, [])
 
-    def test_depth_rules(self):
-        _, issues = din4023.conform({"layers": [layer("Sand", 0, 2), layer("Ton", 1, 3)]})
-        self.assertEqual(len(issues), 1)
-        _, issues = din4023.conform({"layers": []})
-        self.assertEqual(issues, ["no layers"])
+    def test_depth_problems_are_left_to_the_api(self):
+        self.assertEqual(din4023.conform({"layers": [layer("Sand", 0, 2), layer("Ton", 1, 3)]})[1], [])
+        self.assertEqual(din4023.conform({"layers": []})[1], [])
 
 
 class Service(unittest.TestCase):
@@ -75,14 +75,14 @@ class Service(unittest.TestCase):
         self.assertEqual(self.calls[2], ("POST", "/api/reports", {"document_id": "d1", "run_id": "r1", "data": {"steps": [{"step": "x"}]}}))
         self.assertEqual(self.calls[3], ("PUT", "/api/pipeline_runs/p1/status", {"status": "failed", "error": "boom"}))
 
-    def test_borehole_is_normalised_or_blocked(self):
-        self.api.upload_borehole({"borehole": {"name": "B"}, "layers": [layer("sand")]}, "d1", ["s1"])
+    def test_borehole_is_normalised_and_never_blocked(self):
+        flags = [{"field": "elevation_m", "layer_position": None, "severity": "warning", "message": "m", "origin": "validator", "code": None}]
+        self.api.upload_borehole({"borehole": {"name": "B"}, "layers": [layer("sand")]}, "d1", ["s1"], flags)
         method, path, body = self.calls[0]
-        self.assertEqual(body["additional_document_ids"], ["s1"])
+        self.assertEqual((body["additional_document_ids"], body["flags"], body["edits"]), (["s1"], flags, []))
         self.assertEqual((method, path, body["document_id"], body["layers"][0]["petrography"]), ("POST", "/api/boreholes", "d1", "Sand"))
-        with self.assertRaises(din4023.Din4023Error):
-            self.api.upload_borehole({"borehole": {"name": "B"}, "layers": [layer("clay")]}, "d1")
-        self.assertEqual(len(self.calls), 1)  # the violating borehole was never sent
+        self.api.upload_borehole({"borehole": {"name": "B"}, "layers": [layer("clay")]}, "d1")
+        self.assertIsNone(self.calls[1][2]["layers"][0]["petrography"])  # sent, the API flags it
 
     def test_upload_document_returns_id(self):
         import pathlib, tempfile
@@ -221,7 +221,10 @@ class RunTrackerTest(unittest.TestCase):
         t.succeeded("split", None, {"boreholes": [{"label": "B 1", "pages": [1]}, {"label": "B 2", "pages": [2]}]}, [self.pdf, self.pdf], {"calls": 1})
         t.started("transform", 1, "haiku", "high")
         t.succeeded("transform", 1, {"payload": {"borehole": {"name": "B"}, "layers": [layer("sand")]}, "validation_issues": []}, [], None)
-        t.succeeded("transform", 2, {"payload": {"borehole": {"name": "bad"}, "layers": [layer("sand")]}, "validation_issues": []}, [], None)
+        good = {"payload": {"borehole": {"name": "B", "sources": {"name": {"page": 1, "box": None}}},
+                            "layers": [layer("sand", source={"page": 1, "box": [0, 0, 1, 1]})]}, "flags": [], "edits": []}
+        t.succeeded("validate", 1, good, [], None)
+        t.succeeded("validate", 2, {"payload": {"borehole": {"name": "bad"}, "layers": [layer("sand")]}, "flags": [], "edits": []}, [], None)
         t.failed("extract", 2, PipelineStopped("run stopped"), None)
 
         stages = self.stage_calls()
@@ -230,18 +233,24 @@ class RunTrackerTest(unittest.TestCase):
         self.assertEqual(stages[3][0::4], ("PUT", "success"))
         split_update = [b for m, p, b in self.calls if m == "PUT" and b["status"] == "success"][0]
         self.assertEqual(split_update["document_ids"], ["split1", "split2"])
-        # after split: extract/transform planned per borehole, linked to their split PDF
-        planned = [(b["type"], b["position"], b["document_ids"]) for m, p, b in self.calls if m == "POST" and "exec_stages" in p][2:6]
-        self.assertEqual(planned, [("extract", 1, ["doc1", "split1"]), ("transform", 1, ["doc1", "split1"]),
-                                   ("extract", 2, ["doc1", "split2"]), ("transform", 2, ["doc1", "split2"])])
-        borehole = [b for m, p, b in self.calls if p == "/api/boreholes"][0]
+        # after split: extract/transform/validate planned per borehole, linked to their split PDF
+        planned = [(b["type"], b["position"], b["document_ids"]) for m, p, b in self.calls if m == "POST" and "exec_stages" in p][2:8]
+        self.assertEqual(planned, [(s, i, ["doc1", f"split{i}"]) for i in (1, 2) for s in ("extract", "transform", "validate")])
+        # transform no longer stores; validate does, with the split PDF as the boxes' document
+        boreholes = [b for m, p, b in self.calls if p == "/api/boreholes"]
+        self.assertEqual(len(boreholes), 2)
+        borehole = boreholes[0]
         self.assertEqual((borehole["document_id"], borehole["additional_document_ids"]), ("doc1", ["split1"]))
+        self.assertEqual(borehole["borehole"]["sources"]["name"]["document_id"], "split1")
+        self.assertEqual(borehole["layers"][0]["source"]["document_id"], "split1")
         updates = [b for m, p, b in self.calls if m == "PUT"]
         self.assertEqual(updates[3]["status"], "success")
-        self.assertEqual(updates[3]["data"]["borehole_id"], "bh1")
-        self.assertEqual(updates[4]["status"], "failed")  # the API refused borehole 2
-        self.assertTrue(updates[4]["error"].startswith("upload: ApiError"))
-        self.assertEqual(updates[5]["status"], "stopped")
+        self.assertNotIn("borehole_id", updates[3]["data"])  # transform
+        self.assertEqual(updates[4]["status"], "success")
+        self.assertEqual(updates[4]["data"]["borehole_id"], "bh1")
+        self.assertEqual(updates[5]["status"], "failed")  # the API refused borehole 2
+        self.assertTrue(updates[5]["error"].startswith("upload: ApiError"))
+        self.assertEqual(updates[6]["status"], "stopped")
         self.assertEqual(len(t.upload_errors), 1)
 
 

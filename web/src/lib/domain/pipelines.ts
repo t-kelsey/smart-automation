@@ -15,9 +15,9 @@ export interface PipelineJob {
 	durationSeconds?: number;
 	model?: string;
 	error?: string;
-	/** The borehole a transform job produced, once it has finished. */
+	/** The borehole a transform or validate job produced, once it has finished. */
 	boreholeId?: string;
-	/** 1-based borehole index of an extract/transform job; unset for whole-document jobs. */
+	/** 1-based borehole index of a per-borehole job; unset for whole-document jobs. */
 	position?: number;
 }
 
@@ -71,7 +71,8 @@ export const PIPELINE_STAGES = [
 	{ key: 'filter', label: 'Filter pages' },
 	{ key: 'split', label: 'Split boreholes' },
 	{ key: 'extract', label: 'Extract' },
-	{ key: 'transform', label: 'Transform' }
+	{ key: 'transform', label: 'Transform' },
+	{ key: 'validate', label: 'Validate' }
 ] as const;
 
 /**
@@ -95,8 +96,8 @@ export function stageStatus(stage: PipelineStage): PipelineStatus {
 }
 
 /**
- * Whether the job can be redone on its own: a failed or stopped extract/transform job of a
- * finished run whose input exists (the split result, or the borehole's extraction). Failed
+ * Whether the job can be redone on its own: a failed or stopped extract/transform/validate job
+ * of a finished run whose input exists (the split result, or the borehole's previous stage). Failed
  * filter/split jobs are retried by retrying the whole pipeline.
  */
 export function canRetryJob(pipeline: Pipeline, stage: PipelineStage, job: PipelineJob): boolean {
@@ -104,10 +105,9 @@ export function canRetryJob(pipeline: Pipeline, stage: PipelineStage, job: Pipel
 	if (job.status !== 'failed' && job.status !== 'skipped') return false;
 	const jobsOf = (key: string) => pipeline.stages.find((s) => s.key === key)?.jobs ?? [];
 	if (stage.key === 'extract') return jobsOf('split').every((j) => j.status === 'success');
-	if (stage.key === 'transform') {
-		return jobsOf('extract').some((j) => j.position === job.position && j.status === 'success');
-	}
-	return false;
+	const previous = { transform: 'extract', validate: 'transform' }[stage.key];
+	if (!previous) return false;
+	return jobsOf(previous).some((j) => j.position === job.position && j.status === 'success');
 }
 
 export function pipelineStatus(pipeline: Pipeline): PipelineStatus {
@@ -169,9 +169,9 @@ export function formatRelative(date: Date, now = new Date()): string {
 /** One executed job (`exec_stages` row of the API): the step's result with its metadata. */
 export interface JobDetail {
 	id: string;
-	/** Stage key: `filter`, `split`, `extract` or `transform`. */
+	/** Stage key: `filter`, `split`, `extract`, `transform` or `validate`. */
 	type: string;
-	/** Borehole index within the run for `extract`/`transform`; unset for whole-document steps. */
+	/** Borehole index within the run for per-borehole stages; unset for whole-document steps. */
 	position?: number;
 	/** The pipeline run this job belongs to (`pipeline_runs.id`). */
 	runId: string;

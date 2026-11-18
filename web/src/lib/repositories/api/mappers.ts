@@ -1,13 +1,18 @@
-import type {
-	Borehole,
-	BoreholeColumnData,
-	BoreholeDocument,
-	BoreholeLayer,
-	BoreholeSummary,
-	DocumentDetail,
-	DocumentType,
-	StoredDocument,
-	MapPoint
+import {
+	BOREHOLE_FIELDS,
+	type Borehole,
+	type BoreholeColumnData,
+	type BoreholeDocument,
+	type BoreholeField,
+	type BoreholeLayer,
+	type BoreholeSummary,
+	type DocumentDetail,
+	type DocumentType,
+	type FieldEdit,
+	type FieldFlag,
+	type SourceRef,
+	type StoredDocument,
+	type MapPoint
 } from '#lib/domain/borehole.ts';
 import { colorKeyByName, dinColors, parseComposition } from '#lib/din4023/index.ts';
 import type {
@@ -18,9 +23,12 @@ import type {
 	ApiColumnFeature,
 	ApiDocument,
 	ApiDocumentDetail,
+	ApiEdit,
 	ApiFeature,
+	ApiFlag,
 	ApiGeoPoint,
-	ApiPointFeature
+	ApiPointFeature,
+	ApiSource
 } from './api-types';
 
 const num = (value: string | number | null | undefined): number | null =>
@@ -47,7 +55,45 @@ export function toColor(value: string | null): BoreholeLayer['color'] {
 	return { hex: '#9ca3af', name: raw || 'Unknown' };
 }
 
+const text = (value: string | number | null | undefined): string | null =>
+	value === null || value === undefined ? null : String(value);
+
+export const toSource = (source: ApiSource | null | undefined): SourceRef | null =>
+	source ? { documentId: source.document_id, page: source.page, box: source.box ?? null } : null;
+
+const toSources = (sources: Record<string, ApiSource | null> | null | undefined) =>
+	Object.fromEntries(
+		Object.entries(sources ?? {}).flatMap(([field, source]) =>
+			source ? [[field, toSource(source)!]] : []
+		)
+	);
+
+const toFlag = (f: ApiFlag): FieldFlag => ({
+	id: f.id,
+	field: f.field,
+	layerId: f.layer_id,
+	severity: f.severity,
+	message: f.message,
+	origin: f.origin,
+	code: f.code,
+	resolvedAt: f.resolved_at,
+	resolvedBy: f.resolved_by,
+	suggestion: f.suggestion ?? null
+});
+
+const toEdit = (e: ApiEdit): FieldEdit => ({
+	id: e.id,
+	field: e.field,
+	layerId: e.layer_id,
+	oldValue: e.old_value,
+	newValue: e.new_value,
+	source: e.source,
+	reason: e.reason,
+	createdAt: e.inserted_at
+});
+
 export function toLayer(layer: ApiBoreholeLayer): BoreholeLayer {
+	const original = layer.metadata?.petrography_original;
 	return {
 		id: layer.id,
 		position: layer.position,
@@ -56,9 +102,19 @@ export function toLayer(layer: ApiBoreholeLayer): BoreholeLayer {
 		stratigraphy: toStratigraphy(layer.stratigraphy),
 		petrography: {
 			composition: parseComposition(layer.petrography),
-			description: layer.petrography ?? layer.raw_text ?? ''
+			description: layer.petrography ?? layer.raw_text ?? '',
+			original: !layer.petrography && typeof original === 'string' ? original : undefined
 		},
-		color: toColor(layer.color)
+		color: toColor(layer.color),
+		stored: {
+			depth_from_m: text(layer.depth_from_m),
+			depth_to_m: text(layer.depth_to_m),
+			stratigraphy: layer.stratigraphy,
+			petrography: layer.petrography,
+			color: layer.color
+		},
+		source: toSource(layer.source),
+		sources: toSources(layer.sources)
 	};
 }
 
@@ -106,7 +162,8 @@ export function toSummary(b: ApiBorehole, geometry: ApiGeoPoint | null): Borehol
 		elevation: num(b.elevation_m),
 		totalDepth: num(b.total_depth_m),
 		location: toLocation(geometry, b.place),
-		verified: b.verified
+		verified: b.verified,
+		openFlagCount: b.open_flag_count ?? 0
 	};
 }
 
@@ -151,7 +208,18 @@ export function toBorehole(b: ApiBoreholeDetail, baseUrl: string): Borehole {
 		client: b.client ?? undefined,
 		groundwaterLevel: num(b.groundwater_level_m) ?? undefined,
 		drillingMethod: b.drilling_method ?? undefined,
+		verifiedAt: b.verified_at ?? null,
 		layers,
-		documents: b.documents.map((doc) => toBoreholeDocument(doc, baseUrl))
+		documents: b.documents.map((doc) => toBoreholeDocument(doc, baseUrl)),
+		stored: Object.fromEntries(
+			BOREHOLE_FIELDS.map(({ field }) => [field, text(b[field])])
+		) as Record<BoreholeField, string | null>,
+		sources: toSources(b.sources),
+		sourceCoordinates:
+			b.source_x != null && b.source_y != null && b.source_epsg != null
+				? { x: b.source_x, y: b.source_y, epsg: b.source_epsg }
+				: null,
+		flags: (b.flags ?? []).map(toFlag),
+		edits: (b.edits ?? []).map(toEdit)
 	};
 }

@@ -24,11 +24,11 @@ flowchart LR
 
     subgraph bem["bem pipeline (Python / FastAPI, :8000)"]
         exec["POST /execute, /runs/:id/retry<br/>job queue + worker thread"]
-        steps["1 filter → 2 split → 3 extract → 4 transform<br/>DIN 4023 conformance"]
+        steps["1 filter → 2 split → 3 extract → 4 transform → 5 validate<br/>DIN 4023 conformance, flags, source boxes"]
         exec --> steps
     end
 
-    db[("PostgreSQL + PostGIS<br/>boreholes, borehole_layers, documents,<br/>pipeline_runs, exec_stages, reports")]
+    db[("PostgreSQL + PostGIS<br/>boreholes, borehole_layers, field_flags, field_edits,<br/>documents, pipeline_runs, exec_stages, reports")]
     fs[("Document storage<br/>volume /data/storage<br/>(confidential PDFs)")]
     claude{{"OpenRouter<br/>(vision LLMs; claude CLI for development)"}}
 
@@ -72,7 +72,7 @@ sequenceDiagram
     Note over P: Worker thread takes the job
     P->>A: GET /api/documents/:id/file
     A-->>P: PDF bytes (scratch copy, deleted afterwards)
-    loop Stages filter, split, extract, transform
+    loop Stages filter, split, extract, transform, validate
         P->>C: Pages / text + prompt
         C-->>P: Structured result
         P->>A: POST /api/exec_stages {type, run_id, data, document_ids, position}
@@ -80,9 +80,9 @@ sequenceDiagram
     P->>A: POST /api/documents (split-out PDF per borehole)
     P->>A: POST /api/reports (model, time, tokens, cost per step)
     loop Each borehole
-        P->>P: Validate against DIN 4023
-        P->>A: POST /api/boreholes {borehole, layers, document_id, additional_document_ids}
-        A->>S: Insert borehole, layers, document links
+        P->>P: Validate stage: check against the pages, corrections, flags, boxes
+        P->>A: POST /api/boreholes {borehole, layers, flags, edits, document_id, additional_document_ids}
+        A->>S: Insert borehole, layers, flags, edits, document links, run plausibility checks
     end
     P->>A: PUT /api/pipeline_runs/:id/status (completed | failed)
 
@@ -95,7 +95,7 @@ Notes:
 
 - The webhook call carries no file bytes; the pipeline pulls the file by `document_id` (ADR-0002).
 - Without `PIPELINE_URL` the run stays `new` and nothing is processed. If the pipeline cannot be reached the run is `failed`.
-- A failed or stopped extract/transform job can be retried on its own: `POST /api/exec_stages/:id/retry` reopens the run as `running` and calls the pipeline's `POST /runs/:id/retry`, which records a new `exec_stages` row for that borehole and sets the run's final status again (ADR-0002).
+- A failed or stopped extract, transform or validate job can be retried on its own: `POST /api/exec_stages/:id/retry` reopens the run as `running` and calls the pipeline's `POST /runs/:id/retry`, which records a new `exec_stages` row for that borehole and sets the run's final status again (ADR-0002).
 - Only the stage results of a run whose `run_id` equals the `pipeline_runs.id` show up in the UI (ADR-0002).
 
 ## Flow 2: View a borehole in the UI
@@ -137,7 +137,7 @@ Notes:
 
 - UI → service → repository → API (ADR-0004). UI code does not import repositories (ESLint enforces it).
 - In `pnpm dev` the Vite proxy forwards `/api`; in Docker `hooks.server.ts` forwards it to `API_INTERNAL_URL`.
-- Editing and review pages (`/borehole/:id/edit`, `/review`) exist, but saving changes is not wired to the API yet.
+- The review page (`/borehole/:id/review`) is also the editing page: values are edited inline, flags confirmed, edits undone from the history, and the borehole released; hovering a value highlights its source box in the PDF (ADR-0006).
 
 ## Flow 3: Search boreholes
 

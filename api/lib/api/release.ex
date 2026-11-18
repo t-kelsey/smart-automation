@@ -4,6 +4,7 @@ defmodule Api.Release do
 
       bin/api eval "Api.Release.migrate()"
       bin/api eval "Api.Release.seed()"
+      bin/api eval "Api.Release.backfill_sha256()"
       bin/api eval "Api.Release.section_mock()"
   """
   @app :api
@@ -13,6 +14,18 @@ defmodule Api.Release do
 
     for repo <- Application.fetch_env!(@app, :ecto_repos) do
       {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))
+    end
+  end
+
+  @doc "Fills the missing `documents.sha256` (see `Api.Boreholes.backfill_document_sha256/0`)."
+  def backfill_sha256 do
+    Application.load(@app)
+
+    for repo <- Application.fetch_env!(@app, :ecto_repos) do
+      {:ok, result, _} =
+        Ecto.Migrator.with_repo(repo, fn _repo -> Api.Boreholes.backfill_document_sha256() end)
+
+      IO.puts("documents.sha256: #{result.updated} filled, #{result.skipped} without file")
     end
   end
 

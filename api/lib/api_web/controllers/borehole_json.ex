@@ -21,24 +21,30 @@ defmodule ApiWeb.BoreholeJSON do
   def complete(%{completions: completions}), do: %{data: completions}
 
   @doc """
-  Renders the full detail of a single borehole, including layers and documents.
+  Renders the full detail of a single borehole, including layers, documents, flags (open first)
+  and edits (newest first).
   """
   def show(%{borehole: borehole}) do
     %{
       data:
         properties(borehole)
         |> Map.put(:location, borehole.location)
+        |> Map.put(:sources, borehole.sources)
+        |> Map.put(:open_flag_count, Enum.count(borehole.field_flags, &is_nil(&1.resolved_at)))
+        |> Map.put(:flags, Enum.map(borehole.field_flags, &flag/1))
+        |> Map.put(:edits, Enum.map(borehole.field_edits, &edit/1))
         |> Map.put(:layers, Enum.map(borehole.borehole_layers, &layer/1))
         |> Map.put(:documents, Enum.map(borehole.documents, &borehole_document/1))
     }
   end
 
-  defp feature(%{borehole: borehole, score: score}, view) do
-    %{
-      type: "Feature",
-      geometry: borehole.location,
-      properties: feature_properties(borehole, view)
-    }
+  defp feature(%{borehole: borehole, score: score, open_flag_count: open_flags}, view) do
+    properties =
+      borehole
+      |> feature_properties(view)
+      |> Map.put(:open_flag_count, open_flags)
+
+    %{type: "Feature", geometry: borehole.location, properties: properties}
     |> then(fn f -> if score, do: Map.put(f, :score, score), else: f end)
   end
 
@@ -84,11 +90,15 @@ defmodule ApiWeb.BoreholeJSON do
       end_date: borehole.end_date,
       source_coordinate_system: borehole.source_coordinate_system,
       source_coordinate_raw: borehole.source_coordinate_raw,
+      source_x: borehole.source_x,
+      source_y: borehole.source_y,
+      source_epsg: borehole.source_epsg,
       total_depth_m: borehole.total_depth_m,
       borehole_length_m: borehole.borehole_length_m,
       elevation_m: borehole.elevation_m,
       groundwater_level_m: borehole.groundwater_level_m,
       verified: borehole.verified,
+      verified_at: borehole.verified_at,
       metadata: borehole.metadata,
       inserted_at: borehole.inserted_at,
       updated_at: borehole.updated_at
@@ -105,8 +115,39 @@ defmodule ApiWeb.BoreholeJSON do
       petrography: layer.petrography,
       color: layer.color,
       raw_text: layer.raw_text,
-      metadata: layer.metadata
+      metadata: layer.metadata,
+      source: layer.source,
+      sources: layer.sources
     }
+  end
+
+  defp flag(flag) do
+    Map.take(flag, [
+      :id,
+      :field,
+      :layer_id,
+      :severity,
+      :message,
+      :origin,
+      :code,
+      :suggestion,
+      :resolved_at,
+      :resolved_by,
+      :inserted_at
+    ])
+  end
+
+  defp edit(edit) do
+    Map.take(edit, [
+      :id,
+      :field,
+      :layer_id,
+      :old_value,
+      :new_value,
+      :source,
+      :reason,
+      :inserted_at
+    ])
   end
 
   # Never include :storage_path or :raw_extraction (ADR-0002); the file itself is served by
@@ -124,6 +165,7 @@ defmodule ApiWeb.BoreholeJSON do
       status: document.status,
       page_count: document.page_count,
       size_bytes: document.size_bytes,
+      sha256: document.sha256,
       has_file: Api.Boreholes.document_file_path(document) != nil
     }
   end

@@ -19,9 +19,11 @@
 		 * Without it the column is drawn at a fixed scale.
 		 */
 		availableHeight?: number;
+		/** Worst open review flag of a layer, drawn as a yellow (warning) or red (error) dot. */
+		flagOf?: (layerId: string) => 'warning' | 'error' | null;
 	}
 
-	let { layers, totalDepth, colored = true, selection, availableHeight }: Props = $props();
+	let { layers, totalDepth, colored = true, selection, availableHeight, flagOf }: Props = $props();
 
 	const defaultScale = 14; // units (pixels) per metre
 	const minScale = 1;
@@ -31,14 +33,16 @@
 	const colW = 90;
 	const width = colX + colW + 90;
 
+	/** Drawn depth: layers below the stated total depth are drawn too, not cut off. */
+	let depth = $derived(Math.max(totalDepth, ...layers.map((l) => l.endDepth)));
 	/** Units per metre; one unit is one pixel, so text keeps its size whatever the depth. */
 	let scale = $derived(
-		availableHeight && totalDepth > 0
-			? Math.max(minScale, (availableHeight - top - bottomMargin) / totalDepth)
+		availableHeight && depth > 0
+			? Math.max(minScale, (availableHeight - top - bottomMargin) / depth)
 			: defaultScale
 	);
-	const y = (depth: number) => top + depth * scale;
-	let bottom = $derived(y(totalDepth));
+	const y = (metres: number) => top + metres * scale;
+	let bottom = $derived(y(depth));
 	let height = $derived(bottom + bottomMargin);
 
 	/** Pushes sorted positions apart so that labels do not overlap. */
@@ -110,6 +114,14 @@
 				composition={row.layer.petrography.composition}
 				{colored}
 			/>
+			{#if flagOf?.(row.layer.id)}
+				<circle
+					cx={8}
+					cy={(row.y0 + row.y1) / 2}
+					r={5}
+					class={flagOf(row.layer.id) === 'error' ? 'fill-error-500' : 'fill-warning-500'}
+				/>
+			{/if}
 			{#if hovered || selected}
 				<rect
 					x={colX}

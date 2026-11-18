@@ -25,12 +25,13 @@ defmodule Api.MockPipelineData do
   alias Api.Repo
 
   @statuses ["completed", "completed", "completed", "running", "failed", "new"]
-  @steps ~w(filter split extract transform)
+  @steps ~w(filter split extract transform validate)
   @models %{
     "filter" => "haiku",
     "split" => "haiku",
     "extract" => "sonnet",
-    "transform" => "haiku"
+    "transform" => "haiku",
+    "validate" => "sonnet"
   }
 
   @doc """
@@ -148,6 +149,9 @@ defmodule Api.MockPipelineData do
         Enum.map(positions, fn {{b, layers}, i} ->
           {"transform", i,
            %{"borehole_id" => b.id, "payload" => payload(b, layers), "validation_issues" => []}}
+        end) ++
+        Enum.map(positions, fn {{b, _layers}, i} ->
+          {"validate", i, %{"borehole_id" => b.id, "flags" => [], "edits" => []}}
         end)
 
     # How many of the stage rows (jobs) have a result; a prefix, so partial extract/transform

@@ -78,7 +78,7 @@
 						<button
 							type="button"
 							class="btn preset-tonal btn-sm"
-							onclick={() => goto(resolve('/borehole/[id]/edit', { id: borehole.id }))}
+							onclick={() => goto(resolve('/borehole/[id]/review', { id: borehole.id }))}
 						>
 							<PencilLine class="size-4" />
 							Edit
@@ -96,7 +96,7 @@
 						<button
 							type="button"
 							class="btn preset-tonal btn-sm"
-							onclick={() => goto(resolve('/borehole/[id]/edit', { id: borehole.id }))}
+							onclick={() => goto(resolve('/borehole/[id]/review', { id: borehole.id }))}
 						>
 							<PencilLine class="size-4" />
 							Edit layers

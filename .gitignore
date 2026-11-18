@@ -230,3 +230,6 @@ data/*
 
 # Sample data for verification
 lgrb-sample/
+
+# Public sample borehole logs for local pipeline tests (not committed)
+samples/

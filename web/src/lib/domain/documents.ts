@@ -19,12 +19,24 @@ export interface UploadedDocument {
 	status: string;
 }
 
+/** A stored document with the same content (SHA-256) as a file about to be uploaded. */
+export interface ProcessedDocument {
+	id: string;
+	filename: string;
+	/** ISO timestamp of the upload. */
+	uploadedAt: string;
+	boreholeCount: number;
+	/** Newest pipeline run of the document, if any. */
+	latestRun: { id: string; status: string; startedAt: string } | null;
+}
+
 /** Pipeline steps whose AI model and effort can be chosen, in processing order. */
 export const PIPELINE_STEPS = [
 	{ key: 'filter', label: 'Filter pages', hint: 'Finds the borehole log pages' },
 	{ key: 'split', label: 'Split boreholes', hint: 'Separates the logs on those pages' },
 	{ key: 'extract', label: 'Extract', hint: 'Reads depths, lithology and stratigraphy' },
-	{ key: 'transform', label: 'Transform', hint: 'Standardises the result for the database' }
+	{ key: 'transform', label: 'Transform', hint: 'Standardises the result for the database' },
+	{ key: 'validate', label: 'Validate', hint: 'Checks the result against the document' }
 ] as const;
 
 export type PipelineStep = (typeof PIPELINE_STEPS)[number]['key'];
@@ -44,6 +56,7 @@ export function createDefaultPipelineConfig(): PipelineConfig {
 		filter: { model: 'haiku', effort: 'high' },
 		split: { model: 'haiku', effort: 'medium' },
 		extract: { model: 'sonnet', effort: 'high' },
-		transform: { model: 'haiku', effort: 'high' }
+		transform: { model: 'haiku', effort: 'high' },
+		validate: { model: 'sonnet', effort: 'high' }
 	};
 }

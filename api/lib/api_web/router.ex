@@ -13,8 +13,17 @@ defmodule ApiWeb.Router do
     get "/boreholes/:id", BoreholeController, :show
     get "/boreholes", BoreholeController, :index
     post "/boreholes", BoreholeController, :create
+    delete "/boreholes/:id", BoreholeController, :delete
+    patch "/boreholes/:id", BoreholeController, :update
+    post "/boreholes/:id/verify", BoreholeController, :verify
+    post "/boreholes/:id/edits/:edit_id/revert", BoreholeController, :revert
+    post "/boreholes/:id/layers", LayerController, :create
+    patch "/boreholes/:id/layers/:layer_id", LayerController, :update
+    delete "/boreholes/:id/layers/:layer_id", LayerController, :delete
+    post "/flags/:id/resolve", FlagController, :resolve
 
     post "/documents", DocumentController, :create
+    get "/documents", DocumentController, :index
     get "/documents/:id", DocumentController, :show
     get "/documents/:id/file", DocumentController, :file
     put "/documents/:id/status", DocumentController, :update_status

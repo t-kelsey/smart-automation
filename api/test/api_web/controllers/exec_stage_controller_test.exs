@@ -2,6 +2,7 @@ defmodule ApiWeb.ExecStageControllerTest do
   use ApiWeb.ConnCase, async: true
 
   alias Api.Boreholes
+  alias Api.Repo
 
   test "show returns the stage and 404 for unknown ids", %{conn: conn} do
     path = Path.join(System.tmp_dir!(), "upload_#{System.unique_integer([:positive])}")
@@ -163,5 +164,32 @@ defmodule ApiWeb.ExecStageControllerTest do
              |> put(~p"/api/pipeline_runs/#{run.id}/status", %{"status" => "completed"})
              |> json_response(409)
     end
+  end
+
+  test "timestamps have microsecond precision" do
+    doc =
+      Repo.insert!(%Api.Boreholes.Document{original_filename: "a.pdf", storage_path: "a.pdf"})
+
+    {:ok, a} =
+      Boreholes.create_exec_stage(%{
+        "type" => "extract",
+        "run_id" => "r2",
+        "position" => 1,
+        "document_ids" => [doc.id]
+      })
+
+    {:ok, b} =
+      Boreholes.create_exec_stage(%{
+        "type" => "extract",
+        "run_id" => "r2",
+        "position" => 1,
+        "document_ids" => [doc.id]
+      })
+
+    assert a.inserted_at.microsecond |> elem(1) == 6
+    assert DateTime.compare(a.inserted_at, b.inserted_at) == :lt
+
+    json = Jason.encode!(ApiWeb.ExecStageJSON.show(%{exec_stage: Repo.reload!(a)}))
+    assert {:ok, _, 0} = DateTime.from_iso8601(Jason.decode!(json)["data"]["inserted_at"])
   end
 end

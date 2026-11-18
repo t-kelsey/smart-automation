@@ -14,6 +14,7 @@ defmodule Api.Boreholes.Document do
     field :status, :string, default: "pending"
     field :page_count, :integer
     field :size_bytes, :integer
+    field :sha256, :string
     field :raw_extraction, :map
     # Role for the borehole the document was loaded through (see `Api.Boreholes.get_borehole/1`).
     field :role, :string, virtual: true
@@ -39,6 +40,7 @@ defmodule Api.Boreholes.Document do
       :status,
       :page_count,
       :size_bytes,
+      :sha256,
       :raw_extraction
     ])
     |> validate_required([:original_filename, :storage_path])

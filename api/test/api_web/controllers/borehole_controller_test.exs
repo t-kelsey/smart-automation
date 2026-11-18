@@ -35,6 +35,17 @@ defmodule ApiWeb.BoreholeControllerTest do
       post(conn, ~p"/api/boreholes", body)
     end
 
+    test "accepts layer descriptions longer than 255 characters", %{conn: conn} do
+      long = String.duplicate("Slightly weathered, beige, silty SANDSTONE. ", 20)
+
+      conn =
+        post_borehole(conn, %{
+          "layers" => [%{"depth_from_m" => 0, "depth_to_m" => 1, "raw_text" => long}]
+        })
+
+      assert %{"data" => %{"layers" => [%{"raw_text" => ^long}]}} = json_response(conn, 201)
+    end
+
     test "links the original and additional documents", %{conn: conn} do
       original = insert_document(%{original_filename: "source.pdf", storage_path: "source.pdf"})
       split = insert_document(%{original_filename: "split.pdf", storage_path: "split.pdf"})
@@ -121,13 +132,13 @@ defmodule ApiWeb.BoreholeControllerTest do
       assert Enum.map(features, & &1["properties"]["name"]) == ["B", "C"]
     end
 
-    test "view=points returns only id, name and verified", %{conn: conn} do
+    test "view=points returns only id, name, verified and open_flag_count", %{conn: conn} do
       insert_borehole(%{name: "P", purpose: "secret-ish detail"})
 
       assert %{"features" => [%{"properties" => props}]} =
                json_response(get(conn, ~p"/api/boreholes?view=points"), 200)
 
-      assert Map.keys(props) |> Enum.sort() == ["id", "name", "verified"]
+      assert Map.keys(props) |> Enum.sort() == ["id", "name", "open_flag_count", "verified"]
     end
 
     test "view=columns returns the layers ordered by position, within the bbox", %{conn: conn} do
@@ -241,6 +252,21 @@ defmodule ApiWeb.BoreholeControllerTest do
       assert %{"data" => data} = json_response(get(conn, ~p"/api/boreholes/#{borehole.id}"), 200)
       assert %{"place" => "Basel", "client" => "Stadtwerke"} = data
       assert [%{"page_count" => 3, "size_bytes" => 1234, "has_file" => false}] = data["documents"]
+    end
+  end
+
+  describe "DELETE /api/boreholes/:id" do
+    test "deletes the borehole with its layers but keeps its documents", %{conn: conn} do
+      borehole = insert_borehole(%{name: "BH del"})
+      layer = insert_layer(borehole, %{position: 1, depth_from_m: 0, depth_to_m: 1})
+      document = insert_document(%{original_filename: "a.pdf", storage_path: "a.pdf"})
+      attach_document(borehole, document)
+
+      assert response(delete(conn, ~p"/api/boreholes/#{borehole.id}"), 204)
+      refute Repo.get(Borehole, borehole.id)
+      refute Repo.get(BoreholeLayer, layer.id)
+      assert Repo.get(Document, document.id)
+      assert json_response(delete(conn, ~p"/api/boreholes/#{borehole.id}"), 404)
     end
   end
 

@@ -269,11 +269,11 @@
 			);
 			return id;
 		}
-		// The verified or unverified colour on a white rim, without the material fill
+		// Verified boreholes filled, unverified ones hollow, on a white rim, without the material fill
 		function resolvePlainIcon(point: MapPoint): string {
 			const id = `dot-plain-${point.verified}`;
 			ensureIcon(id, () =>
-				plainIconSvg(point.verified ? mapColors.verified : mapColors.unverified)
+				plainIconSvg(point.verified ? mapColors.verified : mapColors.unverified, point.verified)
 			);
 			return id;
 		}

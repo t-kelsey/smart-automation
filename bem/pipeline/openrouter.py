@@ -79,6 +79,8 @@ def _usage_from(out: dict, seconds: float) -> Usage:
 
 
 class OpenRouter(AI):
+    renders_pages = True
+
     def __init__(self) -> None:
         self.base_url = os.environ.get("OPENROUTER_BASE_URL", DEFAULT_URL).rstrip("/")
         self.json_schema = True  # cleared once a provider rejects the schema

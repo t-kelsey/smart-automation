@@ -13,11 +13,12 @@ views in the middle, and page-specific actions at the right.
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { Borehole } from '#lib/domain/borehole.ts';
+	import DeleteBoreholeButton from './DeleteBoreholeButton.svelte';
 
 	type View = 'details' | 'review';
 
 	interface Props {
-		borehole: Pick<Borehole, 'id' | 'name' | 'location'>;
+		borehole: Pick<Borehole, 'id' | 'name' | 'location' | 'verified' | 'openFlagCount'>;
 		view: View;
 		/** Page-specific actions, shown after the share button. */
 		children?: Snippet;
@@ -33,10 +34,12 @@ views in the middle, and page-specific actions at the right.
 	function onViewChange(next: View) {
 		if (next === view) return;
 		const id = borehole.id;
+		// Reloaded: the review page saves without reloading, so the layout's borehole may be stale.
 		void goto(
 			next === 'review'
 				? resolve('/borehole/[id]/review', { id })
-				: resolve('/borehole/[id]', { id })
+				: resolve('/borehole/[id]', { id }),
+			{ invalidateAll: true }
 		);
 	}
 </script>
@@ -46,7 +49,19 @@ views in the middle, and page-specific actions at the right.
 >
 	<div>
 		<h1 class="h2">Borehole {borehole.name}</h1>
-		<p class="text-sm opacity-70">{borehole.location?.place ?? ''}</p>
+		<p class="flex flex-wrap items-center gap-2 text-sm">
+			{#if borehole.verified}
+				<span class="badge preset-filled-success-500">Verified</span>
+			{:else}
+				<span class="badge preset-outlined-surface-500">Not verified</span>
+			{/if}
+			{#if borehole.openFlagCount}
+				<span class="badge preset-filled-warning-500">
+					{borehole.openFlagCount} open {borehole.openFlagCount === 1 ? 'flag' : 'flags'}
+				</span>
+			{/if}
+			<span class="opacity-70">{borehole.location?.place ?? ''}</span>
+		</p>
 	</div>
 
 	<SegmentedControl
@@ -67,5 +82,6 @@ views in the middle, and page-specific actions at the right.
 
 	<div class="flex flex-wrap items-center gap-2 md:justify-end">
 		{@render children?.()}
+		<DeleteBoreholeButton {borehole} />
 	</div>
 </header>

@@ -87,7 +87,7 @@ export function toJobStatus(status: ApiStageStatus): JobStatus {
 
 /**
  * Builds the stages and jobs of a run. A job with an `exec_stages` row takes the row's status
- * (ADR-0002). Jobs without one (extract/transform before the split result, rows from before
+ * (ADR-0002). Jobs without one (per-borehole jobs before the split result, rows from before
  * stages had a status) are derived from the run's status: while the run is going, everything of
  * the first unfinished stage is running and the rest is pending; once it has failed, the
  * unfinished jobs of that stage failed and the later stages never ran.
@@ -126,14 +126,15 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 			return [{ name: 'Filter pages', done: finished('filter', null), position: null }];
 		if (type === 'split')
 			return [{ name: 'Split boreholes', done: finished('split', null), position: null }];
-		const verb = type === 'extract' ? 'Extract' : 'Transform';
+		const verb = PIPELINE_STAGES.find((s) => s.key === type)?.label ?? type;
 		// Until the split result is there, the number of boreholes is unknown.
 		if (!finished('split', null)) return [{ name: verb, done: false, position: null }];
 		return boreholes.map((b, i) => ({
 			name: `${verb} ${b.label ?? `borehole ${i + 1}`}`,
 			done: finished(type, i + 1),
 			position: i + 1,
-			boreholeId: type === 'transform' ? boreholeIdOf(type, i + 1) : undefined
+			// validate stores the borehole; runs from before the validate stage stored it in transform
+			boreholeId: type === 'extract' ? undefined : boreholeIdOf(type, i + 1)
 		}));
 	}
 
@@ -180,10 +181,10 @@ export function mapPipeline(run: ApiPipelineRun, filename: string): Pipeline {
 		};
 	});
 
-	// A failed run is only partially failed when some borehole still made it through the transform.
-	const transformJobs = stages.find((s) => s.key === 'transform')?.jobs ?? [];
+	// A failed run is only partially failed when some borehole still made it through the last stage.
+	const lastJobs = stages.at(-1)?.jobs ?? [];
 	const status =
-		run.status === 'failed' && transformJobs.some((j) => j.status === 'success')
+		run.status === 'failed' && lastJobs.some((j) => j.status === 'success')
 			? 'partial'
 			: toPipelineStatus(run.status);
 

@@ -1,30 +1,43 @@
 <!--
 @component
-A document viewer for one borehole's documents: shows the original document and lets the user
-switch to its additional information files.
+A document viewer for one borehole's documents: shows the preferred document (else the original)
+and lets the user switch to the others.
 
 @param documents - The documents of a borehole.
+@param [preferredId] - Shown first, e.g. the borehole's own log split out of the original.
+@param [source] - Where a value is written: switches to its document and page and zooms to its box.
 @param [class] - Extra classes for the root element.
 -->
 <script lang="ts">
 	import { FileQuestionMarkIcon } from '@lucide/svelte';
-	import type { BoreholeDocument } from '#lib/domain/borehole.ts';
+	import type { BoreholeDocument, SourceRef } from '#lib/domain/borehole.ts';
 	import { splitDocuments } from '#lib/domain/documents.ts';
 	import DocumentViewer from './DocumentViewer.svelte';
 
 	interface Props {
 		documents: BoreholeDocument[];
+		preferredId?: string | null;
+		source?: SourceRef | null;
 		class?: string;
 	}
 
-	let { documents, class: className = '' }: Props = $props();
+	let { documents, preferredId = null, source = null, class: className = '' }: Props = $props();
 
 	let { original, additional } = $derived(splitDocuments(documents));
-	/** Shown in the viewer; `null` selects the original. */
+	/** Shown in the viewer; `null` selects the preferred document, else the original. */
 	let selectedId = $state<string | null>(null);
 
+	$effect(() => {
+		if (source && documents.some((doc) => doc.id === source.documentId)) {
+			selectedId = source.documentId;
+		}
+	});
+
 	let shown = $derived(
-		documents.find((doc) => doc.id === selectedId) ?? original ?? additional[0] ?? null
+		documents.find((doc) => doc.id === (selectedId ?? preferredId)) ??
+			original ??
+			additional[0] ??
+			null
 	);
 </script>
 
@@ -39,7 +52,11 @@ switch to its additional information files.
 			>
 				{#each [...(original ? [original] : []), ...additional] as doc (doc.id)}
 					<option value={doc.id}>
-						{doc.role === 'original' ? 'Original: ' : ''}{doc.name}
+						{doc.role === 'original'
+							? 'Original: '
+							: doc.id === preferredId
+								? 'Borehole log: '
+								: ''}{doc.name}
 					</option>
 				{/each}
 			</select>
@@ -47,7 +64,11 @@ switch to its additional information files.
 	{/if}
 
 	{#if shown}
-		<DocumentViewer document={shown} class="flex-1" />
+		<DocumentViewer
+			document={shown}
+			highlight={source?.documentId === shown.id ? source : null}
+			class="flex-1"
+		/>
 	{:else}
 		<div
 			class="flex flex-1 flex-col items-center justify-center gap-2 card border border-surface-200-800 bg-surface-50-950 p-6 opacity-60"

@@ -3,7 +3,7 @@ import { Faker, de, en, es, fr } from '@faker-js/faker';
 import type {
 	Borehole,
 	BoreholeDocument,
-	BoreholeLayer,
+	BoreholeLayer as FullLayer,
 	DocumentStatus,
 	DocumentType
 } from '#lib/domain/borehole.ts';
@@ -11,6 +11,55 @@ import type { Composition, SoilKey } from '#lib/din4023/index.ts';
 import din4023 from '../../../../../standards/din-4023/din-4023.json';
 
 // Own instance so seeding here does not affect other users of faker.
+// The mock data has no review data (sources, flags, edits); `withReview` adds empty defaults.
+type BoreholeLayer = Omit<FullLayer, 'stored' | 'source' | 'sources'>;
+type MockBorehole = Omit<
+	Borehole,
+	| 'layers'
+	| 'stored'
+	| 'sources'
+	| 'flags'
+	| 'edits'
+	| 'verifiedAt'
+	| 'openFlagCount'
+	| 'sourceCoordinates'
+> & { layers: BoreholeLayer[] };
+
+const withReview = (b: MockBorehole): Borehole => ({
+	...b,
+	verifiedAt: null,
+	openFlagCount: 0,
+	stored: {
+		name: b.name,
+		external_id: b.externalId ?? null,
+		drilled_at: b.date ?? null,
+		end_date: b.endDate ?? null,
+		purpose: b.cause ?? null,
+		client: b.client ?? null,
+		drilling_method: b.drillingMethod ?? null,
+		place: b.location?.place ?? null,
+		elevation_m: b.elevation?.toString() ?? null,
+		total_depth_m: b.totalDepth?.toString() ?? null,
+		groundwater_level_m: b.groundwaterLevel?.toString() ?? null
+	},
+	sources: {},
+	sourceCoordinates: null,
+	flags: [],
+	edits: [],
+	layers: b.layers.map((layer) => ({
+		...layer,
+		source: null,
+		sources: {},
+		stored: {
+			depth_from_m: String(layer.startDepth),
+			depth_to_m: String(layer.endDepth),
+			stratigraphy: `${layer.stratigraphy.code} ${layer.stratigraphy.name}`.trim(),
+			petrography: layer.petrography.description,
+			color: layer.color.name
+		}
+	}))
+});
+
 const faker = new Faker({ locale: [en, de, fr, es] });
 faker.seed(42);
 
@@ -730,7 +779,7 @@ function makeDocuments(boreholeId: string, name: string, country: string): Boreh
 		}));
 }
 
-function makeBorehole(index: number): Borehole {
+function makeBorehole(index: number): MockBorehole {
 	const region = faker.helpers.arrayElement(regions);
 	const totalDepth = round(faker.number.float({ min: 8, max: 60 }));
 	const drilled = faker.date.between({ from: '1960-01-01', to: '2020-12-31' });
@@ -769,7 +818,7 @@ function makeBorehole(index: number): Borehole {
 }
 
 /** Borehole BK 1042 as used before the data layer existed; kept first and stable. */
-const bk1042: Borehole = {
+const bk1042: MockBorehole = {
 	id: 'BK-1042',
 	name: 'BK 1042',
 	date: '1987-06-12',
@@ -915,4 +964,4 @@ const bk1042: Borehole = {
 export const mockBoreholes: Borehole[] = [
 	bk1042,
 	...Array.from({ length: config.mockBoreholeCount }, (_, i) => makeBorehole(i + 1))
-];
+].map(withReview);

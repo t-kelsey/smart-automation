@@ -61,8 +61,8 @@ class ApiService:
         status: str = "new",
         **fields,
     ) -> dict:
-        """`POST /exec_stages`: `stage` is filter|split|extract|transform; `position` is the 1-based
-        borehole index for extract/transform; `status` new|running|success|failed|stopped (ADR-0002).
+        """`POST /exec_stages`: `stage` is filter|split|extract|transform|validate; `position` is the
+        1-based borehole index for extract/transform/validate; `status` new|running|success|failed|stopped (ADR-0002).
         `fields`: optional `data`, `error`, `model`, `effort`, `usage`. Returns the created stage."""
         body = {"type": stage, "run_id": run_id, "position": position, "status": status, "document_ids": document_ids}
         return self._send("POST", "/exec_stages", body | _present(fields))["data"]
@@ -77,19 +77,27 @@ class ApiService:
         """`POST /reports`: the run's per-step model/time/token/cost stats (`data` must be an object)."""
         return self._send("POST", "/reports", {"document_id": document_id, "run_id": run_id, "data": {"steps": steps}})
 
-    def upload_borehole(self, payload: dict, document_id: str, additional_document_ids: list[str] | None = None) -> dict:
-        """`POST /boreholes`. The payload must satisfy DIN 4023 (see `din4023.conform`), otherwise
-        `Din4023Error` is raised and nothing is sent. `document_id` becomes the borehole's original document,
-        `additional_document_ids` (e.g. its split-out PDF) are linked as additional documents."""
-        conformed, issues = din4023.conform(payload)
-        if issues:
-            raise din4023.Din4023Error(issues)
+    def upload_borehole(
+        self,
+        payload: dict,
+        document_id: str,
+        additional_document_ids: list[str] | None = None,
+        flags: list[dict] | None = None,
+        edits: list[dict] | None = None,
+    ) -> dict:
+        """`POST /boreholes` with DIN 4023 petrography (`din4023.conform`; unknown terms become null).
+        `payload` may carry `borehole.sources` and `layers[].source`; `flags` and `edits` (validator
+        corrections) refer to layers by `layer_position` (ADR-0006). `document_id` becomes the
+        borehole's original document, `additional_document_ids` (e.g. its split-out PDF) are linked too."""
+        conformed, _ = din4023.conform(payload)
         return self._send(
             "POST",
             "/boreholes",
             {
                 "borehole": conformed["borehole"],
                 "layers": conformed["layers"],
+                "flags": flags or [],
+                "edits": edits or [],
                 "document_id": document_id,
                 "additional_document_ids": additional_document_ids or [],
             },

@@ -41,7 +41,7 @@ export class PipelineService {
 		return this.repository.delete(id);
 	}
 
-	/** Redoes one failed or stopped extract/transform job as a new job of the same run. */
+	/** Redoes one failed or stopped extract/transform/validate job as a new job of the same run. */
 	retryJob(execStageId: string): Promise<void> {
 		return this.repository.retryJob(execStageId);
 	}

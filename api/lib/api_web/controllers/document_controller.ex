@@ -20,6 +20,13 @@ defmodule ApiWeb.DocumentController do
 
   def create(_conn, _params), do: {:error, "multipart field \"file\" is required"}
 
+  @doc "Documents with the given `sha256` (duplicate upload detection), newest first."
+  def index(conn, %{"sha256" => sha256}) when is_binary(sha256) do
+    render(conn, :index, entries: Boreholes.list_documents_by_sha256(sha256))
+  end
+
+  def index(_conn, _params), do: {:error, "query parameter \"sha256\" is required"}
+
   @doc "Metadata of a single document and the boreholes it belongs to (never the storage path)."
   def show(conn, %{"id" => id}) do
     case Boreholes.get_document_with_boreholes(id) do

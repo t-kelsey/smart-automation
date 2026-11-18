@@ -9,8 +9,9 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
-from .ai import PipelineError, StepReport, Timer, Usage, backend_names, get_ai, log
+from .ai import PipelineError, PipelineStopped, StepReport, Timer, Usage, backend_names, get_ai, log
 from .config import PipelineConfig
 from .naming import run_id, stamped
 from .output import Recorder, Tracker, dump_json, persist_enabled
@@ -18,8 +19,9 @@ from .steps.extract import extract_boreholes
 from .steps.filter import filter_pages
 from .steps.split import split_boreholes
 from .steps.translate import transform_boreholes
+from .steps.validate import validate_boreholes
 
-STAGES = ("filter", "split", "extract", "transform")
+STAGES = ("filter", "split", "extract", "transform", "validate")
 DEFAULT_OUT = pathlib.Path(__file__).resolve().parent.parent / "out"
 
 
@@ -62,7 +64,7 @@ def run_pipeline(
     tracker: Tracker | None = None,
     stop: threading.Event | None = None,
 ) -> tuple[list[dict], list[StepReport], float]:
-    """Run all four steps on one PDF; every stage (and borehole) reports its start, result or failure
+    """Run all five steps on one PDF; every stage (and borehole) reports its start, result or failure
     to `tracker`. Setting `stop` cancels the run with PipelineStopped at the next stage, borehole or
     AI call.
 
@@ -74,6 +76,32 @@ def run_pipeline(
         if out_dir is None or not persist_enabled():
             out_dir = pathlib.Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="bem-")))
         return _run(pdf, out_dir, chunk_size, workers, config or PipelineConfig(), Recorder(tracker), stop)
+
+
+def _transform_and_validate(extracted, out_dir, r4, r5, workers, recorder) -> list[dict]:
+    """Transform and validate each borehole on its own, so one failed borehole does not stop the others.
+    Each failure is recorded on its own job; raises PipelineError at the end if any borehole failed."""
+
+    def chain(item):
+        position, (f, data) = item
+        try:
+            (t,) = transform_boreholes([(f, data)], out_dir, r4, 1, recorder, position)
+            (v,) = validate_boreholes([(f, data, t)], out_dir, r5, 1, recorder, position)
+            return v
+        except Exception as e:
+            return e
+
+    with ThreadPoolExecutor(workers) as pool:
+        outcomes = list(pool.map(chain, enumerate(extracted, 1)))
+    failed = [(i, o) for i, o in enumerate(outcomes, 1) if isinstance(o, Exception)]
+    if failed:
+        stopped = next((o for _, o in failed if isinstance(o, PipelineStopped)), None)
+        if stopped:
+            raise stopped
+        error = PipelineError(f"{len(failed)} of {len(outcomes)} borehole(s) failed: " + "; ".join(f"#{i}: {o}" for i, o in failed)[:2000])
+        error.stage_recorded = True  # recorded per borehole already
+        raise error
+    return outcomes
 
 
 def _run(
@@ -90,8 +118,9 @@ def _run(
         StepReport("2 split boreholes", c.split.model, c.split.effort, stop=stop),
         StepReport("3 extract", c.extract.model, c.extract.effort, stop=stop),
         StepReport("4 transform to db", c.transform.model, c.transform.effort, stop=stop),
+        StepReport("5 validate", c.validate.model, c.validate.effort, stop=stop),
     ]
-    r1, r2, r3, r4 = reports
+    r1, r2, r3, r4, r5 = reports
     results: list[dict] = []
     t0 = time.monotonic()
     stage = "filter"
@@ -107,11 +136,11 @@ def _run(
             with Timer(r3):
                 extracted = extract_boreholes(files, out_dir, r3, workers, recorder)
             stage = "transform"
-            with Timer(r4):
-                results = transform_boreholes(extracted, out_dir, r4, workers, recorder)
+            with Timer(r4), Timer(r5):
+                results = _transform_and_validate(extracted, out_dir, r4, r5, workers, recorder)
         else:
             log("no borehole log pages found, nothing to do")
-    except Exception as e:  # extract/transform record their own failures per borehole
+    except Exception as e:  # extract/transform/validate record their own failures per borehole
         recorder.record_failure(stage, e, report=dict(zip(STAGES, reports))[stage])
         raise
     finally:

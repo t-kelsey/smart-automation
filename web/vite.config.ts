@@ -12,8 +12,9 @@ export default defineConfig({
 	server: {
 		// ADR-0004: the DIN 4023 standard file lives outside web/
 		fs: { allow: ['..'] },
-		// Dev proxy for the default PUBLIC_API_URL=/api
-		proxy: { '/api': 'http://localhost:4000' }
+		// Dev proxy for the default PUBLIC_API_URL=/api; API_INTERNAL_URL points it (and the server
+		// hook) at another API, e.g. the Docker stack's.
+		proxy: { '/api': process.env.API_INTERNAL_URL ?? 'http://localhost:4000' }
 	},
 	plugins: [
 		enhancedImages(),

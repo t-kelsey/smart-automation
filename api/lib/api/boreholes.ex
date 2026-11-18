@@ -11,8 +11,11 @@ defmodule Api.Boreholes do
   alias Api.Boreholes.BoreholeLayer
   alias Api.Boreholes.Document
   alias Api.Boreholes.ExecStage
+  alias Api.Boreholes.FieldEdit
+  alias Api.Boreholes.FieldFlag
   alias Api.Boreholes.PipelineRun
   alias Api.Boreholes.Report
+  alias Api.Boreholes.Review
   alias Api.Boreholes.SearchQuery
   alias Api.Boreholes.StageDocumentLink
 
@@ -24,16 +27,21 @@ defmodule Api.Boreholes do
       that is parsed and raises if invalid) over name, external id, place and date; adds a
       relevance `score`
     * `:verified` - boolean
+    * `:flagged` - boolean, whether the borehole has open flags (ADR-0006)
     * `:drilled_from`, `:drilled_to` - `Date`, inclusive
     * `:min_depth`, `:max_depth` - number, compared with `total_depth_m`
     * `:sort` - `{field, :asc | :desc}` with field `:name`, `:drilled_at`, `:total_depth_m`,
-      `:inserted_at` or `:score` (only with `:q`); defaults to score (with `:q`) or name
+      `:inserted_at`, `:open_flags` or `:score` (only with `:q`); defaults to score (with `:q`) or name
     * `:limit`, `:offset` - paging; without `:limit` every match is returned
   """
   @type filters :: map()
 
   @typedoc "One result row; `score` is `nil` unless the query had a `:q`."
-  @type entry :: %{borehole: Borehole.t(), score: integer() | nil}
+  @type entry :: %{
+          borehole: Borehole.t(),
+          score: integer() | nil,
+          open_flag_count: non_neg_integer()
+        }
 
   @doc """
   Lists boreholes matching `filters` (see `t:filters/0`).
@@ -62,6 +70,12 @@ defmodule Api.Boreholes do
   end
 
   @doc """
+  Deletes a borehole with its layers, flags, edit history and document links. The documents
+  themselves stay: they belong to pipeline runs and may hold other boreholes.
+  """
+  def delete_borehole(%Borehole{} = borehole), do: Repo.delete(borehole)
+
+  @doc """
   Preloads the layers (ordered by position) of the boreholes in `list_boreholes/1` entries, in one
   query for all of them.
   """
@@ -73,7 +87,8 @@ defmodule Api.Boreholes do
   end
 
   @doc """
-  Fetches a borehole by id, preloading its documents and layers (ordered by position).
+  Fetches a borehole by id, preloading its documents, layers (ordered by position), flags (open
+  first) and edits (newest first).
 
   Each document carries its `role` for this borehole; the original document comes first.
 
@@ -83,7 +98,26 @@ defmodule Api.Boreholes do
     with {:ok, uuid} <- Ecto.UUID.cast(id),
          %Borehole{} = borehole <- Repo.get(Borehole, uuid) do
       layers_query = from(l in BoreholeLayer, order_by: l.position)
-      borehole = Repo.preload(borehole, borehole_layers: layers_query)
+
+      # flags of a deleted layer stay in the table but are hidden until the layer is back
+      layer_ids = from(l in BoreholeLayer, where: l.borehole_id == ^borehole.id, select: l.id)
+
+      flags_query =
+        from(f in FieldFlag,
+          where: is_nil(f.layer_id) or f.layer_id in subquery(layer_ids),
+          where: f.borehole_id == ^borehole.id,
+          order_by: [asc: not is_nil(f.resolved_at), asc: f.inserted_at, asc: f.id]
+        )
+
+      edits_query = from(e in FieldEdit, order_by: [desc: e.inserted_at, desc: e.id])
+
+      borehole =
+        Repo.preload(borehole,
+          borehole_layers: layers_query,
+          field_flags: flags_query,
+          field_edits: edits_query
+        )
+
       %{borehole | documents: list_documents(borehole)}
     else
       _ -> nil
@@ -150,11 +184,16 @@ defmodule Api.Boreholes do
   present, `location` is set via `ST_Transform(ST_SetSRID(ST_MakePoint(x, y), epsg), 4326)`
   (ADR-0001) rather than expecting the caller to reproject coordinates itself.
 
-  Each map in `layers_attrs` gets `"position"` set to its 1-based index if it doesn't have one.
+  Each map in `layers_attrs` gets `"position"` set to its 1-based index if it doesn't have one;
+  afterwards positions are renumbered by depth. `borehole_attrs` may carry `"sources"` and a
+  layer a `"source"`.
 
   Options:
     * `:document_id` - an existing `documents.id` to attach as this borehole's original
       document (ADR-0001, via `attach_documents/3`)
+    * `:flags`, `:edits` - the validator's flags and corrections (`Api.Boreholes.Review`), which
+      refer to layers by `layer_position`; the plausibility checks run afterwards
+      (`Api.Boreholes.Checks`)
     * `:additional_document_ids` - existing `documents.id`s to attach as `additional` documents
       (e.g. the split-out PDF the borehole was extracted from); duplicates and the original are
       ignored
@@ -162,9 +201,11 @@ defmodule Api.Boreholes do
   def create_borehole(borehole_attrs, layers_attrs, opts \\ []) do
     Repo.transaction(fn ->
       with {:ok, borehole} <- insert_borehole(borehole_attrs),
-           :ok <- set_location(borehole, borehole_attrs),
-           {:ok, _layers} <- insert_layers(borehole, layers_attrs),
+           :ok <- locate(borehole, borehole_attrs),
+           {:ok, layers} <- insert_layers(borehole, layers_attrs),
+           :ok <- Review.insert_pipeline_extras(borehole, layers, opts[:flags], opts[:edits]),
            :ok <- maybe_attach(borehole, opts) do
+        Review.finish(borehole.id)
         get_borehole(borehole.id)
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -172,31 +213,102 @@ defmodule Api.Boreholes do
     end)
   end
 
+  defp locate(borehole, attrs) do
+    case set_location(borehole, attrs) do
+      {:error, :unknown_epsg} -> flag_unknown_epsg(borehole, attrs)
+      :ok -> :ok
+    end
+  end
+
   defp insert_borehole(attrs) do
     %Borehole{} |> Borehole.changeset(attrs) |> Repo.insert()
   end
 
-  defp set_location(borehole, attrs) do
+  @doc """
+  Sets `location` from `x`/`y`/`epsg` (reprojected to WGS84). `{:error, :unknown_epsg}` if `epsg`
+  is not an integer known to PostGIS (`spatial_ref_sys`); nothing is written then. `:ok` without
+  coordinates.
+  """
+  def set_location(borehole, attrs) do
     attrs = stringify_keys(attrs)
 
     case {attrs["x"], attrs["y"], attrs["epsg"]} do
       {x, y, epsg} when not is_nil(x) and not is_nil(y) and not is_nil(epsg) ->
-        query =
+        with {:ok, srid} <- known_epsg(epsg),
+             {:ok, x} <- to_float(x),
+             {:ok, y} <- to_float(y) do
           from(b in Borehole, where: b.id == ^borehole.id)
           |> update(
             set: [
               location:
-                fragment("ST_Transform(ST_SetSRID(ST_MakePoint(?, ?), ?), 4326)", ^x, ^y, ^epsg)
+                fragment("ST_Transform(ST_SetSRID(ST_MakePoint(?, ?), ?), 4326)", ^x, ^y, ^srid),
+              source_x: ^x,
+              source_y: ^y,
+              source_epsg: ^srid
             ]
           )
+          |> Repo.update_all([])
 
-        Repo.update_all(query, [])
-        :ok
+          :ok
+        end
 
       _ ->
         :ok
     end
   end
+
+  defp to_float(n) when is_number(n), do: {:ok, n * 1.0}
+
+  defp to_float(s) when is_binary(s) do
+    case Float.parse(String.replace(s, ",", ".")) do
+      {f, ""} -> {:ok, f}
+      _ -> {:error, :unknown_epsg}
+    end
+  end
+
+  defp to_float(_), do: {:error, :unknown_epsg}
+
+  # integer (or integer string) present in spatial_ref_sys
+  defp known_epsg(epsg) do
+    srid =
+      case epsg do
+        n when is_integer(n) -> n
+        s when is_binary(s) -> with {n, ""} <- Integer.parse(s), do: n
+        _ -> nil
+      end
+
+    # int4 range, so the SELECT cannot overflow
+    if is_integer(srid) and srid in 1..2_147_483_647 and
+         Repo.exists?(from(r in "spatial_ref_sys", where: r.srid == ^srid)),
+       do: {:ok, srid},
+       else: {:error, :unknown_epsg}
+  end
+
+  @doc "Whether `epsg` is an integer known to PostGIS."
+  def known_epsg?(epsg), do: match?({:ok, _}, known_epsg(epsg))
+
+  # POST /api/boreholes: the borehole is kept without location, flagged for a human
+  defp flag_unknown_epsg(borehole, attrs) do
+    epsg = attrs |> stringify_keys() |> Map.get("epsg")
+
+    %FieldFlag{borehole_id: borehole.id}
+    |> FieldFlag.changeset(%{
+      "field" => "location",
+      "severity" => "error",
+      "origin" => "rule",
+      "code" => "unknown_epsg",
+      "message" =>
+        "EPSG #{inspect_epsg(epsg)} is unknown; coordinates x/y kept in source_coordinate_raw"
+    })
+    |> Repo.insert()
+    |> case do
+      {:ok, _} -> :ok
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp inspect_epsg(epsg) when is_binary(epsg), do: epsg
+  defp inspect_epsg(epsg), do: inspect(epsg)
 
   defp insert_layers(borehole, layers_attrs) do
     layers_attrs
@@ -289,6 +401,72 @@ defmodule Api.Boreholes do
 
   def document_file_path(_document), do: nil
 
+  @doc """
+  Fills `sha256` of documents stored before it existed (or added by `mix documents.backfill`), so
+  duplicate uploads of them are recognised too. Documents without a readable file are skipped.
+  Returns `%{updated: n, skipped: m}`.
+  """
+  def backfill_document_sha256 do
+    Repo.all(from d in Document, where: is_nil(d.sha256))
+    |> Enum.reduce(%{updated: 0, skipped: 0}, fn document, acc ->
+      with path when is_binary(path) <- document_file_path(document),
+           {:ok, sha256} <- file_sha256(path) do
+        Repo.update_all(from(d in Document, where: d.id == ^document.id), set: [sha256: sha256])
+        %{acc | updated: acc.updated + 1}
+      else
+        _ -> %{acc | skipped: acc.skipped + 1}
+      end
+    end)
+  end
+
+  # streamed in chunks, the file is never held in memory
+  defp file_sha256(path) do
+    hash =
+      path
+      |> File.stream!(1_048_576)
+      |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
+      |> :crypto.hash_final()
+      |> Base.encode16(case: :lower)
+
+    {:ok, hash}
+  rescue
+    e in File.Error -> {:error, e.reason}
+  end
+
+  @doc """
+  Documents with this SHA-256 (hex, any case), newest first, each with `borehole_count` (boreholes
+  that have it as their original document) and its `pipeline_runs` (newest first).
+  """
+  def list_documents_by_sha256(sha256) when is_binary(sha256) do
+    sha256 = String.downcase(sha256)
+
+    counts =
+      from(bd in BoreholeDocument,
+        where: bd.role == "original",
+        group_by: bd.document_id,
+        select: %{document_id: bd.document_id, count: count(bd.borehole_id)}
+      )
+
+    from(d in Document,
+      left_join: c in subquery(counts),
+      on: c.document_id == d.id,
+      where: d.sha256 == ^sha256,
+      order_by: [desc: d.inserted_at, desc: d.id],
+      select: {d, coalesce(c.count, 0)}
+    )
+    |> Repo.all()
+    |> Enum.map(fn {document, count} ->
+      runs =
+        from(r in PipelineRun,
+          where: r.document_id == ^document.id,
+          order_by: [desc: r.inserted_at, desc: r.id]
+        )
+        |> Repo.all()
+
+      %{document: document, borehole_count: count, pipeline_runs: runs}
+    end)
+  end
+
   @upload_extensions ~w(.pdf .png .jpg .jpeg .tif .tiff .docx)
 
   @doc """
@@ -307,13 +485,15 @@ defmodule Api.Boreholes do
       destination = Path.join(storage_dir(), storage_path)
 
       with :ok <- File.mkdir_p(storage_dir()),
+           {:ok, sha256} <- file_sha256(path),
            :ok <- File.cp(path, destination),
            {:ok, %{size: size}} <- File.stat(destination) do
         attrs = %{
           original_filename: Path.basename(filename),
           storage_path: storage_path,
           mime_type: MIME.from_path(filename),
-          size_bytes: size
+          size_bytes: size,
+          sha256: sha256
         }
 
         case Repo.insert(Document.changeset(%Document{id: id}, attrs)) do
@@ -459,7 +639,7 @@ defmodule Api.Boreholes do
           on: l.exec_stage_id == e.id,
           where: l.document_id == ^uuid,
           distinct: true,
-          order_by: [desc: e.inserted_at]
+          order_by: [desc: e.inserted_at, desc: e.id]
         )
         |> filter_exec_stages(filters)
         |> Repo.all()
@@ -603,16 +783,17 @@ defmodule Api.Boreholes do
     end
   end
 
-  @retryable_types ~w(extract transform)
+  @retryable_types ~w(extract transform validate)
 
   @doc """
-  Retries one failed or stopped `extract`/`transform` job of a finished run: reopens the run as
+  Retries one failed or stopped `extract`/`transform`/`validate` job of a finished run: reopens the run as
   `running` and asks the pipeline to redo just that borehole (`Api.Pipeline.submit_job_retry/2`);
   the pipeline records the new attempt as a new exec_stage row, the old row stays. Extract is
-  followed by transform for that borehole. If the pipeline cannot be reached the run keeps its
+  followed by transform and validate for that borehole. If the pipeline cannot be reached the run keeps its
   previous status. `{:error, {:conflict, message}}` if the job cannot be retried: wrong type or
   status, already retried, run still active, no pipeline configured, or its input is missing
-  (the split result for extract, a successful extract for transform).
+  (the split result for extract, a successful extract for transform, a successful transform for
+  validate).
   """
   def retry_exec_stage(%ExecStage{} = exec_stage) do
     with :ok <- check_retryable(exec_stage),
@@ -632,7 +813,7 @@ defmodule Api.Boreholes do
   end
 
   defp check_retryable(%ExecStage{type: type}) when type not in @retryable_types,
-    do: {:error, {:conflict, "only extract and transform jobs can be retried"}}
+    do: {:error, {:conflict, "only extract, transform and validate jobs can be retried"}}
 
   defp check_retryable(%ExecStage{status: status}) when status not in ["failed", "stopped"],
     do: {:error, {:conflict, "only failed or stopped jobs can be retried, this one is #{status}"}}
@@ -655,8 +836,12 @@ defmodule Api.Boreholes do
   defp check_run_finished(_run), do: :ok
 
   defp check_retry_input(%ExecStage{type: type} = e) do
-    needed = if type == "extract", do: {"split", nil}, else: {"extract", e.position}
-    {needed_type, needed_position} = needed
+    {needed_type, needed_position} =
+      case type do
+        "extract" -> {"split", nil}
+        "transform" -> {"extract", e.position}
+        "validate" -> {"transform", e.position}
+      end
 
     ok =
       from(o in ExecStage,
@@ -748,7 +933,20 @@ defmodule Api.Boreholes do
           |> select_merge(^%{score: search_score(search)})
       end
 
-    Enum.reduce(filters, base, &filter/2)
+    base
+    |> select_merge(^%{open_flag_count: open_flag_count()})
+    |> then(fn query -> Enum.reduce(filters, query, &filter/2) end)
+  end
+
+  # Open flags of the borehole as a correlated subquery, no N+1 (ADR-0006).
+  defp open_flag_count do
+    dynamic(
+      [borehole: b],
+      fragment(
+        "(SELECT count(*) FROM field_flags f WHERE f.borehole_id = ? AND f.resolved_at IS NULL AND (f.layer_id IS NULL OR EXISTS (SELECT 1 FROM borehole_layers l WHERE l.id = f.layer_id)))",
+        b.id
+      )
+    )
   end
 
   defp filter(
@@ -771,6 +969,9 @@ defmodule Api.Boreholes do
 
   defp filter({:verified, verified}, q) when is_boolean(verified),
     do: where(q, [borehole: b], b.verified == ^verified)
+
+  defp filter({:flagged, true}, q), do: where(q, ^dynamic(^open_flag_count() > 0))
+  defp filter({:flagged, false}, q), do: where(q, ^dynamic(^open_flag_count() == 0))
 
   defp filter({:drilled_from, %Date{} = date}, q),
     do: where(q, [borehole: b], b.drilled_at >= ^date)
@@ -810,6 +1011,18 @@ defmodule Api.Boreholes do
     if negate, do: dynamic([borehole: b], is_nil(b.drilled_at) or not (^any)), else: any
   end
 
+  defp term_condition(%{field: field, values: values, negate: negate})
+       when field in [:verified, :flagged] do
+    any =
+      any_of(values, fn
+        value when field == :verified -> dynamic([borehole: b], b.verified == ^value)
+        true -> dynamic(^open_flag_count() > 0)
+        false -> dynamic(^open_flag_count() == 0)
+      end)
+
+    if negate, do: dynamic(not (^any)), else: any
+  end
+
   defp term_condition(%{field: field, values: values, negate: negate}) do
     columns = Keyword.keys(@search_columns[field])
     any = any_of(values, &text_condition(columns, like_pattern(&1), negate))
@@ -840,7 +1053,7 @@ defmodule Api.Boreholes do
   # Sum of the weights of the columns each value was found in, plus 5 if the name starts with it.
   defp search_score(%SearchQuery{terms: terms}) do
     for %{field: field, negate: false, values: values} <- terms,
-        field != :date,
+        field in [:text, :name, :place],
         value <- values,
         reduce: dynamic(fragment("0::int")) do
       acc ->
@@ -1000,6 +1213,9 @@ defmodule Api.Boreholes do
 
       {:score, _dir} ->
         order_by(query, [borehole: b], asc: b.name)
+
+      {:open_flags, dir} ->
+        order_by(query, ^[{dir, open_flag_count()}, {:asc, dynamic([borehole: b], b.id)}])
 
       {field, dir} ->
         order_by(query, [borehole: b], [{^nulls_last(dir), field(b, ^field)}, asc: b.id])

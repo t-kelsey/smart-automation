@@ -57,7 +57,7 @@
 		},
 		{
 			name: 'BEM',
-			text: 'The borehole extraction pipeline in Python, run as a small HTTP service. It gets a document from the API, runs four Claude stages over it and posts the finished boreholes back. Like the UI, it only uses the API. The AI backend is pluggable.'
+			text: 'The borehole extraction pipeline in Python, run as a small HTTP service. It gets a document from the API, runs five Claude stages over it and posts the finished boreholes back. Like the UI, it only uses the API. The AI backend is pluggable.'
 		}
 	];
 
@@ -76,7 +76,11 @@
 		},
 		{
 			name: 'Transform',
-			text: 'The raw extraction is translated into English and shaped like the database tables. Petrography is mapped to the terms of DIN 4023, and a borehole with a layer that cannot be mapped is not uploaded. Default: Haiku, high effort.'
+			text: 'The raw extraction is translated into English and shaped like the database tables. Petrography is mapped to the terms of DIN 4023; a term that cannot be mapped is left empty for review. Default: Haiku, high effort.'
+		},
+		{
+			name: 'Validate',
+			text: 'A second model checks every value against the document, notes where it is written, corrects what is clearly wrong and flags what is doubtful. Then the borehole is stored, ready for human review. Default: Opus, high effort.'
 		}
 	];
 
@@ -84,9 +88,9 @@
 		'Files are queued in the browser, nothing is stored yet. The user picks a model and effort per stage, then starts the extraction.',
 		'The UI uploads each file to the API, which stores it and creates a pipeline run.',
 		'The API tells BEM to execute the run. BEM answers at once and queues the job. A queued or running run can be stopped from the UI.',
-		'A BEM worker downloads the document from the API and runs the four stages.',
+		'A BEM worker downloads the document from the API and runs the five stages.',
 		'After every stage, BEM uploads its output to the API, so the UI can show live progress.',
-		'Each valid borehole is posted to the API and linked to its source document. The run ends as completed, failed or stopped.'
+		'Each validated borehole is posted to the API and linked to its source document. The run ends as completed, failed or stopped.'
 	];
 
 	const diagram = `flowchart LR
@@ -101,7 +105,7 @@
     fs[("Document storage")]
     subgraph bem["BEM (Python)"]
         direction LR
-        filter["1 Filter"] --> split["2 Split"] --> extract["3 Extract"] --> transform["4 Transform<br/>DIN 4023"]
+        filter["1 Filter"] --> split["2 Split"] --> extract["3 Extract"] --> transform["4 Transform<br/>DIN 4023"] --> validate["5 Validate"]
     end
     claude{{"Claude models"}}
     user <--> ui

@@ -61,6 +61,19 @@ run the search and close the drawer.
 		}
 	];
 
+	const reviewRules: Rule[] = [
+		{
+			syntax: 'verified:yes',
+			meaning: 'Released after review; verified:no for the rest.',
+			example: 'verified:no'
+		},
+		{
+			syntax: 'flagged:yes',
+			meaning: 'Has open flags to review; flagged:no for none.',
+			example: 'flagged:yes verified:no'
+		}
+	];
+
 	const combineRules: Rule[] = [
 		{
 			syntax: 'a b',
@@ -123,6 +136,11 @@ run the search and close the drawer.
 				<section class="space-y-3">
 					<h5 class="h6">Names and places</h5>
 					{@render rules(textRules)}
+				</section>
+
+				<section class="space-y-3">
+					<h5 class="h6">Review status</h5>
+					{@render rules(reviewRules)}
 				</section>
 
 				<section class="space-y-3">

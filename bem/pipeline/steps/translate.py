@@ -1,4 +1,4 @@
-"""The four pipeline steps. Each writes its intermediate output below `out_dir`."""
+"""The five pipeline steps. Each writes its intermediate output below `out_dir`."""
 
 import json
 import pathlib
@@ -139,7 +139,7 @@ def transform_boreholes(
                 schema=schemas.DB_PAYLOAD,
                 report=part,
                 tools="",
-                max_turns=2,
+                max_turns=4,  # the CLI sometimes spends a turn on a tool attempt
             )
             payload, din_issues = din4023.conform(payload)
             coordinate_systems.resolve(payload["borehole"])

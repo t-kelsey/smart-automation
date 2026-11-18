@@ -12,6 +12,39 @@ export interface ApiGeoPoint {
 /** Decimals are serialised as strings ("18.3"). */
 type Decimal = string | number;
 
+/** Where a value is written: page 1-based, box normalised 0–1, origin top left (ADR-0006). */
+export interface ApiSource {
+	document_id: string;
+	page: number;
+	box: [number, number, number, number] | null;
+}
+
+export interface ApiFlag {
+	id: string;
+	field: string;
+	layer_id: string | null;
+	severity: 'warning' | 'error';
+	message: string;
+	origin: 'rule' | 'validator';
+	code: string | null;
+	resolved_at: string | null;
+	resolved_by: 'human' | 'rule' | null;
+	/** Proposed value, any JSON; absent or `null` if none. */
+	suggestion?: unknown;
+	inserted_at: string;
+}
+
+export interface ApiEdit {
+	id: string;
+	field: string;
+	layer_id: string | null;
+	old_value: unknown;
+	new_value: unknown;
+	source: 'validator' | 'human';
+	reason: string | null;
+	inserted_at: string;
+}
+
 export interface ApiBoreholeLayer {
 	id: string;
 	position: number;
@@ -22,6 +55,8 @@ export interface ApiBoreholeLayer {
 	color: string | null;
 	raw_text: string | null;
 	metadata: Record<string, unknown>;
+	source?: ApiSource | null;
+	sources?: Record<string, ApiSource | null> | null;
 }
 
 /**
@@ -57,11 +92,16 @@ export interface ApiBorehole {
 	end_date: string | null;
 	source_coordinate_system: string | null;
 	source_coordinate_raw: string | null;
+	source_x?: number | null;
+	source_y?: number | null;
+	source_epsg?: number | null;
 	total_depth_m: Decimal | null;
 	borehole_length_m: Decimal | null;
 	elevation_m: Decimal | null;
 	groundwater_level_m: Decimal | null;
 	verified: boolean;
+	verified_at?: string | null;
+	open_flag_count?: number;
 	metadata: Record<string, unknown>;
 	inserted_at: string;
 	updated_at: string;
@@ -72,6 +112,9 @@ export interface ApiBoreholeDetail extends ApiBorehole {
 	location: ApiGeoPoint | null;
 	layers: ApiBoreholeLayer[];
 	documents: ApiBoreholeDocument[];
+	sources?: Record<string, ApiSource | null> | null;
+	flags?: ApiFlag[];
+	edits?: ApiEdit[];
 }
 
 /** `GET /api/documents/:id` → `{ data: ApiDocumentDetail }`. */
@@ -92,11 +135,11 @@ export interface ApiFeature {
 	score?: number;
 }
 
-/** With `view=points` the properties hold only id, name and verified. */
+/** With `view=points` the properties hold only id, name, verified and the open flag count. */
 export interface ApiPointFeature {
 	type: 'Feature';
 	geometry: ApiGeoPoint | null;
-	properties: Pick<ApiBorehole, 'id' | 'name' | 'verified'>;
+	properties: Pick<ApiBorehole, 'id' | 'name' | 'verified' | 'open_flag_count'>;
 }
 
 /** With `view=columns` (requires `bbox`) the properties add the total depth and the layers. */

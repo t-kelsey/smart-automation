@@ -241,3 +241,64 @@ GUESS_EPSG = {
     },
     "required": ["approx_lon", "approx_lat", "reasoning"],
 }
+
+# Step 5: an independent check of the transform payload against the page images (ADR-0006)
+_VERDICT = {"type": "string", "enum": ["ok", "corrected", "uncertain", "wrong"]}
+_PIXEL_BOX = {
+    "type": ["array", "null"],
+    "items": {"type": "number"},
+    "description": "[x0, y0, x1, y1] in pixels of the page image, origin top left",
+}
+_CHECK = {
+    "field": {"type": "string"},
+    "verdict": _VERDICT,
+    "corrected_value": {
+        "type": ["string", "number", "object", "null"],
+        "description": "the right value with verdict corrected, a suggestion with uncertain/wrong, else null (location: {x, y, epsg})",
+    },
+    "message": {**_t("string"), "description": "why the verdict is not ok"},
+}
+VALIDATE = {
+    "type": "object",
+    "properties": {
+        "borehole_fields": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"page": _t("integer"), "box": _PIXEL_BOX, **_CHECK},
+                "required": ["field", "page", "box", "verdict", "corrected_value", "message"],
+            },
+        },
+        "layers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "integer"},
+                    "page": _t("integer"),
+                    "box": _PIXEL_BOX,
+                    "field_boxes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"field": {"type": "string"}, "page": _t("integer"), "box": _PIXEL_BOX},
+                            "required": ["field", "page", "box"],
+                        },
+                        "description": "where each layer field is written (depths, description, stratigraphy, colour)",
+                    },
+                    "fields": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": _CHECK,
+                            "required": ["field", "verdict", "corrected_value", "message"],
+                        },
+                        "description": "only the fields that are not ok",
+                    },
+                },
+                "required": ["position", "page", "box", "field_boxes", "fields"],
+            },
+        },
+    },
+    "required": ["borehole_fields", "layers"],
+}
