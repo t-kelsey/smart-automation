@@ -62,6 +62,17 @@ defmodule Api.Boreholes do
   end
 
   @doc """
+  Preloads the layers (ordered by position) of the boreholes in `list_boreholes/1` entries, in one
+  query for all of them.
+  """
+  @spec preload_layers([entry()]) :: [entry()]
+  def preload_layers(entries) do
+    layers_query = from(l in BoreholeLayer, order_by: l.position)
+    boreholes = Repo.preload(Enum.map(entries, & &1.borehole), borehole_layers: layers_query)
+    Enum.zip_with(entries, boreholes, fn entry, borehole -> %{entry | borehole: borehole} end)
+  end
+
+  @doc """
   Fetches a borehole by id, preloading its documents and layers (ordered by position).
 
   Each document carries its `role` for this borehole; the original document comes first.

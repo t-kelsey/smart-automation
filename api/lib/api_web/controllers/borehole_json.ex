@@ -37,9 +37,33 @@ defmodule ApiWeb.BoreholeJSON do
     %{
       type: "Feature",
       geometry: borehole.location,
-      properties: if(view == :points, do: point_properties(borehole), else: properties(borehole))
+      properties: feature_properties(borehole, view)
     }
     |> then(fn f -> if score, do: Map.put(f, :score, score), else: f end)
+  end
+
+  defp feature_properties(borehole, :points), do: point_properties(borehole)
+  defp feature_properties(borehole, :columns), do: column_properties(borehole)
+  defp feature_properties(borehole, _view), do: properties(borehole)
+
+  # What the map's 3D detail view draws: the layers' depths, material text and colour.
+  defp column_properties(%Borehole{} = borehole) do
+    borehole
+    |> point_properties()
+    |> Map.merge(%{
+      total_depth_m: borehole.total_depth_m,
+      layers:
+        Enum.map(borehole.borehole_layers, fn layer ->
+          Map.take(layer(layer), [
+            :id,
+            :position,
+            :depth_from_m,
+            :depth_to_m,
+            :petrography,
+            :color
+          ])
+        end)
+    })
   end
 
   defp point_properties(%Borehole{} = borehole) do

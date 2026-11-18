@@ -4,7 +4,7 @@ Web frontend of the geodatabase: explore, search and review boreholes and start 
 
 ## Why it exists
 
-The extracted data is only useful if people can find and judge it. The web app shows boreholes on an interactive world map, searches them (name, place, date with autocompletion), draws each borehole as a DIN 4023 profile column next to its source document, and lets users upload reports, configure and watch pipeline runs (retrying a whole run or a single failed extract/transform job) and review the results.
+The extracted data is only useful if people can find and judge it. The web app shows boreholes on an interactive world map (top-down, or as a tilted 3D detail view where each borehole is a column of its layers with DIN 4023 hatching and colours, or as a side view along a drawn line with predicted layers between the boreholes), searches them (name, place, date with autocompletion), draws each borehole as a DIN 4023 profile column next to its source document, and lets users upload reports, configure and watch pipeline runs (retrying a whole run or a single failed extract/transform job) and review the results.
 
 ## Development setup
 
@@ -26,15 +26,15 @@ The production build imports `../standards` (the DIN 4023 definitions), so the D
 
 ## Technology
 
-| Choice                                  | Why                                                                                                                                                                                                      |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SvelteKit 3 / Svelte 5 + TypeScript** | Little boilerplate and fast rendering for map- and chart-heavy pages; server hooks proxy the API so the browser only talks to one origin.                                                                |
+| Choice                                  | Why                                                                                                                                                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **SvelteKit 3 / Svelte 5 + TypeScript** | Little boilerplate and fast rendering for map- and chart-heavy pages; server hooks proxy the API so the browser only talks to one origin.                                                              |
 | **MapLibre GL JS + supercluster**       | Open-source vector map that takes GeoJSON in WGS84 directly from the API, no API key, and clustering keeps large borehole sets responsive ([ADR-0004](../docs/adr/0004-web-frontend-and-din-4023.md)). |
-| **Own DIN 4023 engine in TypeScript**   | Profile columns follow the standard's materials, colours and hatching, rendered as SVG patterns from layer data ([ADR-0004](../docs/adr/0004-web-frontend-and-din-4023.md)).                             |
-| **pdf.js**                              | Shows the source document beside the profile so users can check the extraction.                                                                                                                          |
-| **Tailwind 4 + Skeleton**               | Consistent styling and accessible components without a custom design system.                                                                                                                             |
-| **Layered services/repositories**       | Keeps UI independent of the transport; mock repositories (faker) remain for offline UI work but are not wired in.                                                                                        |
-| **adapter-node, pnpm**                  | Runs as a plain Node server in Docker; reproducible installs.                                                                                                                                            |
+| **Own DIN 4023 engine in TypeScript**   | Profile columns follow the standard's materials, colours and hatching, rendered as SVG patterns from layer data ([ADR-0004](../docs/adr/0004-web-frontend-and-din-4023.md)).                           |
+| **pdf.js**                              | Shows the source document beside the profile so users can check the extraction.                                                                                                                        |
+| **Tailwind 4 + Skeleton**               | Consistent styling and accessible components without a custom design system.                                                                                                                           |
+| **Layered services/repositories**       | Keeps UI independent of the transport; mock repositories (faker) remain for offline UI work but are not wired in.                                                                                      |
+| **adapter-node, pnpm**                  | Runs as a plain Node server in Docker; reproducible installs.                                                                                                                                          |
 
 ## Architecture
 

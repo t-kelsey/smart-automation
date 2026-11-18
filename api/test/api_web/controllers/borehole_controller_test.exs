@@ -130,6 +130,45 @@ defmodule ApiWeb.BoreholeControllerTest do
       assert Map.keys(props) |> Enum.sort() == ["id", "name", "verified"]
     end
 
+    test "view=columns returns the layers ordered by position, within the bbox", %{conn: conn} do
+      inside =
+        insert_borehole(%{
+          name: "Inside",
+          total_depth_m: Decimal.new("12"),
+          location: %Geo.Point{coordinates: {10.0, 50.0}, srid: 4326}
+        })
+
+      insert_layer(inside, %{position: 2, depth_from_m: 3, depth_to_m: 12, petrography: "Ton"})
+      insert_layer(inside, %{position: 1, depth_from_m: 0, depth_to_m: 3, petrography: "Sand"})
+
+      outside =
+        insert_borehole(%{
+          name: "Outside",
+          location: %Geo.Point{coordinates: {100.0, 10.0}, srid: 4326}
+        })
+
+      insert_layer(outside, %{position: 1, depth_from_m: 0, depth_to_m: 1})
+
+      assert %{"features" => [%{"properties" => props}]} =
+               json_response(get(conn, ~p"/api/boreholes?view=columns&bbox=9,49,11,51"), 200)
+
+      assert props["id"] == inside.id
+      assert props["total_depth_m"] == "12"
+
+      assert [
+               %{"position" => 1, "petrography" => "Sand"} = first,
+               %{"position" => 2, "petrography" => "Ton"}
+             ] = props["layers"]
+
+      assert Map.keys(first) |> Enum.sort() ==
+               ["color", "depth_from_m", "depth_to_m", "id", "petrography", "position"]
+    end
+
+    test "view=columns requires a bbox", %{conn: conn} do
+      assert %{"errors" => %{"detail" => "bbox is required for view=columns"}} =
+               json_response(get(conn, ~p"/api/boreholes?view=columns"), 400)
+    end
+
     test "returns 400 for an invalid sort or limit", %{conn: conn} do
       assert %{"errors" => %{"detail" => "invalid sort"}} =
                json_response(get(conn, ~p"/api/boreholes?sort=nope"), 400)

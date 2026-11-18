@@ -1,5 +1,7 @@
 import type {
+	BBox,
 	Borehole,
+	BoreholeColumnData,
 	DocumentDetail,
 	BoreholeSummary,
 	ListParams,
@@ -31,6 +33,8 @@ export interface BoreholeRepository {
 	list(params?: ListParams): Promise<Page<BoreholeSummary>>;
 	/** Positions of all boreholes with a location, without any further details. */
 	listMapPoints(): Promise<MapPoint[]>;
+	/** Located boreholes in `bbox` with their layers, for drawing them as columns. */
+	listColumns(bbox: BBox): Promise<BoreholeColumnData[]>;
 	/** Returns the borehole including layers and documents, or `null` if it does not exist. */
 	getById(id: string): Promise<Borehole | null>;
 	/** Returns one document with its linked boreholes, or `null` if it does not exist. */

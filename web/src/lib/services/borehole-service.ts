@@ -1,4 +1,6 @@
 import type {
+	BBox,
+	BoreholeColumnData,
 	Borehole,
 	BoreholeFilter,
 	BoreholeSort,
@@ -82,6 +84,15 @@ export class BoreholeService {
 	/** Positions of all boreholes for the map; one light request instead of paging through the list. */
 	listMapPoints(): Promise<MapPoint[]> {
 		return this.repository.listMapPoints();
+	}
+
+	/** Located boreholes in `bbox` with their layers ordered by depth, for drawing them as columns. */
+	async listColumns(bbox: BBox): Promise<BoreholeColumnData[]> {
+		const columns = await this.repository.listColumns(bbox);
+		return columns.map((column) => ({
+			...column,
+			layers: [...column.layers].sort((a, b) => a.startDepth - b.startDepth)
+		}));
 	}
 
 	/** Summary of one borehole, e.g. for a map tooltip. Throws `BoreholeNotFoundError` if it does not exist. */

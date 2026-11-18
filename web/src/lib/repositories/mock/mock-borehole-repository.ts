@@ -1,5 +1,7 @@
 import type {
+	BBox,
 	Borehole,
+	BoreholeColumnData,
 	BoreholeSummary,
 	DocumentDetail,
 	ListParams,
@@ -62,6 +64,18 @@ export class MockBoreholeRepository implements BoreholeRepository {
 	async listMapPoints(): Promise<MapPoint[]> {
 		return this.boreholes.flatMap(({ id, name, verified, location }) =>
 			location ? [{ id, name, verified, lon: location.lon, lat: location.lat }] : []
+		);
+	}
+
+	async listColumns([west, south, east, north]: BBox): Promise<BoreholeColumnData[]> {
+		return this.boreholes.flatMap(({ id, name, verified, location, totalDepth, layers }) =>
+			location &&
+			location.lon >= west &&
+			location.lon <= east &&
+			location.lat >= south &&
+			location.lat <= north
+				? [{ id, name, verified, lon: location.lon, lat: location.lat, totalDepth, layers }]
+				: []
 		);
 	}
 

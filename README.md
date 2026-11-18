@@ -12,7 +12,7 @@ Legacy borehole logs (scanned or digital PDFs, multilingual, many layouts) are t
 2. **Extract**: the pipeline finds the real borehole log pages, splits the report into one PDF per borehole, extracts depth intervals, lithology, stratigraphy and metadata (location, date, elevation) in the original wording, and translates and normalises it to English and to the DIN 4023 terms.
 3. **Georeference**: coordinates in local systems (e.g. Gauss-Krüger) are reprojected to WGS84 in PostGIS.
 4. **Store** boreholes, layers and the source document in a central PostGIS database.
-5. **Search and explore** on an interactive world map, with a query language (name, place, date) and autocompletion, and view each borehole as a DIN 4023 profile column next to its source document.
+5. **Search and explore** on an interactive world map (also as a 3D detail view with each borehole as a column of its layers, and as a section along a drawn line that predicts the layers between boreholes), with a query language (name, place, date) and autocompletion, and view each borehole as a DIN 4023 profile column next to its source document.
 
 Every pipeline run is tracked per stage (status, model, tokens, cost) and visible in the web app. A whole run or a single failed extract/transform job can be retried. Boreholes generated for demos are marked `metadata.source = "mock"`.
 

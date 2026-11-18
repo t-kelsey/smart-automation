@@ -99,6 +99,18 @@ export interface ApiPointFeature {
 	properties: Pick<ApiBorehole, 'id' | 'name' | 'verified'>;
 }
 
+/** With `view=columns` (requires `bbox`) the properties add the total depth and the layers. */
+export interface ApiColumnFeature {
+	type: 'Feature';
+	geometry: ApiGeoPoint | null;
+	properties: Pick<ApiBorehole, 'id' | 'name' | 'verified' | 'total_depth_m'> & {
+		layers: Pick<
+			ApiBoreholeLayer,
+			'id' | 'position' | 'depth_from_m' | 'depth_to_m' | 'petrography' | 'color'
+		>[];
+	};
+}
+
 /**
  * `GET /api/boreholes` and `GET /api/boreholes/search`. `total`, `limit` and `offset` are
  * GeoJSON foreign members for paging.

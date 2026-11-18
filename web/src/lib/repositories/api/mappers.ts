@@ -1,5 +1,6 @@
 import type {
 	Borehole,
+	BoreholeColumnData,
 	BoreholeDocument,
 	BoreholeLayer,
 	BoreholeSummary,
@@ -14,6 +15,7 @@ import type {
 	ApiBoreholeDetail,
 	ApiBoreholeLayer,
 	ApiBoreholeDocument,
+	ApiColumnFeature,
 	ApiDocument,
 	ApiDocumentDetail,
 	ApiFeature,
@@ -115,6 +117,24 @@ export function featureToMapPoint({ properties, geometry }: ApiPointFeature): Ma
 	if (!geometry) return [];
 	const [lon, lat] = geometry.coordinates;
 	return [{ id: properties.id, name: properties.name, verified: properties.verified, lon, lat }];
+}
+
+export function featureToColumn({ properties, geometry }: ApiColumnFeature): BoreholeColumnData[] {
+	if (!geometry) return [];
+	const [lon, lat] = geometry.coordinates;
+	return [
+		{
+			id: properties.id,
+			name: properties.name,
+			verified: properties.verified,
+			lon,
+			lat,
+			totalDepth: num(properties.total_depth_m),
+			layers: properties.layers.map((layer) =>
+				toLayer({ ...layer, stratigraphy: null, raw_text: null, metadata: {} })
+			)
+		}
+	];
 }
 
 /** `baseUrl` is the API base, used for links to document files. */

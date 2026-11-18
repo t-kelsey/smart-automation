@@ -1,4 +1,4 @@
-import { colorKeyByName } from './colors.ts';
+import { colorKeyByName, dinColors } from './colors.ts';
 import { standard } from './standard.ts';
 import type { DinColorKey, Language, Material, MaterialGroup, MaterialKey } from './types.ts';
 
@@ -118,6 +118,12 @@ export const materialGroups: {
 
 export const materialsByGroup = (group: MaterialGroup): Material[] =>
 	materialList.filter((m) => m.group === group);
+
+/** The material's DIN colour (Annex A) as hex, or `undefined` if the standard gives it none. */
+export function materialHex(key: MaterialKey): string | undefined {
+	const color = materials[key].color;
+	return color ? dinColors[color].hex : undefined;
+}
 
 /** Materials that can be named as minor component. */
 export const canBeSecondary = (key: MaterialKey): boolean => !!materials[key].secondaryShort;

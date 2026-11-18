@@ -1,3 +1,18 @@
+<script module lang="ts">
+	/** The layer under the pointer in the map's detail view. */
+	export interface HoveredLayer {
+		position: number;
+		/** Depths below the borehole start in metres. */
+		top: number;
+		bottom: number;
+		/** Main material, e.g. "Sand", or "unknown". */
+		label: string;
+		/** DIN short form, empty if the material is unknown. */
+		shortForm: string;
+		color: string;
+	}
+</script>
+
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { CheckIcon, ExternalLinkIcon, Share2Icon } from '@lucide/svelte';
@@ -9,11 +24,15 @@
 		point?: MapPoint;
 		/** Undefined while the summary is still loading. */
 		summary?: BoreholeSummary;
+		/** In the detail view: the hovered layer of the borehole's column. */
+		layer?: HoveredLayer;
 		onEnter?: () => void;
 		onLeave?: () => void;
 	}
 
-	let { point, summary, onEnter, onLeave }: Props = $props();
+	let { point, summary, layer, onEnter, onLeave }: Props = $props();
+
+	const metres = (value: number) => `${Number(value.toFixed(2))} m`;
 
 	let copied = $state(false);
 
@@ -67,6 +86,22 @@
 					></span>{:else}{summary.totalDepth === null ? '–' : `${summary.totalDepth} m`}{/if}
 			</dd>
 		</dl>
+		{#if layer}
+			<div class="flex items-center gap-2 border-t border-surface-200-800 pt-2 text-sm">
+				<span
+					class="size-4 shrink-0 rounded-sm border border-surface-950/30"
+					style:background-color={layer.color}
+				></span>
+				<span class="min-w-0 flex-1">
+					<span class="font-medium">Layer {layer.position}</span>
+					<span class="opacity-60">· {metres(layer.top)}–{metres(layer.bottom)}</span>
+					<span class="block truncate">
+						{layer.label}
+						{#if layer.shortForm}<span class="opacity-60">({layer.shortForm})</span>{/if}
+					</span>
+				</span>
+			</div>
+		{/if}
 		<div class="flex gap-2">
 			<button type="button" class="btn flex-1 preset-tonal btn-sm" onclick={share}>
 				{#if copied}<CheckIcon class="size-4" /> Copied{:else}<Share2Icon class="size-4" /> Share{/if}
