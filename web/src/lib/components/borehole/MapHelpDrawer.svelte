@@ -69,6 +69,50 @@
 				</section>
 
 				<section class="space-y-2">
+					<h5 class="h6">Detail view</h5>
+					<ul class="list-disc space-y-1 pl-5 text-sm">
+						<li>
+							Zoom in to level 11 or closer and press <em>Detail view</em>: the map tilts and each
+							borehole becomes a column of its layers.
+						</li>
+						<li>
+							The column is the borehole lifted out of the ground: the surface layer is on top, the
+							deepest layer stands on the map. Columns are 10 times taller than the borehole is
+							deep.
+						</li>
+						<li>
+							Each layer shows the DIN 4023 hatch and colour of its main material; grey layers could
+							not be classified, empty parts are depths without a recorded layer.
+						</li>
+						<li>
+							Hover or tap a layer to see its depth and material. Zooming out leaves the view.
+						</li>
+						<li>Drag with the right mouse button (or two fingers) to rotate and tilt.</li>
+					</ul>
+				</section>
+
+				<section class="space-y-2">
+					<h5 class="h6">Section</h5>
+					<ul class="list-disc space-y-1 pl-5 text-sm">
+						<li>
+							Press <em>Section</em>, click the start and the end of a line (Esc cancels). The map
+							shows the boreholes within 100 m of it.
+						</li>
+						<li>
+							<em>Show section</em> shows them side by side at their distance along the line, all starting
+							at the same height, so equal depths line up.
+						</li>
+						<li>
+							Between neighbouring boreholes, layers of the same material are connected unless they
+							would slope more than 45° (at 10× vertical exaggeration); layers without a partner
+							wedge out halfway. These predictions are lighter with dashed outlines and can be
+							switched off.
+						</li>
+						<li>Hover a layer for details, click a column to open the borehole.</li>
+					</ul>
+				</section>
+
+				<section class="space-y-2">
 					<h5 class="h6">Using the map</h5>
 					<ul class="list-disc space-y-1 pl-5 text-sm">
 						<li>Hover or tap a dot for title, date, height and depth.</li>

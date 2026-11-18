@@ -5,7 +5,10 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** The open section on the map page (`lon1,lat1,lon2,lat2`), set by shallow routing. */
+			section?: string;
+		}
 		// interface Platform {}
 	}
 }

@@ -61,6 +61,17 @@
 		plainIconSvg,
 		renderIcon
 	} from './dot-icons.ts';
+	import {
+		COLUMNS_LAYER,
+		DETAIL_BEARING,
+		DETAIL_MIN_ZOOM,
+		DETAIL_PITCH,
+		MapColumns,
+		type SegmentProperties
+	} from './map-columns.ts';
+	import type { HoveredLayer } from './BoreholeHoverCard.svelte';
+	import { MapSection } from './map-section.ts';
+	import { CORRIDOR_M, project, type SectionLine } from '#lib/borehole-columns/section.ts';
 	interface MapView {
 		lat: number;
 		lon: number;
@@ -92,6 +103,21 @@
 		showFill?: boolean;
 		/** Called once the map has rendered its first complete view. */
 		onReady?: () => void;
+		/**
+		 * 3D detail view: the map tilts and every borehole is a column of its layers. Only from zoom
+		 * DETAIL_MIN_ZOOM on; zooming out further leaves it and calls `onDetailExit`.
+		 */
+		detail?: boolean;
+		/** Called when the map left the detail view by itself (zoomed out too far). */
+		onDetailExit?: () => void;
+		/** Section drawing mode: two clicks draw a line, Esc cancels. */
+		drawingSection?: boolean;
+		/** The section line to preview, with its corridor and the boreholes it catches. */
+		sectionLine?: SectionLine;
+		/** Called with the drawn line after the second click. */
+		onSectionDrawn?: (line: SectionLine) => void;
+		/** Called when drawing is cancelled with Esc. */
+		onSectionDrawCancel?: () => void;
 	}
 
 	let {
@@ -103,7 +129,13 @@
 		onViewChange,
 		showLocate = false,
 		showFill = false,
-		onReady
+		onReady,
+		detail = false,
+		onDetailExit,
+		drawingSection = false,
+		sectionLine,
+		onSectionDrawn,
+		onSectionDrawCancel
 	}: Props = $props();
 
 	let container: HTMLDivElement;
@@ -112,6 +144,25 @@
 	let mapInstance: maplibregl.Map | undefined;
 	let locateNow: (() => void) | undefined;
 	let redrawDots: (() => void) | undefined;
+	let applyDetail: ((on: boolean) => void) | undefined;
+	let applySection: ((line: SectionLine | undefined) => void) | undefined;
+	let applyDrawing: ((on: boolean) => void) | undefined;
+
+	// Preview the section line and start or stop drawing when the props change.
+	$effect(() => {
+		const line = sectionLine;
+		applySection?.(line);
+	});
+	$effect(() => {
+		const on = drawingSection;
+		applyDrawing?.(on);
+	});
+
+	// Switch the detail view on or off when the prop changes.
+	$effect(() => {
+		const on = detail;
+		applyDetail?.(on);
+	});
 
 	// Redraw the dots when the fill is switched on or off.
 	$effect(() => {
@@ -155,6 +206,8 @@
 		if (!bounds.isEmpty() && fit) map.fitBounds(bounds, { padding, maxZoom: 14, duration: 0 });
 
 		const index = new Supercluster<{ id: string }>({ radius: 50, maxZoom: 14 }).load(features);
+		// The detail view (see below) draws columns instead of dots while this is set.
+		let detailActive = false;
 
 		// --- single boreholes: one GeoJSON source with only the unclustered points in view
 		const emptyCollection: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -170,6 +223,8 @@
 			}
 		});
 		const source = map.getSource<maplibregl.GeoJSONSource>('boreholes');
+		// The section line and its corridor, drawn below the dots.
+		const section = new MapSection(map, 'boreholes');
 
 		// --- dots: the inner circle is the hatch of the dominant material, or the verified colour until it is loaded
 		const iconPending = new Set<string>();
@@ -270,7 +325,18 @@
 			return new maplibregl.Marker({ element }).setLngLat(lngLat).addTo(map);
 		}
 
+		// Whether the dot layer holds data; the detail view empties it once, not on every move.
+		let dotsShown = false;
 		function update() {
+			// The detail view draws columns instead of clusters and dots.
+			if (detailActive) {
+				markers.forEach((marker) => marker.remove());
+				markers.clear();
+				if (dotsShown) source?.setData(emptyCollection);
+				dotsShown = false;
+				return;
+			}
+			dotsShown = true;
 			const b = map.getBounds();
 			const zoom = map.getZoom();
 			const grouped = zoom <= 5;
@@ -340,7 +406,7 @@
 		// --- the shared hover card
 		const cardElement = document.createElement('div');
 		cardElement.className = 'z-20';
-		const card = $state<{ point?: MapPoint; summary?: BoreholeSummary }>({});
+		const card = $state<{ point?: MapPoint; summary?: BoreholeSummary; layer?: HoveredLayer }>({});
 		const cardComponent = mount(BoreholeHoverCard, {
 			target: cardElement,
 			props: {
@@ -350,25 +416,50 @@
 				get summary() {
 					return card.summary;
 				},
-				onEnter: () => clearTimeout(hideTimer),
-				onLeave: () => scheduleHide()
+				get layer() {
+					return card.layer;
+				},
+				onEnter: () => {
+					overCard = true;
+					clearTimeout(hideTimer);
+				},
+				onLeave: () => {
+					overCard = false;
+					scheduleHide();
+				}
 			}
 		});
-		const cardMarker = new maplibregl.Marker({
-			element: cardElement,
-			anchor: 'bottom',
-			offset: [0, -(iconSize / 2 + 4)]
-		});
+		// Above the dot; in the detail view right of the pointer, so the column's other layers stay
+		// reachable. Markers cannot change their anchor, so the marker is replaced when switching.
+		const cardMarkerFor = (side: boolean) =>
+			new maplibregl.Marker(
+				side
+					? { element: cardElement, anchor: 'left', offset: [16, 0] }
+					: { element: cardElement, anchor: 'bottom', offset: [0, -(iconSize / 2 + 4)] }
+			)
+				.setLngLat([0, 0])
+				.addTo(map);
 		cardElement.hidden = true;
-		cardMarker.setLngLat([0, 0]).addTo(map);
+		let cardMarker = cardMarkerFor(false);
 
+		// The card stays while the pointer is on it. Map events reach the map through the card (it
+		// sits in the canvas container), so they are ignored there and cannot hide or move it.
+		let overCard = false;
+		const onCard = (e: maplibregl.MapMouseEvent) =>
+			e.originalEvent.target instanceof Element &&
+			!!e.originalEvent.target.closest('[role=tooltip]');
 		let hideTimer: ReturnType<typeof setTimeout>;
 		function scheduleHide() {
 			clearTimeout(hideTimer);
+			if (overCard) return;
+			// Long enough to move the pointer from the dot or column onto the card.
 			hideTimer = setTimeout(() => {
+				if (overCard) return;
 				cardElement.hidden = true;
 				card.point = undefined;
-			}, 250);
+				card.layer = undefined;
+				columns.highlight(undefined);
+			}, 600);
 		}
 		async function show(id: string, lngLat: [number, number]) {
 			clearTimeout(hideTimer);
@@ -391,35 +482,147 @@
 		}
 		const onEnter = (e: maplibregl.MapLayerMouseEvent) => {
 			const feature = e.features?.[0];
-			if (!feature) return;
+			if (!feature || onCard(e) || section.isDrawing) return;
 			map.getCanvas().style.cursor = 'pointer';
+			card.layer = undefined;
 			void show(
 				feature.properties.id as string,
 				(feature.geometry as unknown as PointFeature['geometry']).coordinates
 			);
 		};
-		const onLeave = () => {
+		const onLeave = (e: maplibregl.MapMouseEvent) => {
 			map.getCanvas().style.cursor = '';
-			scheduleHide();
+			if (!onCard(e)) scheduleHide();
 		};
 		map.on('mousemove', 'boreholes', onEnter);
 		map.on('mouseleave', 'boreholes', onLeave);
 		// Touch has no hover: a tap opens the card, a tap on the background closes it.
 		map.on('click', 'boreholes', onEnter);
 		map.on('click', (e) => {
-			// Clicks on the card reach the map too (markers sit in its canvas container): they must not close it
-			if (
-				e.originalEvent.target instanceof Element &&
-				e.originalEvent.target.closest('[role=tooltip]')
-			)
-				return;
-			if (!map.queryRenderedFeatures(e.point, { layers: ['boreholes'] }).length) scheduleHide();
+			// Clicks on the card reach the map too: they must not close it
+			if (onCard(e)) return;
+			const layers = [detailActive ? COLUMNS_LAYER : 'boreholes'];
+			if (!map.queryRenderedFeatures(e.point, { layers }).length) scheduleHide();
 		});
+
+		// --- detail view: columns instead of dots, on a tilted map
+		const columns = new MapColumns(
+			map,
+			(bbox) => getServices().then(({ boreholes }) => boreholes.listColumns(bbox)),
+			(error) => notify.fromError(error, 'Could not load borehole columns')
+		);
+		// The hovered segment is highlighted and shown in the card, which opens right of the pointer
+		// and follows it from layer to layer, but not within a layer, so it can be reached.
+		let cardLayerId: string | undefined;
+		const onColumnMove = (e: maplibregl.MapLayerMouseEvent) => {
+			const feature = e.features?.[0];
+			if (!feature || onCard(e) || section.isDrawing) return;
+			const segment = feature.properties as SegmentProperties;
+			map.getCanvas().style.cursor = 'pointer';
+			columns.highlight(segment.layerId);
+			const moved = segment.layerId !== cardLayerId || cardElement.hidden;
+			cardLayerId = segment.layerId;
+			card.layer = {
+				position: segment.position,
+				top: segment.top,
+				bottom: segment.bottom,
+				label: segment.label,
+				shortForm: segment.shortForm,
+				color: segment.color
+			};
+			if (moved) void show(segment.boreholeId, [e.lngLat.lng, e.lngLat.lat]);
+			else clearTimeout(hideTimer);
+		};
+		const onColumnLeave = (e: maplibregl.MapMouseEvent) => {
+			map.getCanvas().style.cursor = '';
+			if (onCard(e)) return;
+			scheduleHide();
+		};
+		function setDetail(on: boolean) {
+			if (on && map.getZoom() < DETAIL_MIN_ZOOM) {
+				onDetailExit?.();
+				return;
+			}
+			if (on === detailActive) return;
+			detailActive = on;
+			clearTimeout(hideTimer);
+			cardElement.hidden = true;
+			card.point = undefined;
+			card.layer = undefined;
+			cardLayerId = undefined;
+			overCard = false;
+			cardMarker.remove();
+			cardMarker = cardMarkerFor(on);
+			if (on) {
+				columns.show();
+				map.on('mousemove', COLUMNS_LAYER, onColumnMove);
+				map.on('mouseleave', COLUMNS_LAYER, onColumnLeave);
+				map.on('click', COLUMNS_LAYER, onColumnMove);
+				const bearing = map.getBearing() === 0 ? DETAIL_BEARING : map.getBearing();
+				map.easeTo({ pitch: DETAIL_PITCH, bearing, duration: 800 });
+			} else {
+				map.off('mousemove', COLUMNS_LAYER, onColumnMove);
+				map.off('mouseleave', COLUMNS_LAYER, onColumnLeave);
+				map.off('click', COLUMNS_LAYER, onColumnMove);
+				columns.hide();
+				map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+			}
+			update();
+			showSection(currentLine);
+		}
+
+		// --- section line: preview with the caught boreholes (rings on dots, sleeves on columns)
+		let currentLine: SectionLine | undefined;
+		function showSection(line: SectionLine | undefined) {
+			currentLine = line;
+			section.setLine(line);
+			const caught = line
+				? points.filter((p) => project(line, [p.lon, p.lat]).offset <= CORRIDOR_M)
+				: [];
+			section.setCaught(
+				caught.map((p) => [p.lon, p.lat]),
+				!detailActive
+			);
+			columns.mark(new Set(caught.map((p) => p.id)));
+		}
+		function setDrawing(on: boolean) {
+			if (on) {
+				clearTimeout(hideTimer);
+				cardElement.hidden = true;
+				section.startDrawing(
+					(line) => onSectionDrawn?.(line),
+					() => onSectionDrawCancel?.()
+				);
+			} else section.stopDrawing();
+		}
+		// Too far out for columns: back to the flat map with dots.
+		const onZoomEnd = () => {
+			if (!detailActive || map.getZoom() >= DETAIL_MIN_ZOOM) return;
+			setDetail(false);
+			onDetailExit?.();
+			notify.info(
+				'Detail view closed',
+				`Zoom in to level ${DETAIL_MIN_ZOOM} or closer to see borehole columns.`
+			);
+		};
+		map.on('zoomend', onZoomEnd);
+		applyDetail = setDetail;
+		setDetail(detail);
+		applySection = showSection;
+		showSection(sectionLine);
+		applyDrawing = setDrawing;
+		setDrawing(drawingSection);
 
 		cleanups.push(() => {
 			clearTimeout(hideTimer);
 			active = false;
 			redrawDots = undefined;
+			applyDetail = undefined;
+			applySection = undefined;
+			applyDrawing = undefined;
+			section.remove();
+			map.off('zoomend', onZoomEnd);
+			columns.hide();
 			clearTimeout(refreshTimer);
 			markers.forEach((marker) => marker.remove());
 			cardMarker.remove();

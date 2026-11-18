@@ -14,7 +14,7 @@ Legacy borehole logs (scanned or digital PDFs, multilingual, many layouts) are t
 4. **Validate**: a second model checks every value against the page, corrects what it is sure about and flags what is doubtful; plausibility checks (gaps, overlaps, depths, missing values) flag the rest.
 5. **Store** boreholes, layers and the source document in a central PostGIS database.
 6. **Review**: a person checks the flagged values next to the source document, where hovering a value highlights its spot in the PDF, edits or confirms them (every change is logged and can be undone) and releases the borehole.
-7. **Search and explore** on an interactive world map, with a query language (name, place, date) and autocompletion, and view each borehole as a DIN 4023 profile column next to its source document.
+7. **Search and explore** on an interactive world map (also as a 3D detail view with each borehole as a column of its layers, and as a section along a drawn line that predicts the layers between boreholes), with a query language (name, place, date) and autocompletion, and view each borehole as a DIN 4023 profile column next to its source document.
 
 Every pipeline run is tracked per stage (status, model, tokens, cost) and visible in the web app. A whole run or a single failed extract, transform or validate job can be retried. Boreholes generated for demos are marked `metadata.source = "mock"`.
 

@@ -10,11 +10,13 @@ defmodule ApiWeb.BoreholeController do
 
   @doc """
   GeoJSON list of boreholes with filters, sorting and paging (see docs/api-reference.md).
-  `view=points` returns only id, name and verified per feature, for the map.
+  `view=points` returns only id, name and verified per feature, for the map; `view=columns`
+  (requires `bbox`) adds the total depth and the layers, for the map's 3D detail view.
   """
   def index(conn, params) do
-    with {:ok, filters} <- BoreholeParams.parse(params) do
-      render_list(conn, filters, params)
+    with {:ok, filters} <- BoreholeParams.parse(params),
+         {:ok, view} <- parse_view(params, filters) do
+      render_list(conn, filters, view)
     end
   end
 
@@ -85,8 +87,9 @@ defmodule ApiWeb.BoreholeController do
   carries an autocorrected `suggestion` if there is one (ADR-0003).
   """
   def search(conn, params) do
-    with {:ok, filters} <- BoreholeParams.parse(params) do
-      render_list(conn, Map.put_new(filters, :q, ""), params)
+    with {:ok, filters} <- BoreholeParams.parse(params),
+         {:ok, view} <- parse_view(params, filters) do
+      render_list(conn, Map.put_new(filters, :q, ""), view)
     end
   end
 
@@ -99,8 +102,18 @@ defmodule ApiWeb.BoreholeController do
     end
   end
 
-  defp render_list(conn, filters, params) do
+  # Layers of every match are only loaded for a bounded area, never for the whole dataset.
+  defp parse_view(%{"view" => "points"}, _filters), do: {:ok, :points}
+
+  defp parse_view(%{"view" => "columns"}, filters) do
+    if filters[:bbox], do: {:ok, :columns}, else: {:error, "bbox is required for view=columns"}
+  end
+
+  defp parse_view(_params, _filters), do: {:ok, :full}
+
+  defp render_list(conn, filters, view) do
     %{entries: entries, total: total} = Boreholes.list_boreholes(filters)
+    entries = if view == :columns, do: Boreholes.preload_layers(entries), else: entries
 
     suggestion =
       case filters[:q] do
@@ -114,7 +127,7 @@ defmodule ApiWeb.BoreholeController do
       suggestion: suggestion,
       limit: filters[:limit],
       offset: filters[:offset] || 0,
-      view: if(params["view"] == "points", do: :points, else: :full)
+      view: view
     )
   end
 end

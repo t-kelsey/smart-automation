@@ -5,6 +5,7 @@ defmodule Api.Release do
       bin/api eval "Api.Release.migrate()"
       bin/api eval "Api.Release.seed()"
       bin/api eval "Api.Release.backfill_sha256()"
+      bin/api eval "Api.Release.section_mock()"
   """
   @app :api
 
@@ -39,6 +40,22 @@ defmodule Api.Release do
 
     for repo <- Application.fetch_env!(@app, :ecto_repos) do
       {:ok, _, _} = Ecto.Migrator.with_repo(repo, fn _repo -> Code.eval_file(seeds) end)
+    end
+  end
+
+  @doc """
+  Inserts the ten section test boreholes of `Api.SectionMockData` (replacing earlier ones), like
+  `mix boreholes.section_mock`.
+  """
+  def section_mock do
+    Application.load(@app)
+
+    for repo <- Application.fetch_env!(@app, :ecto_repos) do
+      {:ok, _, _} =
+        Ecto.Migrator.with_repo(repo, fn _repo ->
+          {removed, created} = Api.SectionMockData.insert()
+          IO.puts("Removed #{removed} and created #{length(created)} section test boreholes.")
+        end)
     end
   end
 end

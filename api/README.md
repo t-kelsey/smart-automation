@@ -21,6 +21,7 @@ mix precommit      # warnings-as-errors, format, tests — run before finishing 
 ```
 
 - More or less mock data: `MOCK_BOREHOLES=1000000 mix run priv/repo/seeds.exs` (max 1,000,000) or `mix boreholes.mock --count 5000`. Generated rows carry `metadata.source = "mock"`; re-running replaces them and never touches real data.
+- Section test data: `mix boreholes.section_mock` (in Docker: `bin/api eval "Api.Release.section_mock()"`) inserts ten boreholes `SL-01`…`SL-10` along a 1 km line in Stuttgart-Feuerbach (9.1340, 48.8050 → 9.1475, 48.8030) for the map's section view; they carry `metadata.source = "section-mock"` and are replaced on re-run.
 - Existing documents: put files in `priv/uploads/` and run `mix documents.backfill`; they are moved to `priv/storage/` (both gitignored, documents are confidential).
 - Duplicate upload detection needs `documents.sha256`; fill it for documents stored before it existed (or added by `mix documents.backfill`) with `mix documents.sha256`, in Docker `docker compose exec api bin/api eval "Api.Release.backfill_sha256()"`.
 - `PIPELINE_URL` (default off in dev) is where runs are sent, e.g. `http://localhost:8000/execute`.

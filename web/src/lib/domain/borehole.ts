@@ -182,6 +182,17 @@ export interface MapPoint {
 	verified: boolean;
 }
 
+/** Map area as west, south, east, north in degrees (WGS84). */
+export type BBox = [west: number, south: number, east: number, north: number];
+
+/** A borehole with its layers, for drawing it as a column (map detail view, sections). */
+export interface BoreholeColumnData extends MapPoint {
+	/** Depth in metres; `null` if the log states none (the deepest layer then defines it). */
+	totalDepth: number | null;
+	/** Ordered by depth. */
+	layers: BoreholeLayer[];
+}
+
 export interface BoreholeFilter {
 	/** Matches name, external id and place. */
 	search?: string;

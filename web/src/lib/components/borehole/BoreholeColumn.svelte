@@ -4,16 +4,9 @@
 -->
 <script lang="ts">
 	import type { BoreholeLayer } from '#lib/domain/borehole.ts';
-	import {
-		columnFill,
-		describe,
-		dinColors,
-		materials,
-		patternId,
-		shortForm
-	} from '#lib/din4023/index.ts';
+	import { describe, shortForm } from '#lib/din4023/index.ts';
 	import type { LayerSelection } from '#lib/layer-selection.svelte.ts';
-	import type { MaterialKey } from '#lib/din4023/index.ts';
+	import LayerFill from './LayerFill.svelte';
 
 	interface Props {
 		layers: BoreholeLayer[];
@@ -38,7 +31,6 @@
 	const bottomMargin = 14;
 	const colX = 60;
 	const colW = 90;
-	const half = colW / 2;
 	const width = colX + colW + 90;
 
 	/** Drawn depth: layers below the stated total depth are drawn too, not cut off. */
@@ -65,11 +57,6 @@
 		return out;
 	}
 
-	const hex = (key: MaterialKey | undefined) => {
-		const color = key && materials[key].color;
-		return color ? dinColors[color].hex : undefined;
-	};
-
 	let rows = $derived.by(() => {
 		const sorted = [...layers].sort((a, b) => a.startDepth - b.startDepth);
 		const labelYs = spread(
@@ -84,16 +71,12 @@
 		);
 		return sorted.map((layer, i) => {
 			const composition = layer.petrography.composition;
-			const fill = composition && columnFill(composition);
 			return {
 				layer,
 				y0: y(layer.startDepth),
 				y1: y(layer.endDepth),
 				labelY: labelYs[i],
 				depthY: depthYs[i],
-				fill,
-				leftColor: fill && hex(fill.main),
-				rightColor: fill && (hex(fill.second) ?? hex(fill.main)),
 				label: composition ? shortForm(composition) : '?',
 				title: composition ? describe(composition) : layer.petrography.description
 			};
@@ -123,48 +106,14 @@
 			onclick={() => selection?.toggle(row.layer.id)}
 		>
 			<title>{row.title}</title>
-			<rect x={colX} y={row.y0} width={colW} height={h} fill={row.fill ? 'white' : '#e5e7eb'} />
-			{#if row.fill}
-				{#if colored}
-					{#if row.leftColor}
-						<rect
-							x={colX}
-							y={row.y0}
-							width={half}
-							height={h}
-							fill={row.leftColor}
-							fill-opacity="0.5"
-						/>
-					{/if}
-					{#if row.rightColor}
-						<rect
-							x={colX + half}
-							y={row.y0}
-							width={half}
-							height={h}
-							fill={row.rightColor}
-							fill-opacity="0.5"
-						/>
-					{/if}
-				{/if}
-				<rect
-					x={colX}
-					y={row.y0}
-					width={colW}
-					height={h}
-					fill="url(#{patternId(row.fill.main, 'a')})"
-				/>
-				{#if row.fill.second}
-					<!-- 4.2.5: the first minor component only fills the right half; equal components fill both -->
-					<rect
-						x={row.fill.mode === 'both' ? colX : colX + half}
-						y={row.y0}
-						width={row.fill.mode === 'both' ? colW : half}
-						height={h}
-						fill="url(#{patternId(row.fill.second, 'b')})"
-					/>
-				{/if}
-			{/if}
+			<LayerFill
+				x={colX}
+				y={row.y0}
+				width={colW}
+				height={h}
+				composition={row.layer.petrography.composition}
+				{colored}
+			/>
 			{#if flagOf?.(row.layer.id)}
 				<circle
 					cx={8}

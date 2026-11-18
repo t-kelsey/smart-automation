@@ -27,7 +27,7 @@ List boreholes as a GeoJSON `FeatureCollection`, with optional filters, sorting 
 | `sort` | `name`, `drilled_at`, `total_depth_m`, `inserted_at`, `score`, `open_flags`; prefix `-` for descending | Default: `name` (or `-score` when `q` is given). Missing values sort last. Exception: `open_flags` is most flags first and `-open_flags` fewest first. |
 | `limit` | 1–10000 | Page size. Omit to get every match. |
 | `offset` | ≥ 0 | Number of matches to skip. |
-| `view` | `points` | Return only `id`, `name`, `verified`, `open_flag_count` in `properties` (small response for the map). |
+| `view` | `points`, `columns` | `points`: only `id`, `name`, `verified`, `open_flag_count` in `properties` (small response for the map). `columns`: additionally `total_depth_m` and `layers` (`id`, `position`, `depth_from_m`, `depth_to_m`, `petrography`, `color`, ordered by `position`), for the map's 3D detail view; requires `bbox` (`400` "bbox is required for view=columns" otherwise). |
 
 ### Response `200 OK`
 
@@ -86,6 +86,7 @@ Returned for an invalid parameter, naming the first one:
 curl "http://localhost:4000/api/boreholes?bbox=9.0,48.0,10.0,49.0"
 curl "http://localhost:4000/api/boreholes?verified=true&min_depth=20&sort=-total_depth_m&limit=20&offset=40"
 curl "http://localhost:4000/api/boreholes?view=points"
+curl "http://localhost:4000/api/boreholes?view=columns&bbox=9.0,48.0,10.0,49.0"
 ```
 
 ---

@@ -1,6 +1,8 @@
 import type {
+	BBox,
 	Borehole,
 	BoreholeChanges,
+	BoreholeColumnData,
 	BoreholeSort,
 	LayerChanges,
 	BoreholeSortField,
@@ -14,12 +16,19 @@ import type { BoreholeRepository } from '../borehole-repository';
 import { ApiClient, type ApiClientOptions } from './api-client';
 import type {
 	ApiBoreholeDetail,
+	ApiColumnFeature,
 	ApiDocumentDetail,
 	ApiFeatureCollection,
 	ApiItemResponse,
 	ApiPointFeature
 } from './api-types';
-import { featureToMapPoint, featureToSummary, toBorehole, toDocumentDetail } from './mappers';
+import {
+	featureToColumn,
+	featureToMapPoint,
+	featureToSummary,
+	toBorehole,
+	toDocumentDetail
+} from './mappers';
 
 const sortFields: Record<BoreholeSortField, string> = {
 	name: 'name',
@@ -81,6 +90,14 @@ export class ApiBoreholeRepository implements BoreholeRepository {
 		const collection =
 			(await this.client.getJson<ApiFeatureCollection<ApiPointFeature>>('/boreholes?view=points'))!;
 		return collection.features.flatMap(featureToMapPoint);
+	}
+
+	async listColumns(bbox: BBox): Promise<BoreholeColumnData[]> {
+		const qs = listQuery({ view: 'columns', bbox: bbox.map((v) => v.toFixed(6)).join(',') });
+		const collection = (await this.client.getJson<ApiFeatureCollection<ApiColumnFeature>>(
+			`/boreholes${qs}`
+		))!;
+		return collection.features.flatMap(featureToColumn);
 	}
 
 	async getById(id: string): Promise<Borehole | null> {
