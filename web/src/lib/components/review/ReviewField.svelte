@@ -51,11 +51,12 @@ suggestion. Hovering the field previews its source in the document, focusing it 
 		input?.focus({ preventScroll: true });
 	}
 
-	/** Ctrl+Enter: looks right, then on to the next flag (or stay, if this field has another one). */
+	/** Ctrl+Enter: the value looks right (all its flags), then on to the next flagged field. */
 	async function onkeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && flags[0]) {
+		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && flags.length) {
 			event.preventDefault();
-			await resolve(flags[0].id);
+			// confirms the value, so every open flag of the field at once
+			for (const flag of [...flags]) await resolve(flag.id);
 			await tick();
 			if (!flags.length) root?.dispatchEvent(new CustomEvent(NEXT_FLAG, { bubbles: true }));
 		}

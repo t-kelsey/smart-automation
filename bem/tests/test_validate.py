@@ -146,6 +146,15 @@ class ApplyVerdicts(unittest.TestCase):
                                   "code": "epsg_guessed", "suggestion": None,
                                   "message": "EPSG 31467 is an AI guess: project names Munich"}])  # fmt: skip
 
+    def test_epsg_guess_joins_the_validators_own_location_flag(self):
+        p = payload()
+        p["borehole"]["metadata"]["epsg_guessed_by_ai"] = "place is Morocco"
+        verdicts = {"borehole_fields": [check("location", "uncertain", message="no system written")], "layers": []}
+        _, flags, _ = apply_verdicts(p, verdicts, SIZES, {})
+        self.assertEqual(len(flags), 1)
+        self.assertEqual(flags[0]["origin"], "validator")
+        self.assertEqual(flags[0]["message"], "no system written (EPSG 31467 is an AI guess: place is Morocco)")
+
     def test_flags_carry_a_usable_suggestion(self):
         verdicts = {
             "borehole_fields": [

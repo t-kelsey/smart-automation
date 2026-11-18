@@ -178,10 +178,15 @@ def apply_verdicts(payload: dict, verdicts: dict, sizes, words) -> tuple[dict, l
             if fb.get("field") in LAYER_FIELDS and (s := _source(fb, sizes, words, _written(layer, fb["field"])))
         }
     if guess := (b.get("metadata") or {}).get("epsg_guessed_by_ai"):
-        flags.append(
-            {"field": "location", "layer_position": None, "severity": "warning", "origin": "rule",
-             "code": "epsg_guessed", "suggestion": None, "message": f"EPSG {b.get('epsg')} is an AI guess: {guess}"}
-        )  # fmt: skip
+        note = f"EPSG {b.get('epsg')} is an AI guess: {guess}"
+        # one flag per concern: if the validator already doubts the location, the guess goes into it
+        if own := next((f for f in flags if f["field"] == "location" and f["layer_position"] is None), None):
+            own["message"] = f"{own['message']} ({note})".strip()
+        else:
+            flags.append(
+                {"field": "location", "layer_position": None, "severity": "warning", "origin": "rule",
+                 "code": "epsg_guessed", "suggestion": None, "message": note}
+            )  # fmt: skip
     return out, flags, edits
 
 
