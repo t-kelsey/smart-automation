@@ -390,6 +390,24 @@ defmodule Api.Boreholes do
 
   def document_file_path(_document), do: nil
 
+  @doc """
+  Fills `sha256` of documents stored before it existed (or added by `mix documents.backfill`), so
+  duplicate uploads of them are recognised too. Documents without a readable file are skipped.
+  Returns `%{updated: n, skipped: m}`.
+  """
+  def backfill_document_sha256 do
+    Repo.all(from d in Document, where: is_nil(d.sha256))
+    |> Enum.reduce(%{updated: 0, skipped: 0}, fn document, acc ->
+      with path when is_binary(path) <- document_file_path(document),
+           {:ok, sha256} <- file_sha256(path) do
+        Repo.update_all(from(d in Document, where: d.id == ^document.id), set: [sha256: sha256])
+        %{acc | updated: acc.updated + 1}
+      else
+        _ -> %{acc | skipped: acc.skipped + 1}
+      end
+    end)
+  end
+
   # streamed in chunks, the file is never held in memory
   defp file_sha256(path) do
     hash =

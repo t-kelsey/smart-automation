@@ -103,6 +103,16 @@ defmodule ApiWeb.DocumentControllerTest do
       |> Map.fetch!("data")
     end
 
+    test "backfill fills the SHA-256 of documents stored without one", %{conn: conn} do
+      doc = upload(conn, "old bytes")
+      Api.Repo.update_all(Api.Boreholes.Document, set: [sha256: nil])
+
+      assert %{updated: 1} = Api.Boreholes.backfill_document_sha256()
+
+      assert Api.Repo.get!(Api.Boreholes.Document, doc["id"]).sha256 ==
+               :crypto.hash(:sha256, "old bytes") |> Base.encode16(case: :lower)
+    end
+
     test "uploads store the SHA-256 and GET /api/documents?sha256= finds them newest first", %{
       conn: conn
     } do

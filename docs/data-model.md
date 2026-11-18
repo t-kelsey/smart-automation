@@ -46,6 +46,9 @@ erDiagram
         boolean verified
         utc_datetime verified_at "set with verified (ADR-0006)"
         jsonb sources "field to {document_id, page, box} (ADR-0006)"
+        float source_x "x as written in the document, source CRS"
+        float source_y "y as written in the document, source CRS"
+        integer source_epsg "EPSG of source_x/source_y; all three set with location"
         jsonb metadata
     }
 
@@ -68,6 +71,7 @@ erDiagram
         string raw_text
         jsonb metadata
         jsonb source "{document_id, page, box} of the row, nullable (ADR-0006)"
+        jsonb sources "layer field to {document_id, page, box} (ADR-0006)"
     }
 
     FIELD_FLAGS {

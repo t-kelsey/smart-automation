@@ -19,7 +19,7 @@ The challenge metric asks for *reliable* extraction. Until now the pipeline stor
 
 - **Input:** the pages of the borehole's split-out PDF as images, the transform payload, the extractor's `warnings` and the pipeline's own issues (DIN normalisation, EPSG guess). It gets a fresh context, not the extractor's reasoning.
 - **Output** (`schemas.VALIDATE`): for every borehole field and every layer, the page and a pixel box where it is written, and a verdict: `ok`, `corrected` (the validator is sure the value is wrong and knows the right one; it is applied), `uncertain` (doubtful; an optional suggested value is stored on the flag as `suggestion`, nothing is applied) or `wrong` (contradicts the document, correct value unknown).
-- **Boxes:** pixel boxes on the page image are normalised to `[x0, y0, x1, y1]` in 0–1 of the page, origin top left. If the PDF has a text layer, a box is tightened to the words inside it (`pdftotext -bbox`, poppler, no new dependency). Scans keep the model's box.
+- **Boxes:** one per borehole field, one per layer row and one per layer field (depths, description, stratigraphy, colour). Pixel boxes on the page image are normalised to `[x0, y0, x1, y1]` in 0–1 of the page, origin top left. If the PDF has a text layer (`pdftotext -bbox`, poppler, no new dependency), a box snaps to the written value near it (numbers compared as numbers, so `9,40` matches 9.4), else it is tightened to the words inside it. Scans keep the model's box.
 - **Storing:** `validate` posts the borehole (`POST /api/boreholes`), so it is stored once, complete with flags; transform no longer posts. A failed validate job is retried like extract/transform (`POST /exec_stages/:id/retry`); retrying extract or transform also reruns validate.
 - `din4023.conform` no longer blocks: an unknown soil term becomes `petrography: null` with the original in `metadata.petrography_original`; ordering and overlap problems are left to the API checks. The API's changeset rules (name present, depths ≥ 0, `depth_to_m > depth_from_m`) still reject a borehole.
 
@@ -28,7 +28,8 @@ The challenge metric asks for *reliable* extraction. Until now the pipeline stor
 | Where | What |
 |---|---|
 | `boreholes.sources` (jsonb) | `{"<field>": {"document_id", "page", "box"}}` per borehole field (`location` stands for the coordinates) |
-| `borehole_layers.source` (jsonb) | one `{"document_id", "page", "box"}` per layer (the whole row/interval) |
+| `borehole_layers.source` / `sources` (jsonb) | the whole row/interval, and `{"<field>": {...}}` per layer field |
+| `boreholes.source_x` / `source_y` / `source_epsg` | the coordinates as written in the document, set with `location`; the review shows these (comparable with the log) and the WGS84 position below |
 | `boreholes.verified_at` | set with `verified` |
 | `field_flags` | `borehole_id`, `layer_id` (nullable, no foreign key: flags of a deleted layer are hidden and come back when it is restored), `field`, `severity` (`warning`/`error`), `message`, `suggestion` (any JSON, the validator's proposed value), `origin` (`rule`/`validator`), `code` (rule id, null for validator flags), `resolved_at`, `resolved_by` (`human`/`rule`) |
 | `field_edits` | append-only history: `borehole_id`, `layer_id` (nullable, **no** foreign key so history survives a deleted layer), `field`, `old_value`, `new_value` (any JSON), `source` (`validator`/`human`), `reason`, `inserted_at` |

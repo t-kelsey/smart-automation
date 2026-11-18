@@ -103,6 +103,9 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
     "name": "B 1/59 Schönberg",
     "...": "all properties as in the list",
     "location": { "type": "Point", "coordinates": [9.177, 48.776] },
+    "source_x": 3513220.5,
+    "source_y": 5404530.2,
+    "source_epsg": 31467,
     "verified_at": null,
     "sources": { "elevation_m": { "document_id": "c7a2...", "page": 1, "box": [0.1, 0.2, 0.3, 0.25] } },
     "open_flag_count": 1,
@@ -131,7 +134,8 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
         "color": "grau",
         "raw_text": "0,0-3,5 Kies...",
         "metadata": {},
-        "source": { "document_id": "c7a2...", "page": 2, "box": [0.05, 0.3, 0.9, 0.34] }
+        "source": { "document_id": "c7a2...", "page": 2, "box": [0.05, 0.3, 0.9, 0.34] },
+        "sources": { "depth_to_m": { "document_id": "c7a2...", "page": 2, "box": [0.06, 0.33, 0.1, 0.34] } }
       }
     ],
     "documents": [
@@ -153,7 +157,7 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
 
 `layers` is always ordered by `position` ascending. `documents` reflects the many-to-many `documents` ↔ `boreholes` relationship (see ADR-0001) — zero, one, or many entries.
 
-`sources` maps a borehole field (`location` stands for the coordinates) to where it stands in a document; a layer's `source` is its whole row; `box` is `[x0, y0, x1, y1]` in 0–1 of the page, origin top left, or `null` (page only). `flags` are the open ones first, then the resolved ones; `edits` are newest first. List features and `view=points` carry `open_flag_count` and `verified_at` is part of the list properties too (ADR-0006).
+`sources` maps a borehole field (`location` stands for the coordinates) to where it stands in a document; a layer's `source` is its whole row and its `sources` map single layer fields (depths, description, stratigraphy, colour) where they are written; `box` is `[x0, y0, x1, y1]` in 0–1 of the page, origin top left, or `null` (page only). `flags` are the open ones first, then the resolved ones; `edits` are newest first. `source_x`/`source_y`/`source_epsg` are the coordinates as written in the document (source CRS), set together with `location` whenever it is set from x/y/epsg, else `null`. List features and `view=points` carry `open_flag_count` and `verified_at` is part of the list properties too (ADR-0006).
 
 `role` is `original` for the one document the borehole was extracted from (at most one per borehole) and `additional` for any further information file (ADR-0001). The original comes first, then the rest by file name.
 
@@ -194,7 +198,7 @@ Creates a borehole with its layers, optionally linked to an existing document (A
 - `layers[].position` defaults to the 1-based list order if not given.
 - `document_id` is optional; if given, the borehole is attached as that document's `"original"` (ADR-0001, at most one per borehole).
 - `additional_document_ids` is optional (list of document UUIDs); each is linked with role `"additional"`, e.g. the split-out per-borehole PDF the pipeline uploaded. Duplicates and the original are ignored; it also works without `document_id`.
-- `borehole.sources` and `layers[].source` say where a value stands in a document (see above).
+- `borehole.sources`, `layers[].source` and `layers[].sources` say where a value stands in a document (see above).
 - `flags` (optional; `field`, `severity` `warning`/`error`, `message`, `origin` `rule`/`validator`, optional `code`, optional `suggestion`: any JSON, the proposed value; accepting it is a normal `PATCH` of that field, which resolves the open flags on it) and `edits` (validator corrections: `field`, `old_value`, `new_value`, `reason`; stored with `source: "validator"`) refer to a layer by `layer_position` (the position the layer was sent with); `null`/absent is a borehole-level field. A `layer_position` that matches no layer is a `400`. Values are any JSON; `location` values are `{"x", "y", "epsg"}`.
 - Afterwards layer `position` is renumbered by `depth_from_m` and the [plausibility checks](#plausibility-checks) run, opening `rule` flags.
 - Everything runs in one transaction — any failure leaves nothing half-created.
@@ -237,7 +241,7 @@ Deletes the borehole with its layers, flags, edit history and document links. Th
 
 Human edits, undo, flags and release. Every write endpoint answers with the full borehole like [`GET /api/boreholes/:id`](#get-apiboreholesid) (`200`, `201` for a new layer), runs in one transaction and ends the same way: for every field that **actually changed** one `field_edits` row (`source: "human"`) is written (unchanged values are skipped), the open flags on that field are resolved (`resolved_by: "human"`), layer `position` is renumbered by `depth_from_m`, and the [plausibility checks](#plausibility-checks) run. `404` for an unknown borehole/layer/edit/flag (a layer or edit of another borehole is unknown too), `422` with changeset errors, `400` with `errors.detail` for a malformed body.
 
-History values (`old_value`/`new_value`, any JSON): decimals are numbers, dates ISO 8601 strings, `location` an object `{"x", "y", "epsg"}` (what was written, in the source CRS; the previous location of a borehole is only known in WGS84, so it is `{"x": lon, "y": lat, "epsg": 4326}`), `layer` the layer's fields `{depth_from_m, depth_to_m, stratigraphy, petrography, color, raw_text, metadata, source}` (no id, no position; `old_value: null` is a creation, `new_value: null` a deletion). `field` is the column name, `location` for the coordinates, `layer` for a whole layer.
+History values (`old_value`/`new_value`, any JSON): decimals are numbers, dates ISO 8601 strings, `location` an object `{"x", "y", "epsg"}` (what was written, in the source CRS; the previous location is taken from `source_x`/`source_y`/`source_epsg`, or, for a borehole stored before those existed, given in WGS84 as `{"x": lon, "y": lat, "epsg": 4326}`), `layer` the layer's fields `{depth_from_m, depth_to_m, stratigraphy, petrography, color, raw_text, metadata, source, sources}` (no id, no position; `old_value: null` is a creation, `new_value: null` a deletion). `field` is the column name, `location` for the coordinates, `layer` for a whole layer.
 
 ### `PATCH /api/boreholes/:id`
 
@@ -245,7 +249,7 @@ Body `{ "borehole": { ... } }` with any of `name`, `external_id`, `purpose`, `pl
 
 ### `POST /api/boreholes/:id/layers`
 
-Body `{ "layer": { "depth_from_m", "depth_to_m", "stratigraphy", "petrography", "color", "raw_text", "metadata", "source" } }` (`depth_from_m`/`depth_to_m` required). `201`. One edit with `field: "layer"`.
+Body `{ "layer": { "depth_from_m", "depth_to_m", "stratigraphy", "petrography", "color", "raw_text", "metadata", "source", "sources" } }` (`depth_from_m`/`depth_to_m` required). `201`. One edit with `field: "layer"`.
 
 ### `PATCH /api/boreholes/:id/layers/:layer_id`
 
