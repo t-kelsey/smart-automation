@@ -111,6 +111,9 @@ export class Review {
 }
 
 /** A value of the edit history as text: coordinates, a layer snapshot or a plain value. */
+/** DOM event a field sends after Ctrl+Enter resolved its last flag: the page moves to the next one. */
+export const NEXT_FLAG = 'review:next-flag';
+
 export function formatValue(value: unknown): string {
 	if (value === null || value === undefined || value === '') return '–';
 	if (typeof value !== 'object') return String(value);

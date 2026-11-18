@@ -17,7 +17,7 @@
 	import CoreDataEditor from '#lib/components/review/CoreDataEditor.svelte';
 	import LayerEditor from '#lib/components/review/LayerEditor.svelte';
 	import SplitPane from '#lib/components/review/SplitPane.svelte';
-	import { Review } from '#lib/components/review/review.ts';
+	import { NEXT_FLAG, Review } from '#lib/components/review/review.ts';
 	import { SourceFocus } from '#lib/components/review/source-focus.svelte.ts';
 	import type { Borehole } from '#lib/domain/borehole.ts';
 	import { LayerSelection } from '#lib/layer-selection.svelte.ts';
@@ -88,12 +88,21 @@
 					)
 				: undefined;
 		const target = after ?? fields[0];
-		if (!target) return;
+		// none left: leave the field, so N and the release prompt work right away
+		if (!target) return (active as HTMLElement | null)?.blur();
 		target.scrollIntoView({ block: 'center', behavior: motion() });
 		target
 			.querySelector<HTMLElement>('[data-review-input], [data-flag-action]')
 			?.focus({ preventScroll: true });
 	}
+
+	// Ctrl+Enter in a field resolved its last flag: go on to the next one.
+	$effect(() => {
+		const el = scroller;
+		if (!el) return;
+		el.addEventListener(NEXT_FLAG, nextFlag);
+		return () => el.removeEventListener(NEXT_FLAG, nextFlag);
+	});
 
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key.toLowerCase() !== 'n' || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -263,7 +272,7 @@
 					>
 						<span class="opacity-70">
 							<kbd>N</kbd> next flag · <kbd>Enter</kbd>/<kbd>Tab</kbd> save & next ·
-							<kbd>Ctrl+Enter</kbd> looks right · <kbd>Esc</kbd> undo typing
+							<kbd>Ctrl+Enter</kbd> looks right & next · <kbd>Esc</kbd> undo typing
 						</span>
 					</p>
 				</div>

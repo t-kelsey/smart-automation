@@ -13,10 +13,11 @@ suggestion. Hovering the field previews its source in the document, focusing it 
 @param [class] - Extra classes for the root element.
 -->
 <script lang="ts">
+	import { tick } from 'svelte';
 	import type { Snippet } from 'svelte';
 	import { CheckIcon, OctagonAlertIcon, TriangleAlertIcon, WandSparklesIcon } from '@lucide/svelte';
 	import FieldMarks from './FieldMarks.svelte';
-	import { formatValue, type Review } from './review.ts';
+	import { formatValue, NEXT_FLAG, type Review } from './review.ts';
 	import type { SourceFocus } from './source-focus.svelte.ts';
 
 	interface Props {
@@ -50,10 +51,13 @@ suggestion. Hovering the field previews its source in the document, focusing it 
 		input?.focus({ preventScroll: true });
 	}
 
-	function onkeydown(event: KeyboardEvent) {
+	/** Ctrl+Enter: looks right, then on to the next flag (or stay, if this field has another one). */
+	async function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && flags[0]) {
 			event.preventDefault();
-			void resolve(flags[0].id);
+			await resolve(flags[0].id);
+			await tick();
+			if (!flags.length) root?.dispatchEvent(new CustomEvent(NEXT_FLAG, { bubbles: true }));
 		}
 	}
 </script>
