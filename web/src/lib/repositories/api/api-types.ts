@@ -1,6 +1,6 @@
 /**
  * Wire format of the Phoenix API, as documented in docs/api-reference.md and rendered by
- * api/lib/api_web/controllers/borehole_json.ex. The backend is the source of truth (ADR-0023).
+ * api/lib/api_web/controllers/borehole_json.ex. The backend is the source of truth (ADR-0001).
  */
 
 export interface ApiGeoPoint {
@@ -25,8 +25,8 @@ export interface ApiBoreholeLayer {
 }
 
 /**
- * `storage_path` and `raw_extraction` are never exposed (ADR-0014). When `has_file` is true the
- * file is served by `GET /api/documents/:id/file` (ADR-0026).
+ * `storage_path` and `raw_extraction` are never exposed (ADR-0002). When `has_file` is true the
+ * file is served by `GET /api/documents/:id/file` (ADR-0002).
  */
 export interface ApiDocument {
 	id: string;
@@ -39,7 +39,7 @@ export interface ApiDocument {
 	has_file: boolean;
 }
 
-/** A document as listed on a borehole; `original` for at most one document per borehole (ADR-0028). */
+/** A document as listed on a borehole; `original` for at most one document per borehole (ADR-0001). */
 export interface ApiBoreholeDocument extends ApiDocument {
 	role: 'original' | 'additional';
 }

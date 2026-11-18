@@ -1,6 +1,6 @@
 defmodule Api.Boreholes.SearchQuery do
   @moduledoc """
-  The borehole search query language (ADR-0042, docs/api-reference.md).
+  The borehole search query language (ADR-0003, docs/api-reference.md).
 
   A query is a list of terms separated by spaces. A borehole matches if it matches every term.
 
@@ -92,7 +92,7 @@ defmodule Api.Boreholes.SearchQuery do
   end
 
   @typedoc """
-  The term at the end of a query that is being typed (ADR-0043): `partial` is its unfinished
+  The term at the end of a query that is being typed (ADR-0003): `partial` is its unfinished
   value, `field` where to look for completions, and `prefix` everything before the value that
   stays (the rest of the query, `-`, the key and earlier comma alternatives).
   """
@@ -188,7 +188,7 @@ defmodule Api.Boreholes.SearchQuery do
   def to_string(%__MODULE__{terms: terms}), do: Enum.map_join(terms, " ", &term_to_string/1)
 
   @doc """
-  Autocorrects a query (ADR-0042). Unknown keys become the closest known key, and every unquoted
+  Autocorrects a query (ADR-0003). Unknown keys become the closest known key, and every unquoted
   text value of at least 3 characters in a term that is not negated is replaced by
   `correct.(field, value)` unless that returns `nil`. Returns the corrected query.
   """

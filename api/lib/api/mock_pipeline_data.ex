@@ -152,7 +152,7 @@ defmodule Api.MockPipelineData do
 
     # How many of the stage rows (jobs) have a result; a prefix, so partial extract/transform
     # stages show some sub jobs finished. The stage after the prefix is running (or failed) and
-    # the rest is new (or stopped), as the pipeline reports them (ADR-0040).
+    # the rest is new (or stopped), as the pipeline reports them (ADR-0002).
     total = length(all_stages)
 
     done =

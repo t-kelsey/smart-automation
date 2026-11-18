@@ -1,6 +1,6 @@
 defmodule ApiWeb.PipelineRunController do
   @moduledoc """
-  Kicks off and tracks `claude_test/` pipeline runs for a document (ADR-0035). The frontend calls
+  Kicks off and tracks `claude_test/` pipeline runs for a document (ADR-0002). The frontend calls
   `create`/`show`; `update_status` is called by the pipeline itself when a run finishes.
   """
   use ApiWeb, :controller
@@ -72,7 +72,7 @@ defmodule ApiWeb.PipelineRunController do
   end
 
   @doc """
-  Stops a run that is still `new`/`running` (ADR-0040): the run and its unfinished stages become
+  Stops a run that is still `new`/`running` (ADR-0002): the run and its unfinished stages become
   `stopped` and the pipeline is asked to cancel it. 409 if the run has already finished.
   """
   def stop(conn, %{"id" => id}) do

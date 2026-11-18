@@ -39,7 +39,7 @@
 	const documentActions = [{ label: 'Download', icon: Download }];
 
 	function onDocumentAction(doc: BoreholeDocument, action: string) {
-		// The API sends the file as an attachment with ?download=1 (ADR-0026).
+		// The API sends the file as an attachment with ?download=1 (ADR-0002).
 		if (action === 'Download' && doc.url) window.location.assign(`${doc.url}?download=1`);
 	}
 </script>

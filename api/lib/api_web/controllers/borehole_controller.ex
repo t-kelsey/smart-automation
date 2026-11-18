@@ -29,7 +29,7 @@ defmodule ApiWeb.BoreholeController do
   "layers": [...], "document_id": "...", "additional_document_ids": ["..."]}`. `document_id` is
   the borehole's original document, `additional_document_ids` further linked documents (e.g. the
   split-out PDF). `borehole` may carry `"x"`/`"y"`/`"epsg"` instead of `"location"` directly
-  (ADR-0002).
+  (ADR-0001).
   """
   def create(conn, params) do
     borehole_attrs = params["borehole"] || %{}
@@ -48,7 +48,7 @@ defmodule ApiWeb.BoreholeController do
 
   @doc """
   Same as `index`, but `q` is the point: results carry a `score`, and a search that finds nothing
-  carries an autocorrected `suggestion` if there is one (ADR-0042).
+  carries an autocorrected `suggestion` if there is one (ADR-0003).
   """
   def search(conn, params) do
     with {:ok, filters} <- BoreholeParams.parse(params) do
@@ -57,7 +57,7 @@ defmodule ApiWeb.BoreholeController do
   end
 
   @doc """
-  Completions for the term being typed at the end of `q` (ADR-0043). `limit` is 1–20, default 8.
+  Completions for the term being typed at the end of `q` (ADR-0003). `limit` is 1–20, default 8.
   """
   def complete(conn, params) do
     with {:ok, limit} <- BoreholeParams.parse_completion_limit(params) do

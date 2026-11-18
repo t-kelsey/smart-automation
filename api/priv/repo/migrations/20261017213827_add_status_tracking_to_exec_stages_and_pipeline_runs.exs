@@ -1,7 +1,7 @@
 defmodule Api.Repo.Migrations.AddStatusTrackingToExecStagesAndPipelineRuns do
   use Ecto.Migration
 
-  # Stage and run lifecycle tracking (ADR-0040): every exec_stage gets a status
+  # Stage and run lifecycle tracking (ADR-0002): every exec_stage gets a status
   # (new|running|success|failed|stopped) plus timing, error, model/effort and token usage; a
   # pipeline run gets timing, the stage it is in and its error, and can be stopped.
   def up do

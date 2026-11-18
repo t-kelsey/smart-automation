@@ -26,7 +26,7 @@ export class ApiSearchRepository implements SearchRepository {
 		};
 	}
 
-	/** `GET /boreholes/complete`: trigram (q-gram) completions of the last term (ADR-0043). */
+	/** `GET /boreholes/complete`: trigram (q-gram) completions of the last term (ADR-0003). */
 	async complete(q: string, limit: number): Promise<SearchCompletion[]> {
 		const qs = listQuery({ q, limit });
 		const body = await this.client.getJson<ApiItemResponse<SearchCompletion[]>>(

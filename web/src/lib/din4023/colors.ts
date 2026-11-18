@@ -27,7 +27,7 @@ export const colorKeyByName = Object.fromEntries(
 	Object.entries(colorNames).map(([key, name]) => [name.de, key])
 ) as Record<string, DinColorKey>;
 
-/** DIN 4023:2023-02 Annex A colours, values from the standard file (hex is used for türkis, see ADR-0022). */
+/** DIN 4023:2023-02 Annex A colours, values from the standard file (hex is used for türkis, see ADR-0004). */
 export const dinColors = Object.fromEntries(
 	(Object.keys(colorNames) as DinColorKey[]).map((key) => {
 		const entry = standard.farben.find((f) => f.name === colorNames[key].de);

@@ -10,7 +10,7 @@ export default defineConfig({
 	// dev server pre-bundles it ("Worker failed to load") and the circle layer then stays empty.
 	optimizeDeps: { exclude: ['maplibre-gl'] },
 	server: {
-		// ADR-0022: the DIN 4023 standard file lives outside web/
+		// ADR-0004: the DIN 4023 standard file lives outside web/
 		fs: { allow: ['..'] },
 		// Dev proxy for the default PUBLIC_API_URL=/api
 		proxy: { '/api': 'http://localhost:4000' }

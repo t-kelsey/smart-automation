@@ -70,11 +70,11 @@ Pipeline (run in `bem/`; needs `uv`, poppler and an OpenRouter key; the `claude`
 ## Conventions
 
 - `api/AGENTS.md` holds the Phoenix/Elixir/Ecto rules; follow it. Notable: use `Req` for HTTP (not HTTPoison/Tesla/httpc); generate migrations with `mix ecto.gen.migration`; don't put programmatically-set fields like `user_id` in `cast`.
-- Web data access follows ADR-0009: UI → service (`web/src/lib/services`) → repository interface (`web/src/lib/repositories`, API or mock), wired in one composition root (`createServices` in `services/index.ts`). UI code must not import repositories (ESLint enforces it). All data comes from the API (ADR-0029; `pnpm dev` needs the API on localhost:4000, reached via the Vite proxy at `/api`). The faker-based borehole/search mock repositories in `repositories/mock/` are kept but not wired in.
+- Web data access follows ADR-0004: UI → service (`web/src/lib/services`) → repository interface (`web/src/lib/repositories`, API or mock), wired in one composition root (`createServices` in `services/index.ts`). UI code must not import repositories (ESLint enforces it). All data comes from the API (ADR-0004; `pnpm dev` needs the API on localhost:4000, reached via the Vite proxy at `/api`). The faker-based borehole/search mock repositories in `repositories/mock/` are kept but not wired in.
 - `web/AGENTS.md` expects the Svelte MCP tools (`list-sections`, `get-documentation`, `svelte-autofixer`) to be used when writing Svelte code; Svelte skills live in `web/.github/skills/`.
 
-- `bem/` talks to the API only over HTTP (never the database or storage directly); stage status, retries and run outcome live in `pipeline_runs` / `exec_stages` (ADR-0034, ADR-0035, ADR-0040, ADR-0044).
+- `bem/` talks to the API only over HTTP (never the database or storage directly); stage status, retries and run outcome live in `pipeline_runs` / `exec_stages` (ADR-0002).
 
 ## Source of truth
 
-`api/` owns the data model and API response shape (see `docs/elixir-backend-borehole-pipeline.md` and `docs/adr/`). If `web/`'s existing types or mock data disagree with what the backend actually defines/returns, the backend wins — update the frontend's types/mock data to match it, not the other way around. See ADR-0023.
+`api/` owns the data model and API response shape (see `docs/elixir-backend-borehole-pipeline.md` and `docs/adr/`). If `web/`'s existing types or mock data disagree with what the backend actually defines/returns, the backend wins — update the frontend's types/mock data to match it, not the other way around. See ADR-0001.

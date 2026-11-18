@@ -1,6 +1,6 @@
 defmodule Api.Boreholes.StageDocumentLink do
   @moduledoc """
-  Many-to-many join between `Api.Boreholes.ExecStage` and `Api.Boreholes.Document` (ADR-0034):
+  Many-to-many join between `Api.Boreholes.ExecStage` and `Api.Boreholes.Document` (ADR-0002):
   a `filter` stage links only to the original source document; an `extract`/`transform` stage for
   one borehole can link to both the original source document and its split-out per-borehole PDF.
   """

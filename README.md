@@ -89,13 +89,13 @@ flowchart LR
 - **Triggered by the API:** a run is started with `POST /execute` (document id, model and effort per stage). The pipeline downloads the document from the API, converts images and Word to PDF, and works through the stages in the background.
 - **Parallel and per borehole:** pages are classified in chunks, and extract and transform run once per borehole, in parallel.
 - **Tracked:** every stage is an `exec_stage` in the API with status, model, effort, result, error, tokens and cost, so the web app shows live progress for every run and borehole.
-- **Fail-safe:** a borehole is only stored when it passes the DIN 4023 check and its upload succeeds. A failed or stopped extract or transform job can be retried on its own without redoing the rest ([ADR-0044](docs/adr/0044-retry-single-pipeline-jobs.md)), and a run can be stopped at any time.
+- **Fail-safe:** a borehole is only stored when it passes the DIN 4023 check and its upload succeeds. A failed or stopped extract or transform job can be retried on its own without redoing the rest ([ADR-0002](docs/adr/0002-document-intake-and-pipeline-runs.md)), and a run can be stopped at any time.
 - **Pluggable AI backend:** OpenRouter by default, with the `claude` CLI for development (`BEM_AI`), so models can be swapped without touching the stages.
 - **Decoupled:** the pipeline talks to the API only over HTTP, never to the database or the document storage.
 
 ### Standardisation: one vocabulary for all parts
 
-Every borehole is brought into the same standard, based on the German norm **DIN 4023** (drawing of soil and rock in borehole logs): soil and rock names, short forms, hatch patterns and colours. The norm is kept as a single data file, [`standards/din-4023/din-4023.json`](standards/din-4023/din-4023.json), which is the source of truth for the whole system ([ADR-0022](docs/adr/0022-shared-din-4023-standard-file.md)):
+Every borehole is brought into the same standard, based on the German norm **DIN 4023** (drawing of soil and rock in borehole logs): soil and rock names, short forms, hatch patterns and colours. The norm is kept as a single data file, [`standards/din-4023/din-4023.json`](standards/din-4023/din-4023.json), which is the source of truth for the whole system ([ADR-0004](docs/adr/0004-web-frontend-and-din-4023.md)):
 
 - **`bem`** normalises the extracted petrography to the norm's terms (`"sand,schluffig"` → `"Sand, schluffig"`, keeping the original wording in the metadata). A borehole with a layer that cannot be mapped is not uploaded; nothing is guessed.
 - **`api`** stores the standardised values (English, metric, WGS84), so every borehole has the same shape whatever its source looked like.
@@ -116,4 +116,4 @@ The hard part of this challenge is not the web app, it is turning messy, multili
 
 ## Licence
 
-Proprietary, all rights reserved (see [LICENSE](LICENSE) and [ADR-0041](docs/adr/0041-proprietary-all-rights-reserved-licence.md)). The data in `data/` and all dependencies are owned by third parties and are not covered.
+Proprietary, all rights reserved (see [LICENSE](LICENSE) and [ADR-0005](docs/adr/0005-local-postgis-and-licence.md)). The data in `data/` and all dependencies are owned by third parties and are not covered.

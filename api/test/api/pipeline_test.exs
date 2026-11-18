@@ -47,7 +47,7 @@ defmodule Api.PipelineTest do
       assert File.read!(Path.join(Boreholes.storage_dir(), "#{data["id"]}.pdf")) =~ "%PDF"
     end
 
-    test "stays pending even with a pipeline configured (ADR-0035: no auto-trigger)", %{
+    test "stays pending even with a pipeline configured (ADR-0002: no auto-trigger)", %{
       conn: conn
     } do
       Application.put_env(:api, :pipeline_url, "http://pipeline.test/process")

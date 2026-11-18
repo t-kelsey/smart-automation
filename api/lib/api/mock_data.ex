@@ -575,7 +575,7 @@ defmodule Api.MockData do
             id: Ecto.UUID.generate(),
             borehole_id: id,
             document_id: doc.id,
-            # The first document is the borehole's original, any others are additional (ADR-0028).
+            # The first document is the borehole's original, any others are additional (ADR-0001).
             role: if(index == 0, do: "original", else: "additional"),
             inserted_at: now,
             updated_at: now

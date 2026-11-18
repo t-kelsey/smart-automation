@@ -12,7 +12,7 @@ import {
 /** `pipeline_runs.status` as the API sends it. */
 export type ApiRunStatus = 'new' | 'running' | 'completed' | 'failed' | 'stopped';
 
-/** `exec_stages.status` as the API sends it (ADR-0040). */
+/** `exec_stages.status` as the API sends it (ADR-0002). */
 export type ApiStageStatus = 'new' | 'running' | 'success' | 'failed' | 'stopped';
 
 export interface ApiExecStage {
@@ -87,7 +87,7 @@ export function toJobStatus(status: ApiStageStatus): JobStatus {
 
 /**
  * Builds the stages and jobs of a run. A job with an `exec_stages` row takes the row's status
- * (ADR-0040). Jobs without one (extract/transform before the split result, rows from before
+ * (ADR-0002). Jobs without one (extract/transform before the split result, rows from before
  * stages had a status) are derived from the run's status: while the run is going, everything of
  * the first unfinished stage is running and the rest is pending; once it has failed, the
  * unfinished jobs of that stage failed and the later stages never ran.

@@ -23,7 +23,7 @@ export interface Services {
 
 /**
  * Composition root: the only place that knows which repository implementation is used.
- * All data comes from the API (ADR-0029). The mock repositories in `repositories/mock/` are kept
+ * All data comes from the API (ADR-0004). The mock repositories in `repositories/mock/` are kept
  * but not wired in; to use them again, construct them here instead of the API repositories.
  * Pass SvelteKit's `fetch` from the load function.
  */

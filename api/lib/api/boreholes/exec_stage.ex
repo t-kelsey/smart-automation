@@ -1,6 +1,6 @@
 defmodule Api.Boreholes.ExecStage do
   @moduledoc """
-  One step execution of the pipeline (ADR-0034, lifecycle ADR-0040): `type` is `filter`, `split`,
+  One step execution of the pipeline (ADR-0002): `type` is `filter`, `split`,
   `extract` or `transform`; `run_id` groups every stage (and the `Api.Boreholes.Report`) of one
   pipeline run; `position` is the borehole index within the run for `extract`/`transform` (`nil`
   for the whole-document `filter`/`split` steps); `data` is the step's JSON result as-is (`nil`

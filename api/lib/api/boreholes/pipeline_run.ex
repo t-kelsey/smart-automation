@@ -1,6 +1,6 @@
 defmodule Api.Boreholes.PipelineRun do
   @moduledoc """
-  One invocation of the pipeline (ADR-0035, lifecycle ADR-0040) for a single document: `id` is
+  One invocation of the pipeline (ADR-0002) for a single document: `id` is
   handed out to the pipeline as `run_id`, grouping its `Api.Boreholes.ExecStage` rows and
   (optional) `Api.Boreholes.Report`. `config` is the frontend's free-form per-stage model/effort
   choices, stored as-is.

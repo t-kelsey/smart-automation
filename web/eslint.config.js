@@ -34,7 +34,7 @@ export default defineConfig(
 		}
 	},
 	{
-		// UI -> Service -> Repository: the UI may only talk to services (see ADR-0009).
+		// UI -> Service -> Repository: the UI may only talk to services (see ADR-0004).
 		files: ['src/routes/**', 'src/lib/components/**'],
 		rules: {
 			'no-restricted-imports': [
@@ -43,7 +43,7 @@ export default defineConfig(
 					patterns: [
 						{
 							group: ['#lib/repositories', '#lib/repositories/*', '**/repositories/**'],
-							message: 'UI code must use services, not repositories (ADR-0009).'
+							message: 'UI code must use services, not repositories (ADR-0004).'
 						}
 					]
 				}

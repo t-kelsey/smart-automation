@@ -1,7 +1,7 @@
 defmodule Api.Repo.Migrations.AddBoreholeSearchIndexes do
   use Ecto.Migration
 
-  # Indexes for the search query language (ADR-0042): trigram GIN indexes serve `ILIKE '%term%'`
+  # Indexes for the search query language (ADR-0003): trigram GIN indexes serve `ILIKE '%term%'`
   # and the word-similarity lookups of the autocorrection, the B-tree serves date ranges.
   def up do
     execute "CREATE EXTENSION IF NOT EXISTS pg_trgm"

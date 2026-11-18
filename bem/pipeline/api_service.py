@@ -1,4 +1,4 @@
-"""Client for the Elixir API: document download, stage tracking, report and borehole upload (ADR-0034, ADR-0040).
+"""Client for the Elixir API: document download, stage tracking, report and borehole upload (ADR-0002).
 
 The base URL comes from `BEM_API_URL` (environment or `bem/.env`, see pipeline/__init__.py; default
 http://localhost:4000); `/api` is appended if missing.
@@ -62,7 +62,7 @@ class ApiService:
         **fields,
     ) -> dict:
         """`POST /exec_stages`: `stage` is filter|split|extract|transform; `position` is the 1-based
-        borehole index for extract/transform; `status` new|running|success|failed|stopped (ADR-0040).
+        borehole index for extract/transform; `status` new|running|success|failed|stopped (ADR-0002).
         `fields`: optional `data`, `error`, `model`, `effort`, `usage`. Returns the created stage."""
         body = {"type": stage, "run_id": run_id, "position": position, "status": status, "document_ids": document_ids}
         return self._send("POST", "/exec_stages", body | _present(fields))["data"]
@@ -142,7 +142,7 @@ class ApiService:
 
     def set_pipeline_run_status(self, pipeline_id: str, status: str, error: str | None = None) -> dict:
         """`PUT /pipeline_runs/:id/status`: `completed`, `failed` (with `error`) or `stopped`
-        (ADR-0035, ADR-0040). `pipeline_id` is the `pipeline_runs.id` the API gave `/execute`. The API
+        (ADR-0002). `pipeline_id` is the `pipeline_runs.id` the API gave `/execute`. The API
         answers 409 if the run already ended otherwise (e.g. it was stopped meanwhile)."""
         return self._send("PUT", f"/pipeline_runs/{pipeline_id}/status", {"status": status} | _present({"error": error}))
 

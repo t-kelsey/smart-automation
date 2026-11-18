@@ -19,7 +19,7 @@ defmodule Api.Repo.Migrations.AddRoleToBoreholeDocuments do
     )
     """
 
-    # At most one original document per borehole (ADR-0028).
+    # At most one original document per borehole (ADR-0001).
     create unique_index(:borehole_documents, [:borehole_id],
              where: "role = 'original'",
              name: :borehole_documents_one_original_index

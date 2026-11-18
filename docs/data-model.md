@@ -64,9 +64,9 @@ erDiagram
     }
 ```
 
-## Pipeline runs & stage tracking (implemented, ADR-0034/ADR-0035/ADR-0040)
+## Pipeline runs & stage tracking (implemented, ADR-0002)
 
-See "Pipeline Runs & Stage Tracking" in [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md) and [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the full flow. `exec_stages` keeps every attempt (reruns add rows, not upserts) and follows each stage through `new → running → success | failed | stopped` (ADR-0040); `pipeline_runs` tracks one submission/polling lifecycle per document and can be stopped.
+See "Pipeline Runs & Stage Tracking" in [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md) and [ADR-0002](adr/0002-document-intake-and-pipeline-runs.md) for the full flow. `exec_stages` keeps every attempt (reruns add rows, not upserts) and follows each stage through `new → running → success | failed | stopped` (ADR-0002); `pipeline_runs` tracks one submission/polling lifecycle per document and can be stopped.
 
 ```mermaid
 erDiagram

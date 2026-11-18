@@ -1,6 +1,6 @@
 defmodule ApiWeb.ExecStageController do
   @moduledoc """
-  Pipeline step tracking (ADR-0034, lifecycle ADR-0040): the pipeline creates a stage (`new` or
+  Pipeline step tracking (ADR-0002): the pipeline creates a stage (`new` or
   `running`) and reports its progress with `update` until it is `success`/`failed`/`stopped`.
   """
   use ApiWeb, :controller

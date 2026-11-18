@@ -4,7 +4,7 @@ Phoenix JSON API and system of record of the geodatabase.
 
 ## Why it exists
 
-The web app and the extraction pipeline both need one place that owns the borehole data model. The API stores boreholes, layers, documents and pipeline runs, georeferences coordinates, serves map, search and detail queries, hands uploaded documents to the pipeline and receives its results. Because the API owns the data model, the other parts adapt to it ([ADR-0023](../docs/adr/0023-backend-is-source-of-truth.md)). Endpoints: [docs/api-reference.md](../docs/api-reference.md).
+The web app and the extraction pipeline both need one place that owns the borehole data model. The API stores boreholes, layers, documents and pipeline runs, georeferences coordinates, serves map, search and detail queries, hands uploaded documents to the pipeline and receives its results. Because the API owns the data model, the other parts adapt to it ([ADR-0001](../docs/adr/0001-borehole-data-model-and-api-contract.md)). Endpoints: [docs/api-reference.md](../docs/api-reference.md).
 
 ## Development setup
 
@@ -31,10 +31,10 @@ mix precommit      # warnings-as-errors, format, tests — run before finishing 
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Elixir + Phoenix 1.8**        | A small, fast JSON API with little boilerplate; the BEAM handles concurrent uploads and background calls to the pipeline well.                                                                                    |
 | **Ecto**                        | Explicit schemas and changesets validate the borehole data model at the boundary; dynamic queries power the search.                                                                                               |
-| **PostgreSQL + PostGIS**        | Geometry columns, spatial indexes and `ST_Transform` reproject coordinates from any EPSG code to WGS84 inside the database ([ADR-0002](../docs/adr/0002-coordinate-reprojection-in-postgis.md)).                  |
-| **`pg_trgm`**                   | Typo-tolerant search and autocompletion with GIN indexes, no separate search engine ([ADR-0042](../docs/adr/0042-search-query-language.md), [ADR-0043](../docs/adr/0043-search-autocompletion-with-trigrams.md)). |
+| **PostgreSQL + PostGIS**        | Geometry columns, spatial indexes and `ST_Transform` reproject coordinates from any EPSG code to WGS84 inside the database ([ADR-0001](../docs/adr/0001-borehole-data-model-and-api-contract.md)).                  |
+| **`pg_trgm`**                   | Typo-tolerant search and autocompletion with GIN indexes, no separate search engine ([ADR-0003](../docs/adr/0003-search-query-and-autocompletion.md)). |
 | **Bandit, Req**                 | Default Phoenix web server; Req is the HTTP client for calling the pipeline.                                                                                                                                      |
-| **Filesystem document storage** | Source documents stay in a volume under our control instead of the database ([ADR-0014](../docs/adr/0014-confidential-document-storage-layout.md)).                                                               |
+| **Filesystem document storage** | Source documents stay in a volume under our control instead of the database ([ADR-0002](../docs/adr/0002-document-intake-and-pipeline-runs.md)).                                                               |
 
 **Limitations:** no authentication, and `elevation_m` must currently be ≥ 0, so boreholes below sea level are rejected.
 

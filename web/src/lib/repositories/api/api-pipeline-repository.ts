@@ -39,7 +39,7 @@ interface ApiExecStageDetail {
 const dateOf = (value?: string | null) => (value ? new Date(value) : undefined);
 
 /**
- * Pipeline runs from the API (ADR-0035 `pipeline_runs`): `GET /pipeline_runs` lists them,
+ * Pipeline runs from the API (ADR-0002 `pipeline_runs`): `GET /pipeline_runs` lists them,
  * `GET /pipeline_runs/:id` returns one with its `exec_stages` and report, `POST /pipeline_runs`
  * submits a document.
  */

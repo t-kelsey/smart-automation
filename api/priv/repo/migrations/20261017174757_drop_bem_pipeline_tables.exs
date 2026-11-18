@@ -1,7 +1,7 @@
 defmodule Api.Repo.Migrations.DropBemPipelineTables do
   @moduledoc """
-  Drops the four `bem/` pipeline-tracking tables (ADR-0030); replaced by `exec_stages`,
-  `stage_document_links` and `reports` (ADR-0034).
+  Drops the four `bem/` pipeline-tracking tables (ADR-0002); replaced by `exec_stages`,
+  `stage_document_links` and `reports` (ADR-0002).
   """
   use Ecto.Migration
 

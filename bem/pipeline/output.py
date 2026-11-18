@@ -13,7 +13,7 @@ from .ai import StepReport, log
 
 
 class Tracker:
-    """Receives the lifecycle of every stage (ADR-0040); the server reports it to the API.
+    """Receives the lifecycle of every stage (ADR-0002); the server reports it to the API.
 
     `position` is the 1-based borehole index for extract/transform and None for filter/split;
     `usage` is the stage's (or borehole's) `Usage.to_dict()`. The default does nothing (CLI runs).

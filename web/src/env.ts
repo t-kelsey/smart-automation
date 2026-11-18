@@ -4,7 +4,7 @@ export const variables = defineEnvVars({
 	PUBLIC_MOCK_BOREHOLES: {
 		public: true,
 		description:
-			'Size of the generated mock data. Only used by the mock repository, which is not wired in (ADR-0029).',
+			'Size of the generated mock data. Only used by the mock repository, which is not wired in (ADR-0004).',
 		schema: (value) => {
 			if (value === undefined || value === '') return 300;
 			const count = Number(value);

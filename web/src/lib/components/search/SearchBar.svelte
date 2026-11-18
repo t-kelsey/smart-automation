@@ -1,6 +1,6 @@
 <!--
 @component
-Rounded search bar with completions while typing (ADR-0043). The API completes the term at the end
+Rounded search bar with completions while typing (ADR-0003). The API completes the term at the end
 of the query by trigram (q-gram) matching on names and places, so typos still complete. Arrow keys
 pick a completion, Enter takes it; Enter without a picked completion searches.
 

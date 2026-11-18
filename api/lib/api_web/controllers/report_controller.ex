@@ -1,6 +1,6 @@
 defmodule ApiWeb.ReportController do
   @moduledoc """
-  Pipeline run reports for the `claude_test/` pipeline (ADR-0034). Debug/internal only, never
+  Pipeline run reports for the `claude_test/` pipeline (ADR-0002). Debug/internal only, never
   consumed by `web/`'s public pages.
   """
   use ApiWeb, :controller

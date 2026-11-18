@@ -1,17 +1,17 @@
 defmodule Api.Pipeline do
   @moduledoc """
-  Hands pipeline runs to the extraction pipeline (`claude_test/`, ADR-0033/ADR-0035).
+  Hands pipeline runs to the extraction pipeline (`claude_test/`, ADR-0002).
 
   The pipeline is an HTTP service configured by `PIPELINE_URL`. The webhook call carries no file
   bytes: it POSTs a small JSON body (`document_id`, `pipeline_id`, `config`) to `PIPELINE_URL`.
   The pipeline fetches the actual file itself via `GET /api/documents/:id/file`, keyed by
   `document_id` — the same mechanism it already uses for the split-out per-borehole PDFs it
-  uploads mid-run through `POST /api/documents` (ADR-0034). That makes "pull the file by
+  uploads mid-run through `POST /api/documents` (ADR-0002). That makes "pull the file by
   document_id" the one consistent way to get any document's bytes, original or split-out, instead
   of special-casing the initial trigger with a push.
 
   Note: this module is the generic webhook-submit client. `Api.Boreholes.PipelineRun` is the
-  unrelated `pipeline_runs` schema (ADR-0035) — don't confuse the two.
+  unrelated `pipeline_runs` schema (ADR-0002) — don't confuse the two.
   """
 
   require Logger
@@ -23,11 +23,11 @@ defmodule Api.Pipeline do
   def url, do: Application.get_env(:api, :pipeline_url)
 
   @doc """
-  Submits a pipeline run to the pipeline synchronously (ADR-0035): posts the run's `document_id`,
+  Submits a pipeline run to the pipeline synchronously (ADR-0002): posts the run's `document_id`,
   `pipeline_id` (the pipeline run's id) and `config`, then sets the run's status to `"running"` on
   success or `"failed"` if the pipeline refuses it or cannot be reached. Leaves the status
   unchanged (`"new"`) if no pipeline is configured — uploads no longer auto-trigger processing
-  (ADR-0035).
+  (ADR-0002).
   """
   @spec submit_pipeline_run(PipelineRun.t()) :: {:ok, PipelineRun.t()}
   def submit_pipeline_run(%PipelineRun{} = pipeline_run) do
@@ -51,7 +51,7 @@ defmodule Api.Pipeline do
   end
 
   @doc """
-  Asks the pipeline to cancel a run (ADR-0040): `POST /runs/:pipeline_id/stop` next to
+  Asks the pipeline to cancel a run (ADR-0002): `POST /runs/:pipeline_id/stop` next to
   `PIPELINE_URL` (e.g. `http://bem:8000/execute` → `http://bem:8000/runs/<id>/stop`). Best effort:
   the run is already `stopped` in the database, so a pipeline that cannot be reached is only
   logged. Returns `:ok` or `{:error, reason}`; `:ok` if no pipeline is configured.

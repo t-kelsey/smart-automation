@@ -6,8 +6,8 @@ defmodule ApiWeb.DocumentController do
   action_fallback ApiWeb.FallbackController
 
   @doc """
-  Uploads a raw document (multipart field `file`). It is stored (ADR-0014) and left `pending` —
-  uploading no longer starts processing by itself (ADR-0035); the frontend calls
+  Uploads a raw document (multipart field `file`). It is stored (ADR-0002) and left `pending` —
+  uploading no longer starts processing by itself (ADR-0002); the frontend calls
   `POST /api/pipeline_runs` separately once it has a run config to submit.
   """
   def create(conn, %{"file" => %Plug.Upload{} = upload}) do
@@ -30,7 +30,7 @@ defmodule ApiWeb.DocumentController do
 
   @doc """
   Updates a document's processing status, reported by the extraction pipeline as it progresses
-  (ADR-0033): `"pending"`/`"processing"` while it runs, `"extracted"`/`"failed"` when it's done.
+  (ADR-0002): `"pending"`/`"processing"` while it runs, `"extracted"`/`"failed"` when it's done.
   """
   def update_status(conn, %{"id" => id, "status" => status}) do
     with %Boreholes.Document{} = document <- Boreholes.get_document(id),
@@ -44,7 +44,7 @@ defmodule ApiWeb.DocumentController do
 
   @doc """
   Streams a source document from the managed storage, for viewing in the application
-  (ADR-0026). `?download=1` asks the browser to save it instead of displaying it.
+  (ADR-0002). `?download=1` asks the browser to save it instead of displaying it.
   """
   def file(conn, %{"id" => id} = params) do
     with %{} = document <- Boreholes.get_document(id),

@@ -1,6 +1,6 @@
 defmodule Api.Boreholes.Report do
   @moduledoc """
-  One row per `claude_test/` pipeline run (ADR-0034): `run_id` groups it with the run's
+  One row per `claude_test/` pipeline run (ADR-0002): `run_id` groups it with the run's
   `Api.Boreholes.ExecStage` rows, `data` is `report.json` as-is (per-step model/time/token/cost
   stats). Debug/internal only — never serialised in a public API response.
   """

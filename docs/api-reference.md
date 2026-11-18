@@ -2,9 +2,9 @@
 
 Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Type: application/json`). No authentication is currently implemented. Errors always have the shape `{ "errors": { "detail": "..." } }`.
 
-This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0031), the document upload endpoints (ADR-0033), and the `bem/` pipeline submission/tracking endpoints (ADR-0034, ADR-0035 call this pipeline `claude_test/`; see the "Pipeline runs" section below). Uploading a document (`POST /api/documents`) no longer starts processing by itself (ADR-0035) — the frontend uploads a file, lets the user pick a per-stage model/effort `config`, then calls `POST /api/pipeline_runs` to actually submit the run and polls `GET /api/pipeline_runs/:id` for progress. See [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the consolidated, current account of this whole flow end to end (supersedes reading ADR-0033/0034/0035 in sequence).
+This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0001), the document upload endpoints (ADR-0002), and the `bem/` pipeline submission/tracking endpoints (ADR-0002; see the "Pipeline runs" section below). Uploading a document (`POST /api/documents`) no longer starts processing by itself (ADR-0002) — the frontend uploads a file, lets the user pick a per-stage model/effort `config`, then calls `POST /api/pipeline_runs` to actually submit the run and polls `GET /api/pipeline_runs/:id` for progress. See [ADR-0002](adr/0002-document-intake-and-pipeline-runs.md) for the consolidated, current account of this whole flow end to end (supersedes reading ADR-0002 in sequence).
 
-> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0026). Never publish or commit these files.
+> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0002). Never publish or commit these files.
 
 > **Prototype scale**: the dataset is capped at 10 000 boreholes. Without `limit` every match is returned in one response; `limit` may be at most 10 000.
 
@@ -132,9 +132,9 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
 }
 ```
 
-`layers` is always ordered by `position` ascending. `documents` reflects the many-to-many `documents` ↔ `boreholes` relationship (see ADR-0013) — zero, one, or many entries.
+`layers` is always ordered by `position` ascending. `documents` reflects the many-to-many `documents` ↔ `boreholes` relationship (see ADR-0001) — zero, one, or many entries.
 
-`role` is `original` for the one document the borehole was extracted from (at most one per borehole) and `additional` for any further information file (ADR-0028). The original comes first, then the rest by file name.
+`role` is `original` for the one document the borehole was extracted from (at most one per borehole) and `additional` for any further information file (ADR-0001). The original comes first, then the rest by file name.
 
 ### Response `404 Not Found`
 
@@ -148,7 +148,7 @@ Returned if no borehole with that `id` exists, including ids that are not valid 
 
 ## `POST /api/boreholes`
 
-Creates a borehole with its layers, optionally linked to an existing document (ADR-0031).
+Creates a borehole with its layers, optionally linked to an existing document (ADR-0001).
 
 ```json
 {
@@ -166,9 +166,9 @@ Creates a borehole with its layers, optionally linked to an existing document (A
 }
 ```
 
-- `"x"`/`"y"`/`"epsg"` are reprojected to WGS84 via `ST_Transform` (ADR-0002) — omit all three (or send `"location"` directly) if coordinates aren't known yet.
+- `"x"`/`"y"`/`"epsg"` are reprojected to WGS84 via `ST_Transform` (ADR-0001) — omit all three (or send `"location"` directly) if coordinates aren't known yet.
 - `layers[].position` defaults to the 1-based list order if not given.
-- `document_id` is optional; if given, the borehole is attached as that document's `"original"` (ADR-0028, at most one per borehole).
+- `document_id` is optional; if given, the borehole is attached as that document's `"original"` (ADR-0001, at most one per borehole).
 - `additional_document_ids` is optional (list of document UUIDs); each is linked with role `"additional"`, e.g. the split-out per-borehole PDF the pipeline uploaded. Duplicates and the original are ignored; it also works without `document_id`.
 - Everything runs in one transaction — any failure leaves nothing half-created.
 
@@ -202,7 +202,7 @@ curl -X POST "http://localhost:4000/api/boreholes" \
 
 ## `GET /api/boreholes/search`
 
-Search by name, place and date (ADR-0042). Takes the same parameters as `GET /api/boreholes` (with `q` defaulting to the empty string, matching everything) and returns the same shape, plus:
+Search by name, place and date (ADR-0003). Takes the same parameters as `GET /api/boreholes` (with `q` defaulting to the empty string, matching everything) and returns the same shape, plus:
 
 | Field | Where | Description |
 |---|---|---|
@@ -245,7 +245,7 @@ curl -G "http://localhost:4000/api/boreholes/search" --data-urlencode 'q=Stutgar
 
 ## `GET /api/boreholes/complete`
 
-Completions for the term being typed at the end of a search query, for autocompletion while typing (ADR-0043).
+Completions for the term being typed at the end of a search query, for autocompletion while typing (ADR-0003).
 
 | Param | Format | Description |
 |---|---|---|
@@ -282,7 +282,7 @@ curl -G "http://localhost:4000/api/boreholes/complete" --data-urlencode 'q=1959 
 
 ## `POST /api/documents`
 
-Uploads a raw document (ADR-0033). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and the document inserted with `status: "pending"` — uploading no longer starts processing by itself (ADR-0035); call [`POST /api/pipeline_runs`](#post-apipipeline_runs) separately once you have a `config` to submit.
+Uploads a raw document (ADR-0002). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and the document inserted with `status: "pending"` — uploading no longer starts processing by itself (ADR-0002); call [`POST /api/pipeline_runs`](#post-apipipeline_runs) separately once you have a `config` to submit.
 
 `202` with `{ "data": <document> }` (same fields as in a borehole's `documents`), `status` always `pending`. `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
 
@@ -314,7 +314,7 @@ Metadata of a single document, for the document viewer page. Same fields as the 
 
 Sets a document's processing status directly. Body `{ "status": "..." }`, one of `pending`, `processing`, `extracted`, `failed`, `reviewed`.
 
-**Legacy/manual bookkeeping only** — the current `bem/` pipeline (see the "Pipeline runs" section and [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md)) never calls this endpoint; it reports a run's outcome on `pipeline_runs` instead (`PUT /api/pipeline_runs/:id/status`). Nothing currently keeps `documents.status` in sync with a `pipeline_runs` row's status, so the two can disagree. Use this endpoint only for manual status corrections outside of a pipeline run.
+**Legacy/manual bookkeeping only** — the current `bem/` pipeline (see the "Pipeline runs" section and [ADR-0002](adr/0002-document-intake-and-pipeline-runs.md)) never calls this endpoint; it reports a run's outcome on `pipeline_runs` instead (`PUT /api/pipeline_runs/:id/status`). Nothing currently keeps `documents.status` in sync with a `pipeline_runs` row's status, so the two can disagree. Use this endpoint only for manual status corrections outside of a pipeline run.
 
 `200` with the same shape as [`GET /api/documents/:id`](#get-apidocumentsid). `422` if `status` is not one of the allowed values. `404` if the document does not exist or the id is not a UUID.
 
@@ -328,12 +328,12 @@ curl -X PUT "http://localhost:4000/api/documents/c7a2.../status" \
 
 ## `GET /api/documents/:id/file`
 
-The stored source file of a document, for viewing in the application (ADR-0026). Works for any
+The stored source file of a document, for viewing in the application (ADR-0002). Works for any
 document id, not just the one from the end user's initial upload — it is also how the pipeline
 fetches the document's file by `document_id` once a run is submitted; the `pipeline_runs` webhook
-below never pushes file bytes. (ADR-0034 designed this to also cover split-out per-borehole PDFs
+below never pushes file bytes. (ADR-0002 designed this to also cover split-out per-borehole PDFs
 the pipeline would upload mid-run via `POST /api/documents`, but the current `bem/` pipeline
-doesn't upload any such documents — see ADR-0037.)
+doesn't upload any such documents — see ADR-0002.)
 
 | Param | Description |
 |---|---|
@@ -350,7 +350,7 @@ curl -OJ "http://localhost:4000/api/documents/c7a2.../file?download=1"
 
 ## Pipeline runs (`pipeline_runs` / `exec_stages` / `reports`)
 
-Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `bem/` pipeline (`claude_test/` in ADR-0034/ADR-0035) runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
+Debug/internal only (never consumed by `web/`'s public pages, except for status/polling fields on `pipeline_runs`). The `bem/` pipeline (see ADR-0002) runs `01_filter` → `02_split` → `03_extract` → `04_transform` on a document, reporting each step to `exec_stages` and a final `report`, then `POST /api/boreholes` per extracted borehole (unchanged, see above).
 
 ### `GET /api/pipeline_runs`
 
@@ -392,7 +392,7 @@ curl "http://localhost:4000/api/pipeline_runs?status=running&limit=20&offset=0"
 
 ### `POST /api/pipeline_runs`
 
-Creates a pipeline run for a document and submits it to the pipeline (ADR-0035). The frontend calls this once it has a `config` to submit — uploading (`POST /api/documents`) no longer does this by itself.
+Creates a pipeline run for a document and submits it to the pipeline (ADR-0002). The frontend calls this once it has a `config` to submit — uploading (`POST /api/documents`) no longer does this by itself.
 
 Submission POSTs a small JSON body (`document_id`, `pipeline_id`, `config`) to `PIPELINE_URL` — no
 file bytes. The pipeline fetches the document's file itself via
@@ -411,7 +411,7 @@ file bytes. The pipeline fetches the document's file itself via
 | `document_id` | UUID of an existing document (from `POST /api/documents`). |
 | `config` | Free-form map of per-stage model/effort choices, stored as-is and sent to the pipeline unchanged. |
 
-Submission happens synchronously in this request: the response's `status` reflects whether the pipeline could be reached (`running`) or not (`new` if no pipeline is configured — dev defaults to `http://localhost:8000/execute` in `config/dev.exs`, `PIPELINE_URL` overrides it and an empty `PIPELINE_URL` turns it off — `failed` if the pipeline refused the request or couldn't be reached). See [ADR-0037](adr/0037-end-to-end-document-pipeline-run-boreholes-flow.md) for the full flow this kicks off.
+Submission happens synchronously in this request: the response's `status` reflects whether the pipeline could be reached (`running`) or not (`new` if no pipeline is configured — dev defaults to `http://localhost:8000/execute` in `config/dev.exs`, `PIPELINE_URL` overrides it and an empty `PIPELINE_URL` turns it off — `failed` if the pipeline refused the request or couldn't be reached). See [ADR-0002](adr/0002-document-intake-and-pipeline-runs.md) for the full flow this kicks off.
 
 `201`:
 
@@ -445,7 +445,7 @@ curl -X POST "http://localhost:4000/api/pipeline_runs" \
 
 The run plus its `exec_stages` (newest first), `stage_counts` and `report` (`null` until the pipeline has posted one). Poll this to show live progress.
 
-Run fields (ADR-0040): `status` is `new` → `running` → `completed` / `failed` / `stopped`; `started_at` is stamped when it becomes `running`, `finished_at` when it ends; `duration_ms` runs from `started_at` to `finished_at` (or to now while running); `current_stage` is the type of the stage that last started; `error` says why it failed or was stopped. `stage_counts` counts the run's stages per status.
+Run fields (ADR-0002): `status` is `new` → `running` → `completed` / `failed` / `stopped`; `started_at` is stamped when it becomes `running`, `finished_at` when it ends; `duration_ms` runs from `started_at` to `finished_at` (or to now while running); `current_stage` is the type of the stage that last started; `error` says why it failed or was stopped. `stage_counts` counts the run's stages per status.
 
 ```json
 {
@@ -510,7 +510,7 @@ Deletes a run (e.g. a stuck one) together with its `exec_stages` and `reports`. 
 
 ### `POST /api/pipeline_runs/:id/stop`
 
-Stops a run that is still `new`/`running` (ADR-0040): the run becomes `stopped` (`error: "stopped by user"`), its unfinished stages too, and a `running` run is cancelled in the pipeline via `POST <pipeline>/runs/:id/stop` (next to `PIPELINE_URL`; best effort, an unreachable pipeline is only logged). The pipeline ends the run at its next stage, borehole or model call. Stopping a stopped run again is a no-op.
+Stops a run that is still `new`/`running` (ADR-0002): the run becomes `stopped` (`error: "stopped by user"`), its unfinished stages too, and a `running` run is cancelled in the pipeline via `POST <pipeline>/runs/:id/stop` (next to `PIPELINE_URL`; best effort, an unreachable pipeline is only logged). The pipeline ends the run at its next stage, borehole or model call. Stopping a stopped run again is a no-op.
 
 `200` with the same shape as `GET /api/pipeline_runs/:id`. `409` if the run has already completed or failed. `404` if the run does not exist.
 
@@ -520,7 +520,7 @@ curl -X POST "http://localhost:4000/api/pipeline_runs/6b1e.../stop"
 
 ### `POST /api/exec_stages`
 
-Records one step execution. Rerunning a step adds a new row rather than replacing the previous one, so every attempt stays comparable. The pipeline creates a stage as soon as it knows it will run it (`new`; filter/split at the start of a run, extract/transform per borehole once split has found them) and reports its progress with [`PUT /api/exec_stages/:id`](#put-apiexec_stagesid) (ADR-0040).
+Records one step execution. Rerunning a step adds a new row rather than replacing the previous one, so every attempt stays comparable. The pipeline creates a stage as soon as it knows it will run it (`new`; filter/split at the start of a run, extract/transform per borehole once split has found them) and reports its progress with [`PUT /api/exec_stages/:id`](#put-apiexec_stagesid) (ADR-0002).
 
 ```json
 {
@@ -546,7 +546,7 @@ Records one step execution. Rerunning a step adds a new row rather than replacin
 
 ### `PUT /api/exec_stages/:id`
 
-Reports progress on a stage (ADR-0040). Body `{ "status": "running" | "success" | "failed" | "stopped" | "new" }` plus optional `data`, `error`, `model`, `effort`, `usage`, `started_at`, `finished_at` (the API stamps the times itself if they are not given) and `document_ids` (linked in addition to the stage's documents, e.g. the split-out PDFs once split has uploaded them).
+Reports progress on a stage (ADR-0002). Body `{ "status": "running" | "success" | "failed" | "stopped" | "new" }` plus optional `data`, `error`, `model`, `effort`, `usage`, `started_at`, `finished_at` (the API stamps the times itself if they are not given) and `document_ids` (linked in addition to the stage's documents, e.g. the split-out PDFs once split has uploaded them).
 
 ```json
 { "status": "success", "data": { "boreholes": [ { "label": "B 1", "pages": [1, 2] } ] }, "usage": { "calls": 1, "total_tokens": 21034, "cost_usd": 0.0123 }, "document_ids": ["9d2c..."] }
@@ -560,7 +560,7 @@ One stage execution (the job detail page of `web/`), same shape as the `POST` re
 
 ### `POST /api/exec_stages/:id/retry`
 
-Redoes one failed or stopped `extract`/`transform` job of a finished run (ADR-0044). No body. The run goes back to `running` (its `error` is cleared) and the pipeline redoes that borehole as a **new** stage row; extract is followed by transform. Answers `202` with the run like `GET /api/pipeline_runs/:id` (without stages).
+Redoes one failed or stopped `extract`/`transform` job of a finished run (ADR-0002). No body. The run goes back to `running` (its `error` is cleared) and the pipeline redoes that borehole as a **new** stage row; extract is followed by transform. Answers `202` with the run like `GET /api/pipeline_runs/:id` (without stages).
 
 `409` (`errors.detail` says why) if the job is not extract/transform, is not `failed`/`stopped`, was already retried, its run is still `new`/`running`, its input is missing (no successful split for extract, no successful extract at that position for transform), or no pipeline is configured. `400` if the pipeline cannot be reached (the run keeps its previous status). `404` if the stage does not exist.
 

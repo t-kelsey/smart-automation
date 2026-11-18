@@ -28,7 +28,7 @@ export class InvalidSearchQueryError extends Error {
 	}
 }
 
-/** Search use case. The API parses the query and runs it in the database (ADR-0042). */
+/** Search use case. The API parses the query and runs it in the database (ADR-0003). */
 export class SearchService {
 	constructor(private readonly repository: SearchRepository) {}
 

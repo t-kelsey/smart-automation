@@ -1,11 +1,11 @@
-"""HTTP server for the pipeline: the API starts a run with `POST /execute` (ADR-0033, ADR-0035).
+"""HTTP server for the pipeline: the API starts a run with `POST /execute` (ADR-0002).
 
 Run with: uv run python -m pipeline.server   (env: BEM_API_URL, BEM_PORT, BEM_WORKDIR)
 
 `/execute` receives a document id, the API's `pipeline_runs.id` (as `pipeline_id`) and a config, queues
 the run and answers 202 at once. One worker thread downloads the document from the API
 (`GET /documents/:id/file`) when it starts stage 1 and runs the pipeline. Every stage is tracked
-as an exec_stage (ADR-0040): filter/split are created `new` up front, extract/transform per borehole
+as an exec_stage (ADR-0002): filter/split are created `new` up front, extract/transform per borehole
 once split has found them; each turns `running` when it starts and `success`/`failed`/`stopped`
 with its result, error, model, effort and usage. A transform stage only succeeds once its borehole
 is stored (`POST /boreholes`). Finally the run gets `PUT /pipeline_runs/:id/status`
@@ -70,7 +70,7 @@ def _error_text(error: BaseException) -> str:
 
 
 class RunTracker(Tracker):
-    """Reports the lifecycle of every stage of one run to the API as exec_stages (ADR-0040).
+    """Reports the lifecycle of every stage of one run to the API as exec_stages (ADR-0002).
 
     Split-out PDFs are uploaded as documents of their own and linked to their extract/transform
     stages; a finished transform stores its borehole before the stage counts as `success`.
@@ -332,7 +332,7 @@ def health() -> dict:
 
 class ExecuteRequest(BaseModel):
     document_id: uuid.UUID
-    # The API's `pipeline_runs.id` (ADR-0035): echoed back, used for `PUT /pipeline_runs/:id/status`
+    # The API's `pipeline_runs.id` (ADR-0002): echoed back, used for `PUT /pipeline_runs/:id/status`
     # on completion. Optional only so /execute can be called directly without a pipeline_runs row
     # (e.g. manual testing) — then completion status cannot be reported anywhere.
     pipeline_id: str | None = None

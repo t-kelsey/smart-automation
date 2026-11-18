@@ -1,6 +1,6 @@
 <!--
 @component
-Help button and drawer explaining the search query language (ADR-0042). Examples are links that
+Help button and drawer explaining the search query language (ADR-0003). Examples are links that
 run the search and close the drawer.
 -->
 <script lang="ts">

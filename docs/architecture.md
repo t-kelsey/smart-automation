@@ -11,7 +11,7 @@ flowchart LR
     subgraph web["web (SvelteKit 3 / Svelte 5, :3000)"]
         ui["Routes + components<br/>/upload, /pipeline, /borehole/:id, /map, /search"]
         svc["Services<br/>Borehole / Search / Upload / Pipeline"]
-        repo["API repositories<br/>(ADR-0009, ADR-0029)"]
+        repo["API repositories<br/>(ADR-0004)"]
         proxy["hooks.server.ts<br/>forwards /api/* to the API"]
         ui --> svc --> repo --> proxy
     end
@@ -41,7 +41,7 @@ flowchart LR
     steps <--> claude
 ```
 
-All four services run via `docker-compose.yml` (`db`, `api`, `web`, `pipeline`). The web app talks only to the API (ADR-0029); the pipeline never touches the database or storage directly, it only uses the API.
+All four services run via `docker-compose.yml` (`db`, `api`, `web`, `pipeline`). The web app talks only to the API (ADR-0004); the pipeline never touches the database or storage directly, it only uses the API.
 
 ## Flow 1: Upload a document and start a parsing pipeline
 
@@ -56,7 +56,7 @@ sequenceDiagram
     participant C as AI backend (OpenRouter)
 
     U->>W: Choose files (pdf, png, jpg, tif, docx)
-    Note over W: Files are only queued in the browser<br/>(upload-queue), nothing is stored yet (ADR-0038)
+    Note over W: Files are only queued in the browser<br/>(upload-queue), nothing is stored yet (ADR-0002)
     U->>W: Configure model + effort per step, "Start extraction"
     W->>A: POST /api/documents (multipart file)
     A->>S: Store file, insert documents row
@@ -93,10 +93,10 @@ sequenceDiagram
 
 Notes:
 
-- The webhook call carries no file bytes; the pipeline pulls the file by `document_id` (ADR-0033).
+- The webhook call carries no file bytes; the pipeline pulls the file by `document_id` (ADR-0002).
 - Without `PIPELINE_URL` the run stays `new` and nothing is processed. If the pipeline cannot be reached the run is `failed`.
-- A failed or stopped extract/transform job can be retried on its own: `POST /api/exec_stages/:id/retry` reopens the run as `running` and calls the pipeline's `POST /runs/:id/retry`, which records a new `exec_stages` row for that borehole and sets the run's final status again (ADR-0044).
-- Only the stage results of a run whose `run_id` equals the `pipeline_runs.id` show up in the UI (ADR-0039).
+- A failed or stopped extract/transform job can be retried on its own: `POST /api/exec_stages/:id/retry` reopens the run as `running` and calls the pipeline's `POST /runs/:id/retry`, which records a new `exec_stages` row for that borehole and sets the run's final status again (ADR-0002).
+- Only the stage results of a run whose `run_id` equals the `pipeline_runs.id` show up in the UI (ADR-0002).
 
 ## Flow 2: View a borehole in the UI
 
@@ -135,13 +135,13 @@ sequenceDiagram
 
 Notes:
 
-- UI → service → repository → API (ADR-0009). UI code does not import repositories (ESLint enforces it).
+- UI → service → repository → API (ADR-0004). UI code does not import repositories (ESLint enforces it).
 - In `pnpm dev` the Vite proxy forwards `/api`; in Docker `hooks.server.ts` forwards it to `API_INTERNAL_URL`.
 - Editing and review pages (`/borehole/:id/edit`, `/review`) exist, but saving changes is not wired to the API yet.
 
 ## Flow 3: Search boreholes
 
-The search page has one input for a small query language over borehole name, place and drilling date (ADR-0042), with completions while typing (ADR-0043). The API parses the query and runs it in PostgreSQL; the web only passes the string through.
+The search page has one input for a small query language over borehole name, place and drilling date (ADR-0003), with completions while typing (ADR-0003). The API parses the query and runs it in PostgreSQL; the web only passes the string through.
 
 ```mermaid
 sequenceDiagram
@@ -192,4 +192,4 @@ Notes:
 - **Indexes:** `pg_trgm` GIN indexes on `boreholes.name`, `external_id` and `place` serve substring matches (`ILIKE '%…%'`), completion candidates and autocorrection candidates; a B-tree on `drilled_at` serves date ranges.
 - **Ranking:** per matched text value name 10, external id 8, place 5, plus 5 if the name starts with it; ties by name. Date terms filter only.
 - **Autocorrection vs. completion:** completion uses word similarity of at least 0.6 while typing, so short inputs do not match unrelated values; autocorrection on search uses a looser similarity of 0.3 and only runs when nothing was found. The API returns the suggestion; the web runs it.
-- **Not searched:** layer descriptions, purpose and client (ADR-0042).
+- **Not searched:** layer descriptions, purpose and client (ADR-0003).

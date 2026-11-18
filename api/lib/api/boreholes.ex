@@ -137,13 +137,13 @@ defmodule Api.Boreholes do
 
   `borehole_attrs` may include `"x"`, `"y"`, `"epsg"` instead of a `"location"` key directly — if
   present, `location` is set via `ST_Transform(ST_SetSRID(ST_MakePoint(x, y), epsg), 4326)`
-  (ADR-0002) rather than expecting the caller to reproject coordinates itself.
+  (ADR-0001) rather than expecting the caller to reproject coordinates itself.
 
   Each map in `layers_attrs` gets `"position"` set to its 1-based index if it doesn't have one.
 
   Options:
     * `:document_id` - an existing `documents.id` to attach as this borehole's original
-      document (ADR-0013, via `attach_documents/3`)
+      document (ADR-0001, via `attach_documents/3`)
     * `:additional_document_ids` - existing `documents.id`s to attach as `additional` documents
       (e.g. the split-out PDF the borehole was extracted from); duplicates and the original are
       ignored
@@ -264,7 +264,7 @@ defmodule Api.Boreholes do
   end
 
   @doc """
-  Absolute path of the document's file in the managed storage (ADR-0014), or `nil` if there is
+  Absolute path of the document's file in the managed storage (ADR-0002), or `nil` if there is
   none. Only plain file names directly inside the storage directory are accepted, so a
   `storage_path` can never point elsewhere on disk.
   """
@@ -282,7 +282,7 @@ defmodule Api.Boreholes do
 
   @doc """
   Stores a freshly uploaded raw file as a new document: the file is copied into the managed
-  storage as `<id><ext>` (ADR-0014) and a `documents` row with status `pending` is inserted.
+  storage as `<id><ext>` (ADR-0002) and a `documents` row with status `pending` is inserted.
   Only the file types the pipeline can read are accepted.
   """
   @spec create_uploaded_document(Plug.Upload.t()) ::
@@ -327,9 +327,9 @@ defmodule Api.Boreholes do
     document |> Document.changeset(%{status: status}) |> Repo.update()
   end
 
-  # -- Pipeline stage tracking (write path for `claude_test/`, ADR-0034) --------------------------
+  # -- Pipeline stage tracking (write path for `claude_test/`, ADR-0002) --------------------------
   # Debug/internal only, never consumed by `web/`. Append-only: unlike the dropped bem tables
-  # (ADR-0030), reruns add new rows instead of replacing previous ones.
+  # (ADR-0002), reruns add new rows instead of replacing previous ones.
 
   @doc """
   Records one pipeline step execution (`attrs` with `"type"`, `"run_id"`, `"position"` and
@@ -353,7 +353,7 @@ defmodule Api.Boreholes do
   end
 
   @doc """
-  Reports progress on a stage (ADR-0040): `attrs` with `"status"` (required) and optionally
+  Reports progress on a stage (ADR-0002): `attrs` with `"status"` (required) and optionally
   `"data"`, `"error"`, `"model"`, `"effort"`, `"usage"`, `"started_at"`, `"finished_at"`.
   `"document_ids"` (optional) are linked in addition to the stage's existing documents. A finished
   stage cannot change any more (422).
@@ -482,7 +482,7 @@ defmodule Api.Boreholes do
     end
   end
 
-  # -- Pipeline runs (ADR-0035) --------------------------------------------------------------
+  # -- Pipeline runs (ADR-0002) --------------------------------------------------------------
 
   @doc """
   Creates a pipeline run (`attrs` with `"document_id"`, optional `"config"`), status `"new"`.
@@ -546,7 +546,7 @@ defmodule Api.Boreholes do
   Sets the status of a pipeline run, optionally with an `"error"` (and `"current_stage"`) in
   `attrs`. Once a run has finished (`completed`/`failed`/`stopped`) its status cannot change any
   more: `{:error, {:conflict, message}}`, unless it is set to the same status again. Finishing a
-  run marks its stages that are still `new`/`running` as `stopped` (ADR-0040).
+  run marks its stages that are still `new`/`running` as `stopped` (ADR-0002).
   """
   def update_pipeline_run_status(%PipelineRun{} = pipeline_run, status, attrs \\ %{}) do
     terminal = PipelineRun.terminal_statuses()
@@ -775,7 +775,7 @@ defmodule Api.Boreholes do
 
   defp filter(_other, q), do: q
 
-  # -- Search query language (ADR-0042) ----------------------------------------------------------
+  # -- Search query language (ADR-0003) ----------------------------------------------------------
 
   # Columns searched by each text field of `Api.Boreholes.SearchQuery`, with their score weight.
   @search_columns %{
@@ -867,7 +867,7 @@ defmodule Api.Boreholes do
   defp like_pattern(value), do: "%" <> escape_like(value) <> "%"
 
   @doc """
-  Autocorrects a search that found nothing (ADR-0042): returns the query string with misspelt
+  Autocorrects a search that found nothing (ADR-0003): returns the query string with misspelt
   field keys and text values replaced by the closest key or the most similar word in the
   searched columns, or `nil` if nothing could be corrected.
   """
@@ -930,7 +930,7 @@ defmodule Api.Boreholes do
   @completion_columns %{text: [:name, :place], name: [:name], place: [:place]}
 
   @doc """
-  Completions for the term being typed at the end of `query` (ADR-0043): field keys it starts,
+  Completions for the term being typed at the end of `query` (ADR-0003): field keys it starts,
   then names and places found by trigram (q-gram) matching, so a typo still completes. Values
   that contain the typed text rank first (at the start before at a word start before inside),
   then by word similarity. At most `limit` entries.
