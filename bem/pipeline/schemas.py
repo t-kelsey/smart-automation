@@ -241,3 +241,55 @@ GUESS_EPSG = {
     },
     "required": ["approx_lon", "approx_lat", "reasoning"],
 }
+
+# Step 5: an independent check of the transform payload against the page images (ADR-0006)
+_VERDICT = {"type": "string", "enum": ["ok", "corrected", "uncertain", "wrong"]}
+_PIXEL_BOX = {
+    "type": ["array", "null"],
+    "items": {"type": "number"},
+    "description": "[x0, y0, x1, y1] in pixels of the page image, origin top left",
+}
+_CHECK = {
+    "field": {"type": "string"},
+    "verdict": _VERDICT,
+    "corrected_value": {
+        "type": ["string", "number", "object", "null"],
+        "description": "the right value, only with verdict corrected (location: {x, y, epsg})",
+    },
+    "message": {**_t("string"), "description": "why, plus a suggestion for uncertain"},
+}
+VALIDATE = {
+    "type": "object",
+    "properties": {
+        "borehole_fields": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"page": _t("integer"), "box": _PIXEL_BOX, **_CHECK},
+                "required": ["field", "page", "box", "verdict", "corrected_value", "message"],
+            },
+        },
+        "layers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "integer"},
+                    "page": _t("integer"),
+                    "box": _PIXEL_BOX,
+                    "fields": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": _CHECK,
+                            "required": ["field", "verdict", "corrected_value", "message"],
+                        },
+                        "description": "only the fields that are not ok",
+                    },
+                },
+                "required": ["position", "page", "box", "fields"],
+            },
+        },
+    },
+    "required": ["borehole_fields", "layers"],
+}

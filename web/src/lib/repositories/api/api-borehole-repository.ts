@@ -1,5 +1,8 @@
 import type {
 	Borehole,
+	BoreholeChanges,
+	BoreholeSort,
+	LayerChanges,
 	BoreholeSortField,
 	BoreholeSummary,
 	DocumentDetail,
@@ -21,8 +24,15 @@ import { featureToMapPoint, featureToSummary, toBorehole, toDocumentDetail } fro
 const sortFields: Record<BoreholeSortField, string> = {
 	name: 'name',
 	date: 'drilled_at',
-	totalDepth: 'total_depth_m'
+	totalDepth: 'total_depth_m',
+	openFlags: 'open_flags'
 };
+
+/** `-` marks descending, except for `open_flags`, which sorts most flags first without it. */
+function sortParam({ field, direction }: BoreholeSort): string {
+	const descending = field === 'openFlags' ? direction === 'asc' : direction === 'desc';
+	return `${descending ? '-' : ''}${sortFields[field]}`;
+}
 
 /** Query string for the list endpoints; empty values are left out. */
 export function listQuery(params: Record<string, string | number | boolean | undefined>): string {
@@ -59,7 +69,7 @@ export class ApiBoreholeRepository implements BoreholeRepository {
 			drilled_to: drilledTo,
 			min_depth: minDepth,
 			max_depth: maxDepth,
-			sort: sort && `${sort.direction === 'desc' ? '-' : ''}${sortFields[sort.field]}`,
+			sort: sort && sortParam(sort),
 			limit,
 			offset
 		});
@@ -79,6 +89,47 @@ export class ApiBoreholeRepository implements BoreholeRepository {
 			[404]
 		);
 		return body ? toBorehole(body.data, this.options.baseUrl) : null;
+	}
+
+	update(id: string, changes: BoreholeChanges): Promise<Borehole> {
+		return this.write('PATCH', `/boreholes/${encodeURIComponent(id)}`, { borehole: changes });
+	}
+
+	addLayer(id: string, layer: LayerChanges): Promise<Borehole> {
+		return this.write('POST', `/boreholes/${encodeURIComponent(id)}/layers`, { layer });
+	}
+
+	updateLayer(id: string, layerId: string, changes: LayerChanges): Promise<Borehole> {
+		return this.write('PATCH', this.layerPath(id, layerId), { layer: changes });
+	}
+
+	deleteLayer(id: string, layerId: string): Promise<Borehole> {
+		return this.write('DELETE', this.layerPath(id, layerId));
+	}
+
+	revertEdit(id: string, editId: string): Promise<Borehole> {
+		return this.write(
+			'POST',
+			`/boreholes/${encodeURIComponent(id)}/edits/${encodeURIComponent(editId)}/revert`
+		);
+	}
+
+	resolveFlag(flagId: string): Promise<Borehole> {
+		return this.write('POST', `/flags/${encodeURIComponent(flagId)}/resolve`);
+	}
+
+	setVerified(id: string, verified: boolean): Promise<Borehole> {
+		return this.write('POST', `/boreholes/${encodeURIComponent(id)}/verify`, { verified });
+	}
+
+	private layerPath(id: string, layerId: string) {
+		return `/boreholes/${encodeURIComponent(id)}/layers/${encodeURIComponent(layerId)}`;
+	}
+
+	/** Every write answers with the borehole as `GET /boreholes/:id` would. */
+	private async write(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown) {
+		const { data } = await this.client.send<ApiItemResponse<ApiBoreholeDetail>>(method, path, body);
+		return toBorehole(data, this.options.baseUrl);
 	}
 
 	async getDocument(id: string): Promise<DocumentDetail | null> {

@@ -4,7 +4,16 @@ Web frontend of the geodatabase: explore, search and review boreholes and start 
 
 ## Why it exists
 
-The extracted data is only useful if people can find and judge it. The web app shows boreholes on an interactive world map, searches them (name, place, date with autocompletion), draws each borehole as a DIN 4023 profile column next to its source document, and lets users upload reports, configure and watch pipeline runs (retrying a whole run or a single failed extract/transform job) and review the results.
+The extracted data is only useful if people can find and judge it. The web app shows boreholes on an interactive world map, searches them (name, place, date with autocompletion), draws each borehole as a DIN 4023 profile column next to its source document, and lets users upload reports, configure and watch pipeline runs (retrying a whole run or a single failed extract/transform/validate job) and review the results.
+
+## Review
+
+The review page of a borehole (`/borehole/[id]/review`) is also its editing page ([ADR-0006](../docs/adr/0006-validation-stage-and-human-review.md)):
+
+- Core data and layers are edited in place (saved on Enter or blur, Escape cancels); layers can be added and deleted, petrography is picked from the DIN 4023 terms, coordinates are entered as x/y/EPSG.
+- Marks per value: yellow/red for open warnings/errors ("Looks right" resolves them), blue for a validator correction, violet for a human edit; ↶ undoes the last change, the popover lists the history with "Restore". Deleted layers are listed below the table.
+- Hovering a value, a layer row or a layer in the profile shows where it is written in the document (page and box). "Next flag" walks the open flags; "Verify & release" sets the borehole verified.
+- Lists show the open flags and can sort by them; the map draws verified boreholes filled and unverified ones hollow.
 
 ## Development setup
 
@@ -26,15 +35,15 @@ The production build imports `../standards` (the DIN 4023 definitions), so the D
 
 ## Technology
 
-| Choice                                  | Why                                                                                                                                                                                                      |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SvelteKit 3 / Svelte 5 + TypeScript** | Little boilerplate and fast rendering for map- and chart-heavy pages; server hooks proxy the API so the browser only talks to one origin.                                                                |
+| Choice                                  | Why                                                                                                                                                                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **SvelteKit 3 / Svelte 5 + TypeScript** | Little boilerplate and fast rendering for map- and chart-heavy pages; server hooks proxy the API so the browser only talks to one origin.                                                              |
 | **MapLibre GL JS + supercluster**       | Open-source vector map that takes GeoJSON in WGS84 directly from the API, no API key, and clustering keeps large borehole sets responsive ([ADR-0004](../docs/adr/0004-web-frontend-and-din-4023.md)). |
-| **Own DIN 4023 engine in TypeScript**   | Profile columns follow the standard's materials, colours and hatching, rendered as SVG patterns from layer data ([ADR-0004](../docs/adr/0004-web-frontend-and-din-4023.md)).                             |
-| **pdf.js**                              | Shows the source document beside the profile so users can check the extraction.                                                                                                                          |
-| **Tailwind 4 + Skeleton**               | Consistent styling and accessible components without a custom design system.                                                                                                                             |
-| **Layered services/repositories**       | Keeps UI independent of the transport; mock repositories (faker) remain for offline UI work but are not wired in.                                                                                        |
-| **adapter-node, pnpm**                  | Runs as a plain Node server in Docker; reproducible installs.                                                                                                                                            |
+| **Own DIN 4023 engine in TypeScript**   | Profile columns follow the standard's materials, colours and hatching, rendered as SVG patterns from layer data ([ADR-0004](../docs/adr/0004-web-frontend-and-din-4023.md)).                           |
+| **pdf.js**                              | Shows the source document beside the profile so users can check the extraction.                                                                                                                        |
+| **Tailwind 4 + Skeleton**               | Consistent styling and accessible components without a custom design system.                                                                                                                           |
+| **Layered services/repositories**       | Keeps UI independent of the transport; mock repositories (faker) remain for offline UI work but are not wired in.                                                                                      |
+| **adapter-node, pnpm**                  | Runs as a plain Node server in Docker; reproducible installs.                                                                                                                                          |
 
 ## Architecture
 

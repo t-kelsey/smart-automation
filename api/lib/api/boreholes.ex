@@ -11,8 +11,11 @@ defmodule Api.Boreholes do
   alias Api.Boreholes.BoreholeLayer
   alias Api.Boreholes.Document
   alias Api.Boreholes.ExecStage
+  alias Api.Boreholes.FieldEdit
+  alias Api.Boreholes.FieldFlag
   alias Api.Boreholes.PipelineRun
   alias Api.Boreholes.Report
+  alias Api.Boreholes.Review
   alias Api.Boreholes.SearchQuery
   alias Api.Boreholes.StageDocumentLink
 
@@ -24,16 +27,21 @@ defmodule Api.Boreholes do
       that is parsed and raises if invalid) over name, external id, place and date; adds a
       relevance `score`
     * `:verified` - boolean
+    * `:flagged` - boolean, whether the borehole has open flags (ADR-0006)
     * `:drilled_from`, `:drilled_to` - `Date`, inclusive
     * `:min_depth`, `:max_depth` - number, compared with `total_depth_m`
     * `:sort` - `{field, :asc | :desc}` with field `:name`, `:drilled_at`, `:total_depth_m`,
-      `:inserted_at` or `:score` (only with `:q`); defaults to score (with `:q`) or name
+      `:inserted_at`, `:open_flags` or `:score` (only with `:q`); defaults to score (with `:q`) or name
     * `:limit`, `:offset` - paging; without `:limit` every match is returned
   """
   @type filters :: map()
 
   @typedoc "One result row; `score` is `nil` unless the query had a `:q`."
-  @type entry :: %{borehole: Borehole.t(), score: integer() | nil}
+  @type entry :: %{
+          borehole: Borehole.t(),
+          score: integer() | nil,
+          open_flag_count: non_neg_integer()
+        }
 
   @doc """
   Lists boreholes matching `filters` (see `t:filters/0`).
@@ -62,7 +70,8 @@ defmodule Api.Boreholes do
   end
 
   @doc """
-  Fetches a borehole by id, preloading its documents and layers (ordered by position).
+  Fetches a borehole by id, preloading its documents, layers (ordered by position), flags (open
+  first) and edits (newest first).
 
   Each document carries its `role` for this borehole; the original document comes first.
 
@@ -72,7 +81,21 @@ defmodule Api.Boreholes do
     with {:ok, uuid} <- Ecto.UUID.cast(id),
          %Borehole{} = borehole <- Repo.get(Borehole, uuid) do
       layers_query = from(l in BoreholeLayer, order_by: l.position)
-      borehole = Repo.preload(borehole, borehole_layers: layers_query)
+
+      flags_query =
+        from(f in FieldFlag,
+          order_by: [asc: not is_nil(f.resolved_at), asc: f.inserted_at, asc: f.id]
+        )
+
+      edits_query = from(e in FieldEdit, order_by: [desc: e.inserted_at, desc: e.id])
+
+      borehole =
+        Repo.preload(borehole,
+          borehole_layers: layers_query,
+          field_flags: flags_query,
+          field_edits: edits_query
+        )
+
       %{borehole | documents: list_documents(borehole)}
     else
       _ -> nil
@@ -139,11 +162,16 @@ defmodule Api.Boreholes do
   present, `location` is set via `ST_Transform(ST_SetSRID(ST_MakePoint(x, y), epsg), 4326)`
   (ADR-0001) rather than expecting the caller to reproject coordinates itself.
 
-  Each map in `layers_attrs` gets `"position"` set to its 1-based index if it doesn't have one.
+  Each map in `layers_attrs` gets `"position"` set to its 1-based index if it doesn't have one;
+  afterwards positions are renumbered by depth. `borehole_attrs` may carry `"sources"` and a
+  layer a `"source"`.
 
   Options:
     * `:document_id` - an existing `documents.id` to attach as this borehole's original
       document (ADR-0001, via `attach_documents/3`)
+    * `:flags`, `:edits` - the validator's flags and corrections (`Api.Boreholes.Review`), which
+      refer to layers by `layer_position`; the plausibility checks run afterwards
+      (`Api.Boreholes.Checks`)
     * `:additional_document_ids` - existing `documents.id`s to attach as `additional` documents
       (e.g. the split-out PDF the borehole was extracted from); duplicates and the original are
       ignored
@@ -152,8 +180,10 @@ defmodule Api.Boreholes do
     Repo.transaction(fn ->
       with {:ok, borehole} <- insert_borehole(borehole_attrs),
            :ok <- set_location(borehole, borehole_attrs),
-           {:ok, _layers} <- insert_layers(borehole, layers_attrs),
+           {:ok, layers} <- insert_layers(borehole, layers_attrs),
+           :ok <- Review.insert_pipeline_extras(borehole, layers, opts[:flags], opts[:edits]),
            :ok <- maybe_attach(borehole, opts) do
+        Review.finish(borehole.id)
         get_borehole(borehole.id)
       else
         {:error, reason} -> Repo.rollback(reason)
@@ -165,7 +195,8 @@ defmodule Api.Boreholes do
     %Borehole{} |> Borehole.changeset(attrs) |> Repo.insert()
   end
 
-  defp set_location(borehole, attrs) do
+  @doc false
+  def set_location(borehole, attrs) do
     attrs = stringify_keys(attrs)
 
     case {attrs["x"], attrs["y"], attrs["epsg"]} do
@@ -592,16 +623,17 @@ defmodule Api.Boreholes do
     end
   end
 
-  @retryable_types ~w(extract transform)
+  @retryable_types ~w(extract transform validate)
 
   @doc """
-  Retries one failed or stopped `extract`/`transform` job of a finished run: reopens the run as
+  Retries one failed or stopped `extract`/`transform`/`validate` job of a finished run: reopens the run as
   `running` and asks the pipeline to redo just that borehole (`Api.Pipeline.submit_job_retry/2`);
   the pipeline records the new attempt as a new exec_stage row, the old row stays. Extract is
-  followed by transform for that borehole. If the pipeline cannot be reached the run keeps its
+  followed by transform and validate for that borehole. If the pipeline cannot be reached the run keeps its
   previous status. `{:error, {:conflict, message}}` if the job cannot be retried: wrong type or
   status, already retried, run still active, no pipeline configured, or its input is missing
-  (the split result for extract, a successful extract for transform).
+  (the split result for extract, a successful extract for transform, a successful transform for
+  validate).
   """
   def retry_exec_stage(%ExecStage{} = exec_stage) do
     with :ok <- check_retryable(exec_stage),
@@ -621,7 +653,7 @@ defmodule Api.Boreholes do
   end
 
   defp check_retryable(%ExecStage{type: type}) when type not in @retryable_types,
-    do: {:error, {:conflict, "only extract and transform jobs can be retried"}}
+    do: {:error, {:conflict, "only extract, transform and validate jobs can be retried"}}
 
   defp check_retryable(%ExecStage{status: status}) when status not in ["failed", "stopped"],
     do: {:error, {:conflict, "only failed or stopped jobs can be retried, this one is #{status}"}}
@@ -644,8 +676,12 @@ defmodule Api.Boreholes do
   defp check_run_finished(_run), do: :ok
 
   defp check_retry_input(%ExecStage{type: type} = e) do
-    needed = if type == "extract", do: {"split", nil}, else: {"extract", e.position}
-    {needed_type, needed_position} = needed
+    {needed_type, needed_position} =
+      case type do
+        "extract" -> {"split", nil}
+        "transform" -> {"extract", e.position}
+        "validate" -> {"transform", e.position}
+      end
 
     ok =
       from(o in ExecStage,
@@ -737,7 +773,20 @@ defmodule Api.Boreholes do
           |> select_merge(^%{score: search_score(search)})
       end
 
-    Enum.reduce(filters, base, &filter/2)
+    base
+    |> select_merge(^%{open_flag_count: open_flag_count()})
+    |> then(fn query -> Enum.reduce(filters, query, &filter/2) end)
+  end
+
+  # Open flags of the borehole as a correlated subquery, no N+1 (ADR-0006).
+  defp open_flag_count do
+    dynamic(
+      [borehole: b],
+      fragment(
+        "(SELECT count(*) FROM field_flags f WHERE f.borehole_id = ? AND f.resolved_at IS NULL)",
+        b.id
+      )
+    )
   end
 
   defp filter(
@@ -760,6 +809,9 @@ defmodule Api.Boreholes do
 
   defp filter({:verified, verified}, q) when is_boolean(verified),
     do: where(q, [borehole: b], b.verified == ^verified)
+
+  defp filter({:flagged, true}, q), do: where(q, ^dynamic(^open_flag_count() > 0))
+  defp filter({:flagged, false}, q), do: where(q, ^dynamic(^open_flag_count() == 0))
 
   defp filter({:drilled_from, %Date{} = date}, q),
     do: where(q, [borehole: b], b.drilled_at >= ^date)
@@ -799,6 +851,18 @@ defmodule Api.Boreholes do
     if negate, do: dynamic([borehole: b], is_nil(b.drilled_at) or not (^any)), else: any
   end
 
+  defp term_condition(%{field: field, values: values, negate: negate})
+       when field in [:verified, :flagged] do
+    any =
+      any_of(values, fn
+        value when field == :verified -> dynamic([borehole: b], b.verified == ^value)
+        true -> dynamic(^open_flag_count() > 0)
+        false -> dynamic(^open_flag_count() == 0)
+      end)
+
+    if negate, do: dynamic(not (^any)), else: any
+  end
+
   defp term_condition(%{field: field, values: values, negate: negate}) do
     columns = Keyword.keys(@search_columns[field])
     any = any_of(values, &text_condition(columns, like_pattern(&1), negate))
@@ -829,7 +893,7 @@ defmodule Api.Boreholes do
   # Sum of the weights of the columns each value was found in, plus 5 if the name starts with it.
   defp search_score(%SearchQuery{terms: terms}) do
     for %{field: field, negate: false, values: values} <- terms,
-        field != :date,
+        field in [:text, :name, :place],
         value <- values,
         reduce: dynamic(fragment("0::int")) do
       acc ->
@@ -989,6 +1053,9 @@ defmodule Api.Boreholes do
 
       {:score, _dir} ->
         order_by(query, [borehole: b], asc: b.name)
+
+      {:open_flags, dir} ->
+        order_by(query, ^[{dir, open_flag_count()}, {:asc, dynamic([borehole: b], b.id)}])
 
       {field, dir} ->
         order_by(query, [borehole: b], [{^nulls_last(dir), field(b, ^field)}, asc: b.id])

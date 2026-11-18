@@ -121,13 +121,13 @@ defmodule ApiWeb.BoreholeControllerTest do
       assert Enum.map(features, & &1["properties"]["name"]) == ["B", "C"]
     end
 
-    test "view=points returns only id, name and verified", %{conn: conn} do
+    test "view=points returns only id, name, verified and open_flag_count", %{conn: conn} do
       insert_borehole(%{name: "P", purpose: "secret-ish detail"})
 
       assert %{"features" => [%{"properties" => props}]} =
                json_response(get(conn, ~p"/api/boreholes?view=points"), 200)
 
-      assert Map.keys(props) |> Enum.sort() == ["id", "name", "verified"]
+      assert Map.keys(props) |> Enum.sort() == ["id", "name", "open_flag_count", "verified"]
     end
 
     test "returns 400 for an invalid sort or limit", %{conn: conn} do

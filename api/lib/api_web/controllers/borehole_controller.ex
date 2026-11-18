@@ -2,6 +2,7 @@ defmodule ApiWeb.BoreholeController do
   use ApiWeb, :controller
 
   alias Api.Boreholes
+  alias Api.Boreholes.Review
   alias Api.Boreholes.SearchQuery
   alias ApiWeb.BoreholeParams
 
@@ -28,7 +29,8 @@ defmodule ApiWeb.BoreholeController do
   Creates a borehole with its layers (see docs/api-reference.md). Body: `{"borehole": {...},
   "layers": [...], "document_id": "...", "additional_document_ids": ["..."]}`. `document_id` is
   the borehole's original document, `additional_document_ids` further linked documents (e.g. the
-  split-out PDF). `borehole` may carry `"x"`/`"y"`/`"epsg"` instead of `"location"` directly
+  split-out PDF). `flags` and `edits` are the validator's findings and corrections (ADR-0006),
+  `borehole.sources` and `layers[].source` say where values stand in the document. `borehole` may carry `"x"`/`"y"`/`"epsg"` instead of `"location"` directly
   (ADR-0001).
   """
   def create(conn, params) do
@@ -38,12 +40,36 @@ defmodule ApiWeb.BoreholeController do
     with {:ok, borehole} <-
            Boreholes.create_borehole(borehole_attrs, layers_attrs,
              document_id: params["document_id"],
-             additional_document_ids: params["additional_document_ids"]
+             additional_document_ids: params["additional_document_ids"],
+             flags: params["flags"],
+             edits: params["edits"]
            ) do
       conn
       |> put_status(:created)
       |> render(:show, borehole: borehole)
     end
+  end
+
+  @doc "Edits borehole fields, body `{\"borehole\": {...}}` (ADR-0006)."
+  def update(conn, %{"id" => id, "borehole" => attrs}) when is_map(attrs) do
+    with {:ok, borehole} <- Review.update_borehole(id, attrs),
+         do: render(conn, :show, borehole: borehole)
+  end
+
+  def update(_conn, _params), do: {:error, "borehole must be an object"}
+
+  @doc "Releases (`true`) or un-releases (`false`) a borehole."
+  def verify(conn, %{"id" => id, "verified" => verified}) when is_boolean(verified) do
+    with {:ok, borehole} <- Review.set_verified(id, verified),
+         do: render(conn, :show, borehole: borehole)
+  end
+
+  def verify(_conn, _params), do: {:error, "verified must be true or false"}
+
+  @doc "Undoes one edit by writing its old value back as a new edit."
+  def revert(conn, %{"id" => id, "edit_id" => edit_id}) do
+    with {:ok, borehole} <- Review.revert_edit(id, edit_id),
+         do: render(conn, :show, borehole: borehole)
   end
 
   @doc """

@@ -1,8 +1,8 @@
 defmodule Api.Boreholes.ExecStage do
   @moduledoc """
   One step execution of the pipeline (ADR-0002): `type` is `filter`, `split`,
-  `extract` or `transform`; `run_id` groups every stage (and the `Api.Boreholes.Report`) of one
-  pipeline run; `position` is the borehole index within the run for `extract`/`transform` (`nil`
+  `extract`, `transform` or `validate` (ADR-0006); `run_id` groups every stage (and the `Api.Boreholes.Report`) of one
+  pipeline run; `position` is the borehole index within the run for `extract`/`transform`/`validate` (`nil`
   for the whole-document `filter`/`split` steps); `data` is the step's JSON result as-is (`nil`
   until it has one).
 
@@ -14,7 +14,7 @@ defmodule Api.Boreholes.ExecStage do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @types ~w(filter split extract transform)
+  @types ~w(filter split extract transform validate)
   @statuses ~w(new running success failed stopped)
   @terminal ~w(success failed stopped)
 

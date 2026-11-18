@@ -13,6 +13,17 @@ def page_count(pdf: pathlib.Path) -> int:
     return len(PdfReader(pdf).pages)
 
 
+def page_pixel_sizes(pdf: pathlib.Path, dpi: float) -> list[tuple[int, int]]:
+    """(width, height) in pixels of every page as `pdftoppm -r dpi` renders it (media box, /Rotate applied)."""
+    sizes = []
+    for page in PdfReader(pdf).pages:
+        w, h = float(page.mediabox.width), float(page.mediabox.height)
+        if page.rotation % 180 == 90:
+            w, h = h, w
+        sizes.append((round(w / 72 * dpi), round(h / 72 * dpi)))
+    return sizes
+
+
 def write_pages(src: pathlib.Path, pages: Iterable[int], dest: pathlib.Path) -> None:
     """Write the given 1-based pages of `src` (in the given order) to `dest`."""
     reader = PdfReader(src)

@@ -23,11 +23,11 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		throw e;
 	});
 
-	// A transform that succeeded leads to a borehole. It is the only borehole of the split-out
+	// A validate (or, in older runs, transform) job that succeeded leads to a borehole. It is the only borehole of the split-out
 	// document of this job's borehole, i.e. the linked document with the fewest boreholes.
 	let borehole: { id: string; name: string } | null = null;
 	const failed = (job.data as { status?: unknown } | null)?.status === 'failed';
-	if (job.type === 'transform' && !failed) {
+	if ((job.type === 'validate' || job.type === 'transform') && !failed) {
 		const documents = await Promise.all(
 			job.documentIds.map((id) =>
 				boreholes.getDocument(id).catch((e) => {

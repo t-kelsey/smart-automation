@@ -9,6 +9,9 @@ erDiagram
     DOCUMENTS ||--o{ BOREHOLE_DOCUMENTS : document_id
     BOREHOLES ||--o{ BOREHOLE_DOCUMENTS : borehole_id
     BOREHOLES ||--o{ BOREHOLE_LAYERS : borehole_id
+    BOREHOLES ||--o{ FIELD_FLAGS : borehole_id
+    BOREHOLE_LAYERS ||--o{ FIELD_FLAGS : layer_id
+    BOREHOLES ||--o{ FIELD_EDITS : borehole_id
 
     DOCUMENTS {
         binary_id id PK
@@ -40,6 +43,8 @@ erDiagram
         decimal elevation_m
         decimal groundwater_level_m
         boolean verified
+        utc_datetime verified_at "set with verified (ADR-0006)"
+        jsonb sources "field to {document_id, page, box} (ADR-0006)"
         jsonb metadata
     }
 
@@ -61,8 +66,36 @@ erDiagram
         string color
         string raw_text
         jsonb metadata
+        jsonb source "{document_id, page, box} of the row, nullable (ADR-0006)"
+    }
+
+    FIELD_FLAGS {
+        binary_id id PK
+        binary_id borehole_id FK "on delete: cascade"
+        binary_id layer_id FK "nullable, on delete: cascade"
+        string field "column name, location, layer"
+        string severity "warning | error"
+        text message
+        string origin "rule | validator"
+        string code "rule id, null for validator flags"
+        utc_datetime_usec resolved_at "null = open"
+        string resolved_by "human | rule"
+    }
+
+    FIELD_EDITS {
+        binary_id id PK
+        binary_id borehole_id FK "on delete: cascade"
+        binary_id layer_id "nullable, NO foreign key: history survives a deleted layer"
+        string field
+        jsonb old_value "any JSON"
+        jsonb new_value "any JSON"
+        string source "validator | human"
+        text reason
+        utc_datetime_usec inserted_at "append-only, no updated_at"
     }
 ```
+
+`field_flags` and `field_edits` (ADR-0006): flags are open until `resolved_at` is set; edits are the append-only history of validator corrections and human edits. `old_value`/`new_value` are stored as `jsonb` through `Api.Boreholes.JsonValue` (a number, string, object or `NULL`). `location` values are `{"x", "y", "epsg"}`, `layer` values a snapshot of the layer. Layer `position` is always the rank by `depth_from_m`. The rules are in the [API reference](api-reference.md#plausibility-checks).
 
 ## Pipeline runs & stage tracking (implemented, ADR-0002)
 

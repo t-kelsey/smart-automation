@@ -4,10 +4,12 @@
 	import { mapColors } from './map-colors.ts';
 </script>
 
-{#snippet dot(color: string, halo = false)}
+{#snippet dot(color: string, halo = false, hollow = false)}
 	<span
 		class="size-4 shrink-0 rounded-full border-2 border-white shadow-md"
-		style:background={color}
+		style:background={hollow ? 'white' : color}
+		style:outline={hollow ? `3px solid ${color}` : undefined}
+		style:outline-offset="-5px"
 		style:box-shadow={halo ? `0 0 0 6px ${color}40` : undefined}
 	></span>
 {/snippet}
@@ -40,12 +42,14 @@
 					<ul class="space-y-3 text-sm">
 						<li class="flex items-center gap-3">
 							{@render dot(mapColors.verified)}
-							<span><strong>Verified</strong>: the extracted data was checked and approved.</span>
+							<span
+								><strong>Verified</strong> (filled): the extracted data was checked and released.</span
+							>
 						</li>
 						<li class="flex items-center gap-3">
-							{@render dot(mapColors.unverified)}
+							{@render dot(mapColors.unverified, false, true)}
 							<span>
-								<strong>Not verified</strong>: extracted automatically, not reviewed yet.
+								<strong>Not verified</strong> (hollow): extracted automatically, not released yet.
 							</span>
 						</li>
 						<li class="flex items-center gap-3">

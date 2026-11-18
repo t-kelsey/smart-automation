@@ -16,8 +16,22 @@ export const toSummary = ({
 	elevation,
 	totalDepth,
 	location,
-	verified
-}: Borehole): BoreholeSummary => ({ id, name, date, elevation, totalDepth, location, verified });
+	verified,
+	openFlagCount
+}: Borehole): BoreholeSummary => ({
+	id,
+	name,
+	date,
+	elevation,
+	totalDepth,
+	location,
+	verified,
+	openFlagCount
+});
+
+const readOnly = async (): Promise<never> => {
+	throw new Error('The mock data is read-only.');
+};
 
 /** In-memory repository for development and tests. */
 export class MockBoreholeRepository implements BoreholeRepository {
@@ -47,9 +61,10 @@ export class MockBoreholeRepository implements BoreholeRepository {
 		);
 		if (sort) {
 			const dir = sort.direction === 'asc' ? 1 : -1;
+			const key = sort.field === 'openFlags' ? 'openFlagCount' : sort.field;
 			matches.sort((a, b) => {
-				const x = a[sort.field];
-				const y = b[sort.field];
+				const x = a[key];
+				const y = b[key];
 				// Missing values always sort last.
 				if (x == null || y == null) return Number(x == null) - Number(y == null);
 				return (x < y ? -1 : x > y ? 1 : 0) * dir;
@@ -69,6 +84,14 @@ export class MockBoreholeRepository implements BoreholeRepository {
 		const borehole = this.boreholes.find((b) => b.id === id);
 		return borehole ? structuredClone(borehole) : null;
 	}
+
+	update = readOnly;
+	addLayer = readOnly;
+	updateLayer = readOnly;
+	deleteLayer = readOnly;
+	revertEdit = readOnly;
+	resolveFlag = readOnly;
+	setVerified = readOnly;
 
 	async getDocument(id: string): Promise<DocumentDetail | null> {
 		const linked = this.boreholes.filter((b) => b.documents.some((d) => d.id === id));

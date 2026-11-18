@@ -18,7 +18,7 @@ defmodule Api.MockData do
   import Ecto.Query
 
   alias Api.Boreholes
-  alias Api.Boreholes.{Borehole, BoreholeDocument, BoreholeLayer, Document}
+  alias Api.Boreholes.{Borehole, BoreholeDocument, BoreholeLayer, Document, FieldEdit, FieldFlag}
   alias Api.Repo
 
   # The one file behind every mock document, and the name it is stored under.
@@ -477,6 +477,8 @@ defmodule Api.MockData do
         insert_chunked(BoreholeLayer, Enum.flat_map(records, & &1.layers))
         insert_chunked(Document, Enum.flat_map(records, & &1.documents))
         insert_chunked(BoreholeDocument, Enum.flat_map(records, & &1.links))
+        insert_chunked(FieldFlag, Enum.flat_map(records, & &1.flags))
+        insert_chunked(FieldEdit, Enum.flat_map(records, & &1.edits))
       end,
       timeout: :infinity
     )
@@ -484,7 +486,8 @@ defmodule Api.MockData do
     %{
       boreholes: count,
       layers: Enum.sum_by(records, &length(&1.layers)),
-      documents: Enum.sum_by(records, &length(&1.documents))
+      documents: Enum.sum_by(records, &length(&1.documents)),
+      flags: Enum.sum_by(records, &length(&1.flags))
     }
   end
 
@@ -562,10 +565,13 @@ defmodule Api.MockData do
     }
 
     documents = build_documents(name, region.country, example, now)
+    {flags, edits} = build_review(borehole, layers, now)
 
     %{
       borehole: borehole,
       layers: layers,
+      flags: flags,
+      edits: edits,
       documents: documents,
       links:
         documents
@@ -639,6 +645,68 @@ defmodule Api.MockData do
         updated_at: now
       }
     end)
+  end
+
+  # Open flags (rule and validator) and validator corrections for about a third of the boreholes,
+  # without sources: the mock documents all share one example file (ADR-0006).
+  defp build_review(borehole, layers, now) do
+    if :rand.uniform() < 0.35 do
+      layer = pick(layers)
+      now = %{now | microsecond: {0, 6}}
+
+      candidates = [
+        {nil, "elevation_m", "warning", "validator", nil,
+         "Elevation is hard to read, the value may be 1 m off"},
+        {nil, "total_depth_m", "warning", "rule", "total_depth_mismatch",
+         "Total depth differs from the bottom of the last layer"},
+        {layer.id, "depth_from_m", "warning", "rule", "layer_gap", "Gap above this layer"},
+        {layer.id, "petrography", "warning", "validator", nil,
+         "The petrography may be a different soil type"},
+        {layer.id, "depth_to_m", "error", "validator", nil,
+         "The bottom depth contradicts the document"}
+      ]
+
+      flags =
+        candidates
+        |> Enum.take_random(:rand.uniform(3))
+        |> Enum.map(fn {layer_id, field, severity, origin, code, message} ->
+          %{
+            id: Ecto.UUID.generate(),
+            borehole_id: borehole.id,
+            layer_id: layer_id,
+            field: field,
+            severity: severity,
+            message: message,
+            origin: origin,
+            code: code,
+            inserted_at: now,
+            updated_at: now
+          }
+        end)
+
+      edits =
+        if :rand.uniform() < 0.5 do
+          [
+            %{
+              id: Ecto.UUID.generate(),
+              borehole_id: borehole.id,
+              layer_id: nil,
+              field: "elevation_m",
+              old_value: Decimal.to_float(borehole.elevation_m) + 1.0,
+              new_value: Decimal.to_float(borehole.elevation_m),
+              source: "validator",
+              reason: "The log says #{Decimal.to_float(borehole.elevation_m)} m",
+              inserted_at: now
+            }
+          ]
+        else
+          []
+        end
+
+      {flags, edits}
+    else
+      {[], []}
+    end
   end
 
   defp build_documents(name, country, example, now) do

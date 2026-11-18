@@ -26,9 +26,11 @@
 		 * Without it the column is drawn at a fixed scale.
 		 */
 		availableHeight?: number;
+		/** Worst open review flag of a layer, drawn as a yellow (warning) or red (error) dot. */
+		flagOf?: (layerId: string) => 'warning' | 'error' | null;
 	}
 
-	let { layers, totalDepth, colored = true, selection, availableHeight }: Props = $props();
+	let { layers, totalDepth, colored = true, selection, availableHeight, flagOf }: Props = $props();
 
 	const defaultScale = 14; // units (pixels) per metre
 	const minScale = 1;
@@ -160,6 +162,14 @@
 						fill="url(#{patternId(row.fill.second, 'b')})"
 					/>
 				{/if}
+			{/if}
+			{#if flagOf?.(row.layer.id)}
+				<circle
+					cx={8}
+					cy={(row.y0 + row.y1) / 2}
+					r={5}
+					class={flagOf(row.layer.id) === 'error' ? 'fill-error-500' : 'fill-warning-500'}
+				/>
 			{/if}
 			{#if hovered || selected}
 				<rect

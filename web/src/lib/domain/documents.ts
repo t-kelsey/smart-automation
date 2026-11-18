@@ -24,7 +24,8 @@ export const PIPELINE_STEPS = [
 	{ key: 'filter', label: 'Filter pages', hint: 'Finds the borehole log pages' },
 	{ key: 'split', label: 'Split boreholes', hint: 'Separates the logs on those pages' },
 	{ key: 'extract', label: 'Extract', hint: 'Reads depths, lithology and stratigraphy' },
-	{ key: 'transform', label: 'Transform', hint: 'Standardises the result for the database' }
+	{ key: 'transform', label: 'Transform', hint: 'Standardises the result for the database' },
+	{ key: 'validate', label: 'Validate', hint: 'Checks the result against the document' }
 ] as const;
 
 export type PipelineStep = (typeof PIPELINE_STEPS)[number]['key'];
@@ -44,6 +45,7 @@ export function createDefaultPipelineConfig(): PipelineConfig {
 		filter: { model: 'haiku', effort: 'high' },
 		split: { model: 'haiku', effort: 'medium' },
 		extract: { model: 'sonnet', effort: 'high' },
-		transform: { model: 'haiku', effort: 'high' }
+		transform: { model: 'haiku', effort: 'high' },
+		validate: { model: 'opus', effort: 'high' }
 	};
 }

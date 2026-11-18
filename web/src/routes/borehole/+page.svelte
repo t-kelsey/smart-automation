@@ -18,16 +18,33 @@
 	const first = $derived(result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1);
 	const last = $derived(Math.min(result.page * result.pageSize, result.total));
 
-	// Page and page size live in the URL so that pages are linkable and the back button works.
-	function show(page: number, pageSize: number) {
-		const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+	// Page, page size and sort live in the URL so that pages are linkable and the back button works.
+	function show(page: number, pageSize: number, flagsFirst = data.flagsFirst) {
+		const query = new URLSearchParams({
+			page: String(page),
+			pageSize: String(pageSize),
+			...(flagsFirst ? { sort: 'open_flags' } : {})
+		});
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- only the query string changes
 		goto(`?${query}`, { reset: false });
 	}
 </script>
 
 <div class="space-y-4">
-	<h1 class="h1">Boreholes</h1>
+	<div class="flex flex-wrap items-center justify-between gap-4">
+		<h1 class="h1">Boreholes</h1>
+		<label class="flex items-center gap-2 text-sm">
+			Sort
+			<select
+				class="select w-auto"
+				value={data.flagsFirst ? 'open_flags' : 'name'}
+				onchange={(e) => show(1, result.pageSize, e.currentTarget.value === 'open_flags')}
+			>
+				<option value="name">By name</option>
+				<option value="open_flags">Most open flags first</option>
+			</select>
+		</label>
+	</div>
 
 	<BoreholeTable items={result.items} />
 

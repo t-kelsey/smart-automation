@@ -1,15 +1,13 @@
 """DIN 4023 conformity of a borehole payload, checked against standards/din-4023/din-4023.json.
 
-A payload conforms when
-- it has at least one layer, and layers are ordered by depth without overlaps,
-- every layer's `petrography` is empty (not in the source) or a DIN 4023 term: a main component
+A layer's `petrography` is empty (not in the source) or a DIN 4023 term: a main component
   (Table 1 name, hatch name or short form, e.g. "Sand", "Sandstein", "S") optionally followed by
   secondary components (Table 1 adjectives or short forms, e.g. "schluffig", "u"), comma separated:
   "Sand, schluffig".
 
 `conform` rewrites each petrography to the standard's spelling ("sand,schluffig" -> "Sand, schluffig")
 and keeps a changed original in the layer's `metadata.petrography_original`. Terms that cannot be
-mapped are reported as issues; nothing is guessed. `color` and `stratigraphy` are not defined by
+mapped become null (the API flags them as `missing_petrography`); nothing is guessed. `color` and `stratigraphy` are not defined by
 the standard (Annex A colours are drawing colours per soil type) and pass through unchanged.
 """
 
@@ -21,12 +19,6 @@ import re
 from functools import lru_cache
 
 STANDARD_FILE = pathlib.Path(__file__).resolve().parents[2] / "standards" / "din-4023" / "din-4023.json"
-
-
-class Din4023Error(ValueError):
-    def __init__(self, issues: list[str]):
-        super().__init__("; ".join(issues))
-        self.issues = issues
 
 
 def _fold(text: str) -> str:
@@ -108,31 +100,17 @@ def normalise_petrography(text: str | None) -> str | None:
 
 
 def conform(payload: dict) -> tuple[dict, list[str]]:
-    """Return (payload with DIN 4023 petrography, issues). Issues must be empty to upload."""
+    """Return (payload with DIN 4023 petrography, notes). Never blocks the upload (ADR-0006): a term that
+    cannot be mapped becomes null with the original kept in `metadata.petrography_original` and a note;
+    layer order and overlaps are checked by the API."""
     out = copy.deepcopy(payload)
-    issues: list[str] = []
-    layers = out.get("layers") or []
-    if not layers:
-        issues.append("no layers")
-    prev_to = None
-    for i, layer in enumerate(layers, 1):
-        pos = layer.get("position", i)
+    notes: list[str] = []
+    for i, layer in enumerate(out.get("layers") or [], 1):
         original = layer.get("petrography")
-        if original and original.strip():
-            canon = normalise_petrography(original)
+        canon = normalise_petrography(original)
+        if original and original.strip() and canon != original:
+            layer.setdefault("metadata", {})["petrography_original"] = str(original)
             if canon is None:
-                issues.append(f"layer {pos}: petrography {original!r} is not a DIN 4023 term")
-            else:
-                if canon != original:
-                    layer.setdefault("metadata", {})["petrography_original"] = str(original)
-                layer["petrography"] = canon
-        else:
-            layer["petrography"] = None
-        f, t = layer.get("depth_from_m"), layer.get("depth_to_m")
-        if f is None or t is None or not t > f:
-            issues.append(f"layer {pos}: invalid depth range {f}..{t}")
-        elif prev_to is not None and f < prev_to:
-            issues.append(f"layer {pos}: starts at {f} m, above the end of the previous layer ({prev_to} m)")
-        if t is not None:
-            prev_to = t
-    return out, issues
+                notes.append(f"layer {layer.get('position', i)}: petrography {original!r} is not a DIN 4023 term, set to null")
+        layer["petrography"] = canon
+    return out, notes

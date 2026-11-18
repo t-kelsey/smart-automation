@@ -18,8 +18,9 @@ from .steps.extract import extract_boreholes
 from .steps.filter import filter_pages
 from .steps.split import split_boreholes
 from .steps.translate import transform_boreholes
+from .steps.validate import validate_boreholes
 
-STAGES = ("filter", "split", "extract", "transform")
+STAGES = ("filter", "split", "extract", "transform", "validate")
 DEFAULT_OUT = pathlib.Path(__file__).resolve().parent.parent / "out"
 
 
@@ -62,7 +63,7 @@ def run_pipeline(
     tracker: Tracker | None = None,
     stop: threading.Event | None = None,
 ) -> tuple[list[dict], list[StepReport], float]:
-    """Run all four steps on one PDF; every stage (and borehole) reports its start, result or failure
+    """Run all five steps on one PDF; every stage (and borehole) reports its start, result or failure
     to `tracker`. Setting `stop` cancels the run with PipelineStopped at the next stage, borehole or
     AI call.
 
@@ -90,8 +91,9 @@ def _run(
         StepReport("2 split boreholes", c.split.model, c.split.effort, stop=stop),
         StepReport("3 extract", c.extract.model, c.extract.effort, stop=stop),
         StepReport("4 transform to db", c.transform.model, c.transform.effort, stop=stop),
+        StepReport("5 validate", c.validate.model, c.validate.effort, stop=stop),
     ]
-    r1, r2, r3, r4 = reports
+    r1, r2, r3, r4, r5 = reports
     results: list[dict] = []
     t0 = time.monotonic()
     stage = "filter"
@@ -108,10 +110,14 @@ def _run(
                 extracted = extract_boreholes(files, out_dir, r3, workers, recorder)
             stage = "transform"
             with Timer(r4):
-                results = transform_boreholes(extracted, out_dir, r4, workers, recorder)
+                transformed = transform_boreholes(extracted, out_dir, r4, workers, recorder)
+            stage = "validate"
+            with Timer(r5):
+                items = [(f, data, t) for (f, data), t in zip(extracted, transformed)]
+                results = validate_boreholes(items, out_dir, r5, workers, recorder)
         else:
             log("no borehole log pages found, nothing to do")
-    except Exception as e:  # extract/transform record their own failures per borehole
+    except Exception as e:  # extract/transform/validate record their own failures per borehole
         recorder.record_failure(stage, e, report=dict(zip(STAGES, reports))[stage])
         raise
     finally:

@@ -11,10 +11,12 @@ Legacy borehole logs (scanned or digital PDFs, multilingual, many layouts) are t
 1. **Upload** a borehole report in the web app and choose the model and effort per pipeline step.
 2. **Extract**: the pipeline finds the real borehole log pages, splits the report into one PDF per borehole, extracts depth intervals, lithology, stratigraphy and metadata (location, date, elevation) in the original wording, and translates and normalises it to English and to the DIN 4023 terms.
 3. **Georeference**: coordinates in local systems (e.g. Gauss-Krüger) are reprojected to WGS84 in PostGIS.
-4. **Store** boreholes, layers and the source document in a central PostGIS database.
-5. **Search and explore** on an interactive world map, with a query language (name, place, date) and autocompletion, and view each borehole as a DIN 4023 profile column next to its source document.
+4. **Validate**: a second model checks every value against the page, corrects what it is sure about and flags what is doubtful; plausibility checks (gaps, overlaps, depths, missing values) flag the rest.
+5. **Store** boreholes, layers and the source document in a central PostGIS database.
+6. **Review**: a person checks the flagged values next to the source document, where hovering a value highlights its spot in the PDF, edits or confirms them (every change is logged and can be undone) and releases the borehole.
+7. **Search and explore** on an interactive world map, with a query language (name, place, date) and autocompletion, and view each borehole as a DIN 4023 profile column next to its source document.
 
-Every pipeline run is tracked per stage (status, model, tokens, cost) and visible in the web app. A whole run or a single failed extract/transform job can be retried. Boreholes generated for demos are marked `metadata.source = "mock"`.
+Every pipeline run is tracked per stage (status, model, tokens, cost) and visible in the web app. A whole run or a single failed extract, transform or validate job can be retried. Boreholes generated for demos are marked `metadata.source = "mock"`.
 
 ## Production setup
 
@@ -68,14 +70,14 @@ flowchart LR
 | Part           | Role                                                                                           | Docs                           |
 | -------------- | ---------------------------------------------------------------------------------------------- | ------------------------------ |
 | [`api/`](api/) | Owns the data model, georeferencing, search and document storage; exposes the REST API         | [api/README.md](api/README.md) |
-| [`bem/`](bem/) | Four-stage LLM pipeline (filter → split → extract → transform) that turns a PDF into boreholes | [bem/README.md](bem/README.md) |
+| [`bem/`](bem/) | Five-stage LLM pipeline (filter → split → extract → transform → validate) that turns a PDF into boreholes | [bem/README.md](bem/README.md) |
 | [`web/`](web/) | Map, search, borehole profile, upload and pipeline monitoring                                  | [web/README.md](web/README.md) |
 
 More detail: [docs/architecture.md](docs/architecture.md) (flows), [docs/api-reference.md](docs/api-reference.md) (endpoints), [docs/adr/](docs/adr/) (decisions).
 
 ### Pipeline architecture
 
-The pipeline in [`bem/`](bem/) is a chain of four small stages instead of one big prompt, so each stage is cheap to retry, measurable and can use the model that fits its job:
+The pipeline in [`bem/`](bem/) is a chain of five small stages instead of one big prompt, so each stage is cheap to retry, measurable and can use the model that fits its job:
 
 ```mermaid
 flowchart LR
@@ -83,13 +85,14 @@ flowchart LR
     filter["1 Filter<br/>keep real log pages<br/>(small model)"] --> split
     split["2 Split<br/>one PDF per borehole<br/>(small model)"] --> extract
     extract["3 Extract<br/>all data, original wording<br/>(strong model)"] --> transform
-    transform["4 Transform<br/>English, DIN 4023,<br/>API payload (small model)"] --> store[("POST /api/boreholes")]
+    transform["4 Transform<br/>English, DIN 4023,<br/>API payload (small model)"] --> validate
+    validate["5 Validate<br/>check against the page,<br/>flags, boxes (strong model)"] --> store[("POST /api/boreholes")]
 ```
 
 - **Triggered by the API:** a run is started with `POST /execute` (document id, model and effort per stage). The pipeline downloads the document from the API, converts images and Word to PDF, and works through the stages in the background.
-- **Parallel and per borehole:** pages are classified in chunks, and extract and transform run once per borehole, in parallel.
+- **Parallel and per borehole:** pages are classified in chunks, and extract, transform and validate run once per borehole, in parallel.
 - **Tracked:** every stage is an `exec_stage` in the API with status, model, effort, result, error, tokens and cost, so the web app shows live progress for every run and borehole.
-- **Fail-safe:** a borehole is only stored when it passes the DIN 4023 check and its upload succeeds. A failed or stopped extract or transform job can be retried on its own without redoing the rest ([ADR-0002](docs/adr/0002-document-intake-and-pipeline-runs.md)), and a run can be stopped at any time.
+- **Checked, not dropped:** a validator in a fresh context compares every value with the page image and returns where it stands (a box on the page, tightened to the text layer where there is one). Doubtful values are stored with a flag for human review instead of blocking the borehole ([ADR-0006](docs/adr/0006-validation-stage-and-human-review.md)). A failed or stopped extract, transform or validate job can be retried on its own without redoing the rest ([ADR-0002](docs/adr/0002-document-intake-and-pipeline-runs.md)), and a run can be stopped at any time.
 - **Pluggable AI backend:** OpenRouter by default, with the `claude` CLI for development (`BEM_AI`), so models can be swapped without touching the stages.
 - **Decoupled:** the pipeline talks to the API only over HTTP, never to the database or the document storage.
 
@@ -97,7 +100,7 @@ flowchart LR
 
 Every borehole is brought into the same standard, based on the German norm **DIN 4023** (drawing of soil and rock in borehole logs): soil and rock names, short forms, hatch patterns and colours. The norm is kept as a single data file, [`standards/din-4023/din-4023.json`](standards/din-4023/din-4023.json), which is the source of truth for the whole system ([ADR-0004](docs/adr/0004-web-frontend-and-din-4023.md)):
 
-- **`bem`** normalises the extracted petrography to the norm's terms (`"sand,schluffig"` → `"Sand, schluffig"`, keeping the original wording in the metadata). A borehole with a layer that cannot be mapped is not uploaded; nothing is guessed.
+- **`bem`** normalises the extracted petrography to the norm's terms (`"sand,schluffig"` → `"Sand, schluffig"`, keeping the original wording in the metadata). A term that cannot be mapped is left empty and flagged for review; nothing is guessed.
 - **`api`** stores the standardised values (English, metric, WGS84), so every borehole has the same shape whatever its source looked like.
 - **`web`** draws the profile column from the same file: hatch patterns, colours and short forms follow the norm.
 
@@ -105,12 +108,11 @@ Because all three parts read the same file, a log from any company, language or 
 
 ## Scope and room to grow
 
-The hard part of this challenge is not the web app, it is turning messy, multilingual, scanned borehole logs into trustworthy standardised data. That is where the hackathon time went: the four-stage pipeline (filter → split → extract → transform) with DIN 4023 conformance, per-stage tracking and retries, the PostGIS data model with georeferencing, and the API that ties them together. The web app is deliberately a thin layer on top of that architecture, and a lot of product work is left on purpose, because the architecture makes it cheap to add:
+The hard part of this challenge is not the web app, it is turning messy, multilingual, scanned borehole logs into trustworthy standardised data. That is where the hackathon time went: the five-stage pipeline (filter → split → extract → transform → validate) with DIN 4023 conformance, validation and human review, per-stage tracking and retries, the PostGIS data model with georeferencing, and the API that ties them together. The web app is deliberately a thin layer on top of that architecture, and a lot of product work is left on purpose, because the architecture makes it cheap to add:
 
 - **Users and access:** authentication, roles, per-project data separation and audit logs (today there is none, see the warning above).
 - **Document management:** uploading additional documents to a borehole, new versions, renaming, deleting, sharing links.
-- **Human review:** editing extracted values, approving results and feeding corrections back as evaluation data.
-- **Quality measurement:** a ground-truth set and per-field accuracy and confidence scores for the extraction.
+- **Quality measurement:** a ground-truth set and per-field accuracy for the extraction; the review history (validator and human corrections per field) is a starting point.
 - **Scale and operations:** a persistent job queue instead of the in-memory one, self-hosted models for confidential data, monitoring.
 - **Richer geology:** stratigraphic lookup tables, groundwater and sample symbols in the profile, cross sections between neighbouring boreholes, export to standard formats.
 

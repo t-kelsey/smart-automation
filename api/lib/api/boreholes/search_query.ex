@@ -14,6 +14,7 @@ defmodule Api.Boreholes.SearchQuery do
       `after:1990` is `date:>1990`, `before:2000` is `date:<2000`
     * a bare year, date or date range (`1959`, `1950..1960`) is a date term; quote it to search
       for it as text
+    * `verified:yes`, `flagged:no` - verified, has open flags (ADR-0006); also `true`/`false`
     * `a,b` - either value, e.g. `place:Bern,Basel`
     * `-term` - must not match, e.g. `-place:Bern`
 
@@ -22,7 +23,7 @@ defmodule Api.Boreholes.SearchQuery do
 
   defstruct terms: []
 
-  @type field :: :text | :name | :place | :date
+  @type field :: :text | :name | :place | :date | :verified | :flagged
   @type date_range :: {Date.t() | nil, Date.t() | nil}
 
   @typedoc """
@@ -51,7 +52,9 @@ defmodule Api.Boreholes.SearchQuery do
     "drilled" => :date,
     "year" => :date,
     "after" => :after,
-    "before" => :before
+    "before" => :before,
+    "verified" => :verified,
+    "flagged" => :flagged
   }
 
   # -?  key:?  value(,value)*  where a value is "quoted" or a run of other characters
@@ -260,9 +263,27 @@ defmodule Api.Boreholes.SearchQuery do
       field when field in [:name, :place] ->
         {:ok, %{term | field: field, values: Enum.map(raw, &elem(&1, 0))}}
 
+      field when field in [:verified, :flagged] ->
+        boolean_term(%{term | field: field})
+
       field ->
         date_term(term, field)
     end
+  end
+
+  defp boolean_term(%{raw: raw, key: key} = term) do
+    values =
+      Enum.map(raw, fn {text, _quoted} ->
+        case String.downcase(text) do
+          yes when yes in ["yes", "true"] -> true
+          no when no in ["no", "false"] -> false
+          _ -> :error
+        end
+      end)
+
+    if :error in values,
+      do: {:error, "#{key}: needs yes or no, e.g. #{key}:yes"},
+      else: {:ok, %{term | values: values}}
   end
 
   # A bare value is a date term if every value is an unquoted date; a lone "name:" is an error.

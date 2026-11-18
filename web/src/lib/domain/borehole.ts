@@ -1,5 +1,74 @@
 import type { Composition } from '#lib/din4023/index.ts';
 
+/** Where a value is written in a source document (ADR-0006). */
+export interface SourceRef {
+	documentId: string;
+	/** 1-based page number. */
+	page: number;
+	/** `[x0, y0, x1, y1]` in 0–1 of the page, origin top left; `null` when only the page is known. */
+	box: [number, number, number, number] | null;
+}
+
+/** A doubt about one value, raised by a plausibility rule of the API or by the validator. */
+export interface FieldFlag {
+	id: string;
+	/** API field name (`elevation_m`, `depth_to_m`, …), `location` for the coordinates. */
+	field: string;
+	/** Set for a layer field. */
+	layerId: string | null;
+	severity: 'warning' | 'error';
+	message: string;
+	origin: 'rule' | 'validator';
+	/** Rule id; `null` for validator flags. */
+	code: string | null;
+	/** ISO timestamp; `null` while the flag is open. */
+	resolvedAt: string | null;
+	resolvedBy: 'human' | 'rule' | null;
+}
+
+/** One change of a value; the history is append-only, a revert is a new edit. */
+export interface FieldEdit {
+	id: string;
+	/** Like `FieldFlag.field`; `layer` for creating (old value `null`) or deleting a whole layer. */
+	field: string;
+	layerId: string | null;
+	oldValue: unknown;
+	newValue: unknown;
+	source: 'validator' | 'human';
+	reason: string | null;
+	/** ISO timestamp. */
+	createdAt: string;
+}
+
+/** Borehole fields the review page edits one by one, by API name. Coordinates are edited apart. */
+export const BOREHOLE_FIELDS = [
+	{ field: 'name', label: 'Name', type: 'text' },
+	{ field: 'external_id', label: 'External id', type: 'text' },
+	{ field: 'drilled_at', label: 'Date', type: 'date' },
+	{ field: 'end_date', label: 'End date', type: 'date' },
+	{ field: 'purpose', label: 'Boring cause', type: 'text' },
+	{ field: 'client', label: 'Client', type: 'text' },
+	{ field: 'drilling_method', label: 'Drilling method', type: 'text' },
+	{ field: 'place', label: 'Place', type: 'text' },
+	{ field: 'elevation_m', label: 'Height o. NN (m)', type: 'number' },
+	{ field: 'total_depth_m', label: 'Total depth (m)', type: 'number' },
+	{ field: 'groundwater_level_m', label: 'Groundwater (m)', type: 'number' }
+] as const;
+
+export type BoreholeField = (typeof BOREHOLE_FIELDS)[number]['field'];
+
+/** Layer fields the review page edits, by API name. */
+export type LayerField = 'depth_from_m' | 'depth_to_m' | 'stratigraphy' | 'petrography' | 'color';
+
+/** Changes for `PATCH`: field values, and the coordinates as `x`/`y` in the system `epsg`. */
+export type BoreholeChanges = Partial<Record<BoreholeField, string | number | null>> & {
+	x?: number;
+	y?: number;
+	epsg?: number;
+};
+
+export type LayerChanges = Partial<Record<LayerField, string | number | null>>;
+
 /** Layer of a borehole; soil and rock are described after DIN 4023 (see `#lib/din4023`). */
 export interface BoreholeLayer {
 	/** Database id (uuid); use for keys and selection, not for display. */
@@ -15,9 +84,14 @@ export interface BoreholeLayer {
 		composition?: Composition;
 		/** Description as written on the original log. */
 		description: string;
+		/** The extracted text when it was no DIN 4023 term and petrography was left empty. */
+		original?: string;
 	};
 	/** Layer colour as shown on the original log. */
 	color: { hex: string; name: string };
+	/** Values as stored, by API name; what the review page edits. */
+	stored: Record<LayerField, string | null>;
+	source: SourceRef | null;
 }
 
 export type DocumentType = 'pdf' | 'image' | 'docx';
@@ -72,14 +146,25 @@ export interface Borehole {
 	client?: string;
 	location: { lat: number; lon: number; place?: string } | null;
 	verified: boolean;
+	/** ISO timestamp of the release; `null` while not verified. */
+	verifiedAt: string | null;
+	openFlagCount: number;
 	layers: BoreholeLayer[];
 	documents: BoreholeDocument[];
+	/** Values as stored, by API name; what the review page edits. */
+	stored: Record<BoreholeField, string | null>;
+	/** Where each field is written, by API name (`location` for the coordinates). */
+	sources: Record<string, SourceRef>;
+	/** Open flags first. */
+	flags: FieldFlag[];
+	/** Newest first. */
+	edits: FieldEdit[];
 }
 
 /** Lightweight representation for lists and the map. */
 export type BoreholeSummary = Pick<
 	Borehole,
-	'id' | 'name' | 'date' | 'elevation' | 'totalDepth' | 'location' | 'verified'
+	'id' | 'name' | 'date' | 'elevation' | 'totalDepth' | 'location' | 'verified' | 'openFlagCount'
 >;
 
 /** Minimal data to place a borehole on the map; details are loaded on demand. */
@@ -102,7 +187,7 @@ export interface BoreholeFilter {
 	maxDepth?: number;
 }
 
-export type BoreholeSortField = 'name' | 'date' | 'totalDepth';
+export type BoreholeSortField = 'name' | 'date' | 'totalDepth' | 'openFlags';
 
 export interface BoreholeSort {
 	field: BoreholeSortField;

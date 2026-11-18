@@ -114,7 +114,7 @@ The current pipeline is `bem/` (`bem/README.md`; see ADR-0002), not the old five
 
 1. **Upload**: `POST /api/documents` (ADR-0002) stores the file and creates a `documents` row (`status: "pending"`). This no longer starts processing by itself (ADR-0002).
 2. **Pick a config, then submit**: once the user has chosen per-stage model/effort settings (a free-form map), the frontend calls `POST /api/pipeline_runs` with `{document_id, config}`. The backend creates a `pipeline_runs` row (`status: "new"`) and itself submits the run to `bem/` over `PIPELINE_URL`: a file-free JSON webhook (`document_id`, `pipeline_id`, `config`, no file bytes), moving `status` to `"running"` on success or `"failed"` if the pipeline can't be reached. The pipeline fetches the document's file itself via `GET /api/documents/:id/file` (ADR-0002). (ADR-0002 designed this endpoint to also serve split-out per-borehole PDFs the pipeline would upload mid-run via `POST /api/documents`, but the current pipeline doesn't upload any such documents — see ADR-0002.)
-3. **Poll progress**: `GET /api/pipeline_runs/:id` returns the run's `status`/`config`, its `exec_stages` (one row per step execution, `type` `filter`/`split`/`extract`/`transform`, append-only so reruns are comparable — ADR-0002) and its `report` (per-step model/time/token/cost stats, `null` until posted). `GET /api/pipeline_runs` lists every run (newest first, with `status`/`document_id` filters and `limit`/`offset` paging) for the frontend's `pipelines/` overview page; each entry adds `document_filename` but leaves out `exec_stages`/`report` to stay light for a table view.
+3. **Poll progress**: `GET /api/pipeline_runs/:id` returns the run's `status`/`config`, its `exec_stages` (one row per step execution, `type` `filter`/`split`/`extract`/`transform`/`validate`, append-only so reruns are comparable — ADR-0002) and its `report` (per-step model/time/token/cost stats, `null` until posted). `GET /api/pipeline_runs` lists every run (newest first, with `status`/`document_id` filters and `limit`/`offset` paging) for the frontend's `pipelines/` overview page; each entry adds `document_filename` but leaves out `exec_stages`/`report` to stay light for a table view.
 4. **Finish**: when the whole run completes, `bem/` calls `PUT /api/pipeline_runs/:id/status` with `"completed"`, `"failed"` (plus `error`) or `"stopped"`; by then it has already posted the extracted boreholes via the unchanged `POST /api/boreholes` (ADR-0001). Every stage is tracked through `new → running → success | failed | stopped` with timing, model, effort, usage and error, and `POST /api/pipeline_runs/:id/stop` cancels a run (ADR-0002). `PUT /api/documents/:id/status` (ADR-0002) still exists but is no longer called by this flow — legacy/manual bookkeeping only (see `docs/api-reference.md`).
 
 `exec_stages`/`stage_document_links`/`reports` (ADR-0002) are the tables the pipeline writes its per-step output to; `pipeline_runs` (ADR-0002) is the submission/polling layer the frontend talks to on top of them. Full request/response docs: the "Pipeline runs" section of `docs/api-reference.md`.
@@ -147,7 +147,7 @@ The current pipeline is `bem/` (`bem/README.md`; see ADR-0002), not the old five
 - Convert source coordinates (UTM zones, local grids, DMS, etc.) to WGS84 lon/lat for storage — `Geo` + a conversion lib (e.g. shell out to `proj` or use a pure-Elixir UTM conversion) is sufficient for the hackathon scope
 
 ### 4. Map/Search API (consumed by `web/`) — implemented, see `docs/api-reference.md`
-- `GET /api/boreholes` → GeoJSON `FeatureCollection`, with `bbox`, search in a small query language over name, place and date (`q`, ADR-0003), filters (`verified`, `drilled_from`/`drilled_to`, `min_depth`/`max_depth`), `sort`, paging (`limit`/`offset`, capped at 10 000) and `view=points` for a lightweight map payload (ADR-0001)
+- `GET /api/boreholes` → GeoJSON `FeatureCollection`, with `bbox`, search in a small query language over name, place and date (`q`, ADR-0003), filters (`verified`, `flagged`, `drilled_from`/`drilled_to`, `min_depth`/`max_depth`), `sort`, paging (`limit`/`offset`, capped at 10 000) and `view=points` for a lightweight map payload (ADR-0001)
 - `GET /api/boreholes/:id` → full detail (Stammdaten + ordered `borehole_layers` + confidentiality-filtered `documents`); `404` JSON for an unknown or malformed id
 - `GET /api/boreholes/search` → same shape as the list endpoint, plus `score` per feature and an autocorrected `suggestion` when nothing was found (ADR-0003)
 - `GET /api/boreholes/complete` → trigram (q-gram) completions of the term being typed at the end of a query (ADR-0003)
@@ -156,9 +156,9 @@ The current pipeline is `bem/` (`bem/README.md`; see ADR-0002), not the old five
 - Errors are JSON (`{ errors: { detail } }`) via `action_fallback ApiWeb.FallbackController`: `400`/`404` for GETs, `422` with field errors for `POST /api/boreholes` changeset failures
 - `Api.MockData` + `mix boreholes.mock --count N` (and `MOCK_BOREHOLES` in seeds) generates up to 10 000 deterministic boreholes/layers/documents for load-testing paging and search without real data
 
-### 5. Review/QA workflow (nice-to-have if time allows)
-- Minimal endpoint/LiveView to list unverified boreholes and let a human correct depth/stratigraphy/coordinates before marking `verified: true`
-- How a borehole gets flagged for review (confidence scoring, AI cross-check, etc.) is still an open decision — not scoped yet
+### 5. Review/QA workflow — implemented (ADR-0006)
+- The pipeline's `validate` stage posts the borehole with `flags`, validator `edits` and `sources`; `Api.Boreholes.Checks` adds rule flags after create and every edit
+- `PATCH /api/boreholes/:id`, layer `POST`/`PATCH`/`DELETE`, `POST /api/boreholes/:id/edits/:edit_id/revert`, `POST /api/flags/:id/resolve` and `POST /api/boreholes/:id/verify` edit, undo and release a borehole; every change is in the `field_edits` history. See the "Editing and review" section of `docs/api-reference.md`
 
 ---
 

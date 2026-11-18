@@ -1,4 +1,4 @@
-"""The four pipeline steps. Each writes its intermediate output below `out_dir`."""
+"""The five pipeline steps. Each writes its intermediate output below `out_dir`."""
 
 import json
 import pathlib

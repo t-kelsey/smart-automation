@@ -90,8 +90,11 @@ export async function renderIcon(svg: string): Promise<ImageData> {
 	return context.getImageData(0, 0, size, size);
 }
 
-/** A plain dot in `color` with a white rim, for when the material fill is off. */
-export function plainIconSvg(color: string): string {
+/** A dot in `color` with a white rim, for when the material fill is off; hollow unless `filled`. */
+export function plainIconSvg(color: string, filled = true): string {
 	const center = iconSize / 2;
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 ${iconSize} ${iconSize}"><circle cx="${center}" cy="${center}" r="13.5" fill="#fff"/><circle cx="${center}" cy="${center}" r="10" fill="${color}"/></svg>`;
+	const inner = filled
+		? `<circle cx="${center}" cy="${center}" r="10" fill="${color}"/>`
+		: `<circle cx="${center}" cy="${center}" r="8.5" fill="#fff" stroke="${color}" stroke-width="3.5"/>`;
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 ${iconSize} ${iconSize}"><circle cx="${center}" cy="${center}" r="13.5" fill="#fff"/>${inner}</svg>`;
 }

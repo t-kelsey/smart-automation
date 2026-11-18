@@ -37,7 +37,7 @@ defmodule ApiWeb.ExecStageController do
   end
 
   @doc """
-  Retries a failed or stopped `extract`/`transform` job (see `Api.Boreholes.retry_exec_stage/1`):
+  Retries a failed or stopped `extract`/`transform`/`validate` job (see `Api.Boreholes.retry_exec_stage/1`):
   the run becomes `running` again and the pipeline redoes that borehole as a new job. Answers with
   the run like `GET /api/pipeline_runs/:id`. 404 if unknown, 409 if the job cannot be retried.
   """

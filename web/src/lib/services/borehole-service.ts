@@ -4,9 +4,10 @@ import type {
 	BoreholeSort,
 	BoreholeSummary,
 	DocumentDetail,
+	LayerChanges,
 	MapPoint
 } from '#lib/domain/borehole.ts';
-import type { BoreholeRepository } from '#lib/repositories/borehole-repository.ts';
+import { ValidationError, type BoreholeRepository } from '#lib/repositories/borehole-repository.ts';
 
 export class BoreholeNotFoundError extends Error {
 	constructor(readonly id: string) {
@@ -21,6 +22,29 @@ export class DocumentNotFoundError extends Error {
 		this.name = 'DocumentNotFoundError';
 	}
 }
+
+const NUMBER_FIELDS = new Set([
+	'elevation_m',
+	'total_depth_m',
+	'groundwater_level_m',
+	'depth_from_m',
+	'depth_to_m'
+]);
+
+/** Typed text of a field as the API takes it: empty is `null`, numbers accept a decimal comma. */
+function parseValue(field: string, text: string): string | number | null {
+	const value = text.trim();
+	if (!value) return null;
+	if (!NUMBER_FIELDS.has(field)) return value;
+	const number = Number(value.replace(',', '.'));
+	if (Number.isNaN(number)) throw new ValidationError({ [field]: ['is not a number'] });
+	return number;
+}
+
+const byDepth = (borehole: Borehole): Borehole => ({
+	...borehole,
+	layers: [...borehole.layers].sort((a, b) => a.startDepth - b.startDepth)
+});
 
 export const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -86,18 +110,57 @@ export class BoreholeService {
 
 	/** Summary of one borehole, e.g. for a map tooltip. Throws `BoreholeNotFoundError` if it does not exist. */
 	async getSummary(id: string): Promise<BoreholeSummary> {
-		const { name, date, elevation, totalDepth, location, verified } = await this.getById(id);
-		return { id, name, date, elevation, totalDepth, location, verified };
+		const { name, date, elevation, totalDepth, location, verified, openFlagCount } =
+			await this.getById(id);
+		return { id, name, date, elevation, totalDepth, location, verified, openFlagCount };
 	}
 
 	/** Borehole with layers ordered by depth. Throws `BoreholeNotFoundError` if it does not exist. */
 	async getById(id: string): Promise<Borehole> {
 		const borehole = await this.repository.getById(id);
 		if (!borehole) throw new BoreholeNotFoundError(id);
-		return {
-			...borehole,
-			layers: [...borehole.layers].sort((a, b) => a.startDepth - b.startDepth)
-		};
+		return byDepth(borehole);
+	}
+
+	// Review (ADR-0006): every write returns the borehole as stored afterwards, with its flags and
+	// edits updated, and throws a `ValidationError` for rejected values.
+
+	/** Saves the typed text of one borehole field, or of one field of the layer `layerId`. */
+	async setField(id: string, field: string, text: string, layerId?: string | null) {
+		const changes = { [field]: parseValue(field, text) };
+		return byDepth(
+			await (layerId
+				? this.repository.updateLayer(id, layerId, changes)
+				: this.repository.update(id, changes))
+		);
+	}
+
+	/** Moves the borehole to `x`/`y` in the coordinate system `epsg`. */
+	async setLocation(id: string, location: { x: number; y: number; epsg: number }) {
+		return byDepth(await this.repository.update(id, location));
+	}
+
+	async addLayer(id: string, layer: LayerChanges) {
+		return byDepth(await this.repository.addLayer(id, layer));
+	}
+
+	async deleteLayer(id: string, layerId: string) {
+		return byDepth(await this.repository.deleteLayer(id, layerId));
+	}
+
+	/** Undoes an edit (restores the old value, or a deleted layer). */
+	async revertEdit(id: string, editId: string) {
+		return byDepth(await this.repository.revertEdit(id, editId));
+	}
+
+	/** Marks a flagged value as right. */
+	async resolveFlag(flagId: string) {
+		return byDepth(await this.repository.resolveFlag(flagId));
+	}
+
+	/** Releases the borehole (or takes the release back); allowed with open flags. */
+	async setVerified(id: string, verified: boolean) {
+		return byDepth(await this.repository.setVerified(id, verified));
 	}
 
 	/** Document with its linked boreholes. Throws `DocumentNotFoundError` if it does not exist. */

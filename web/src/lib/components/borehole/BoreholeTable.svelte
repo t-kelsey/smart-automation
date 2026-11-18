@@ -22,6 +22,7 @@
 				<th class="text-right!">Elevation (m)</th>
 				<th class="text-right!">Depth (m)</th>
 				<th>Verified</th>
+				<th>Flags</th>
 			</tr>
 		</thead>
 		<tbody class="[&>tr]:hover:preset-tonal">
@@ -47,9 +48,19 @@
 							<Circle class="size-4 opacity-40" aria-label="Not verified" />
 						{/if}
 					</td>
+					<td>
+						{#if borehole.openFlagCount}
+							<span
+								class="badge preset-filled-warning-500"
+								title="{borehole.openFlagCount} open flags to review"
+							>
+								{borehole.openFlagCount}
+							</span>
+						{/if}
+					</td>
 				</tr>
 			{:else}
-				<tr><td colspan="6" class="py-8 text-center opacity-60">No boreholes found.</td></tr>
+				<tr><td colspan="7" class="py-8 text-center opacity-60">No boreholes found.</td></tr>
 			{/each}
 		</tbody>
 	</table>

@@ -1,11 +1,15 @@
+import type { SourceRef } from '#lib/domain/borehole.ts';
+
 /**
  * Highlighting of layers on the borehole details and review pages.
  *
  * Two independent highlights: `hoveredId` follows the pointer, `selectedId` is set by a click and
  * kept in local storage per borehole, so it survives a switch between the details and review pages.
+ * On the review page `source` is where the hovered borehole field is written in the document.
  */
 export class LayerSelection {
 	hoveredId = $state<string | null>(null);
+	source = $state.raw<SourceRef | null>(null);
 	#selectedId = $state<string | null>(null);
 	#boreholeId: string;
 
@@ -24,6 +28,11 @@ export class LayerSelection {
 
 	hover = (id: string | null) => {
 		this.hoveredId = id;
+	};
+
+	/** Shows where a value is written; `null` when the pointer leaves it. */
+	showSource = (source: SourceRef | null) => {
+		this.source = source;
 	};
 
 	/** Selects the layer, or clears the selection when it is already selected. */

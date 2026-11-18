@@ -30,7 +30,7 @@ defmodule Mix.Tasks.Boreholes.Mock do
 
     Mix.shell().info(
       "Removed #{removed} mock boreholes; created #{created.boreholes} boreholes, " <>
-        "#{created.layers} layers, #{created.documents} documents."
+        "#{created.layers} layers, #{created.documents} documents, #{created.flags} open flags."
     )
   end
 end

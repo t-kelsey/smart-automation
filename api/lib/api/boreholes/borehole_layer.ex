@@ -13,25 +13,32 @@ defmodule Api.Boreholes.BoreholeLayer do
     field :color, :string
     field :raw_text, :string
     field :metadata, :map, default: %{}
+    field :source, :map
 
     belongs_to :borehole, Api.Boreholes.Borehole
 
     timestamps(type: :utc_datetime)
   end
 
+  @editable [:depth_from_m, :depth_to_m, :stratigraphy, :petrography, :color, :raw_text]
+
+  @doc "Fields a human may edit one by one."
+  def editable, do: @editable
+
+  @doc false
+  def edit_changeset(borehole_layer, attrs) do
+    borehole_layer |> cast(attrs, @editable) |> validate()
+  end
+
   @doc false
   def changeset(borehole_layer, attrs) do
     borehole_layer
-    |> cast(attrs, [
-      :position,
-      :depth_from_m,
-      :depth_to_m,
-      :stratigraphy,
-      :petrography,
-      :color,
-      :raw_text,
-      :metadata
-    ])
+    |> cast(attrs, [:position, :metadata, :source | @editable])
+    |> validate()
+  end
+
+  defp validate(changeset) do
+    changeset
     |> validate_required([:position, :depth_from_m, :depth_to_m])
     |> validate_number(:depth_from_m, greater_than_or_equal_to: 0)
     |> validate_number(:depth_to_m, greater_than_or_equal_to: 0)

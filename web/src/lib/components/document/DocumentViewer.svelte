@@ -5,6 +5,7 @@ Fills the height of its parent, so give the parent a height. State is local, so 
 can sit side by side (e.g. for comparing documents).
 
 @param document - Document to show; needs `name`, `type` and `url` (the file link).
+@param [highlight] - Page to show and a box to draw on it (normalised 0–1, origin top left).
 @param [class] - Extra classes for the root element.
 
 @example
@@ -24,15 +25,17 @@ can sit side by side (e.g. for comparing documents).
 		ZoomOutIcon
 	} from '@lucide/svelte';
 	import { Alert } from '#lib/components/alert/index.ts';
-	import type { StoredDocument } from '#lib/domain/borehole.ts';
+	import { untrack } from 'svelte';
+	import type { SourceRef, StoredDocument } from '#lib/domain/borehole.ts';
 	import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 
 	interface Props {
 		document: Pick<StoredDocument, 'name' | 'type' | 'url'>;
+		highlight?: Pick<SourceRef, 'page' | 'box'> | null;
 		class?: string;
 	}
 
-	let { document: doc, class: className = '' }: Props = $props();
+	let { document: doc, highlight = null, class: className = '' }: Props = $props();
 
 	const MIN_ZOOM = 0.25;
 	const MAX_ZOOM = 5;
@@ -47,6 +50,7 @@ can sit side by side (e.g. for comparing documents).
 
 	let scroller = $state<HTMLDivElement>();
 	let canvas = $state<HTMLCanvasElement>();
+	let boxElement = $state<HTMLDivElement>();
 	let containerWidth = $state(0);
 
 	let pdf = $state.raw<PDFDocumentProxy | null>(null);
@@ -63,11 +67,14 @@ can sit side by side (e.g. for comparing documents).
 		scroller?.scrollTo({ top: 0 });
 	}
 
+	// Primitives, so that an equal document object (e.g. after a reload of the borehole) keeps the view.
+	let url = $derived(doc.url);
+	let type = $derived(doc.type);
+
 	// Reset view state and (re)load whenever another document is shown.
 	$effect(() => {
-		const { url, type } = doc;
 		zoom = 1;
-		page = 1;
+		page = untrack(() => highlight?.page ?? 1);
 		pageCount = 1;
 		pdf = null;
 		errorMessage = '';
@@ -88,6 +95,7 @@ can sit side by side (e.g. for comparing documents).
 				const result = await task.promise;
 				if (cancelled) return;
 				pageCount = result.numPages;
+				page = Math.min(page, pageCount);
 				pdf = result;
 			} catch (e) {
 				if (cancelled) return;
@@ -140,6 +148,21 @@ can sit side by side (e.g. for comparing documents).
 			renderTask?.cancel();
 		};
 	});
+
+	// Turn to the highlighted page (clamped once the page count is known) …
+	$effect(() => {
+		if (highlight && isPdf)
+			page = Math.max(1, Math.min(highlight.page, pdf ? pageCount : Infinity));
+	});
+
+	// … and scroll its box into view once the page is drawn.
+	$effect(() => {
+		if (box && boxElement && status === 'ready') {
+			boxElement.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+		}
+	});
+
+	let box = $derived(highlight?.box && (!isPdf || highlight.page === page) ? highlight.box : null);
 
 	function onKeydown(event: KeyboardEvent) {
 		if (event.target instanceof HTMLInputElement) return;
@@ -265,27 +288,42 @@ can sit side by side (e.g. for comparing documents).
 				<p class="absolute inset-0 grid place-items-center text-sm opacity-60">Loading…</p>
 			{/if}
 
-			{#if isPdf}
-				<canvas
-					bind:this={canvas}
-					class="mx-auto block bg-white shadow {status === 'error' ? 'hidden' : ''}"
-					aria-label="Page {page} of {doc.name}"
-				></canvas>
-			{:else}
-				<!-- eslint-disable svelte/no-navigation-without-resolve -- url comes from the API -->
-				<img
-					src={doc.url}
-					alt={doc.name}
-					class="mx-auto block max-w-none bg-white shadow {status === 'error' ? 'hidden' : ''}"
-					style:width="{zoom * 100}%"
-					onload={() => (status = 'ready')}
-					onerror={() => {
-						errorMessage = 'The image could not be loaded.';
-						status = 'error';
-					}}
-				/>
-				<!-- eslint-enable svelte/no-navigation-without-resolve -->
-			{/if}
+			<!-- The page and, on top, the box of the highlighted value. -->
+			<div
+				class="relative mx-auto {isPdf ? 'w-fit' : ''} {status === 'error' ? 'hidden' : ''}"
+				style:width={isPdf ? undefined : `${zoom * 100}%`}
+			>
+				{#if isPdf}
+					<canvas
+						bind:this={canvas}
+						class="block bg-white shadow"
+						aria-label="Page {page} of {doc.name}"
+					></canvas>
+				{:else}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- url comes from the API -->
+					<img
+						src={doc.url}
+						alt={doc.name}
+						class="block w-full max-w-none bg-white shadow"
+						onload={() => (status = 'ready')}
+						onerror={() => {
+							errorMessage = 'The image could not be loaded.';
+							status = 'error';
+						}}
+					/>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/if}
+				{#if box}
+					<div
+						bind:this={boxElement}
+						class="pointer-events-none absolute rounded-sm border-2 border-primary-500 bg-primary-500/20"
+						style:left="{box[0] * 100}%"
+						style:top="{box[1] * 100}%"
+						style:width="{(box[2] - box[0]) * 100}%"
+						style:height="{(box[3] - box[1]) * 100}%"
+					></div>
+				{/if}
+			</div>
 		{/if}
 	</div>
 </div>

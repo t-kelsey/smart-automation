@@ -214,6 +214,16 @@ defmodule Api.PipelineTest do
       assert conn |> post(~p"/api/exec_stages/#{failed.id}/retry") |> json_response(409)
     end
 
+    test "retries a validate job only after its transform succeeded", %{conn: conn} = ctx do
+      Req.Test.stub(Api.Pipeline, &Plug.Conn.send_resp(&1, 202, ""))
+      ctx.stage.("transform", 1, "failed")
+      validate = ctx.stage.("validate", 1, "failed")
+      assert conn |> post(~p"/api/exec_stages/#{validate.id}/retry") |> json_response(409)
+
+      ctx.stage.("transform", 1, "success")
+      assert conn |> post(~p"/api/exec_stages/#{validate.id}/retry") |> json_response(202)
+    end
+
     test "restores the run if the pipeline cannot be reached", %{conn: conn} = ctx do
       ctx.stage.("split", nil, "success")
       failed = ctx.stage.("extract", 1, "failed")

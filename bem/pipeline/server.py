@@ -5,10 +5,10 @@ Run with: uv run python -m pipeline.server   (env: BEM_API_URL, BEM_PORT, BEM_WO
 `/execute` receives a document id, the API's `pipeline_runs.id` (as `pipeline_id`) and a config, queues
 the run and answers 202 at once. One worker thread downloads the document from the API
 (`GET /documents/:id/file`) when it starts stage 1 and runs the pipeline. Every stage is tracked
-as an exec_stage (ADR-0002): filter/split are created `new` up front, extract/transform per borehole
-once split has found them; each turns `running` when it starts and `success`/`failed`/`stopped`
-with its result, error, model, effort and usage. A transform stage only succeeds once its borehole
-is stored (`POST /boreholes`). Finally the run gets `PUT /pipeline_runs/:id/status`
+as an exec_stage (ADR-0002): filter/split are created `new` up front, extract/transform/validate per
+borehole once split has found them; each turns `running` when it starts and `success`/`failed`/`stopped`
+with its result, error, model, effort and usage. A validate stage only succeeds once its borehole
+is stored (`POST /boreholes`, ADR-0006). Finally the run gets `PUT /pipeline_runs/:id/status`
 (`completed`/`failed`/`stopped`, with the error). `POST /runs/:id/stop` cancels a queued or
 running run.
 """
@@ -35,15 +35,16 @@ from .ai import StepReport, Timer
 from .config import PipelineConfig
 from .ai import PipelineError, PipelineStopped, get_ai, log
 from .api_service import ApiError, ApiService
-from .din4023 import Din4023Error
 from .output import Recorder, Tracker, persist_enabled
 from .naming import new_run, run_id
 from .steps.extract import extract_boreholes
 from .steps.translate import transform_boreholes
+from .steps.validate import validate_boreholes
 
 WORKDIR = pathlib.Path(os.environ.get("BEM_WORKDIR", pathlib.Path(__file__).resolve().parent.parent / "out" / "server"))
 CHUNK_SIZE = int(os.environ.get("BEM_CHUNK_SIZE", "10"))
 WORKERS = int(os.environ.get("BEM_WORKERS", "4"))
+BOREHOLE_STAGES = ("extract", "transform", "validate")  # one job per borehole, retryable on their own
 
 
 @dataclass
@@ -52,7 +53,7 @@ class Job:
     pipeline_id: str | None
     config: PipelineConfig
     stop: threading.Event = field(default_factory=threading.Event)
-    # (stage, position) when only one failed/stopped extract or transform job of the run is redone
+    # (stage, position) when only one failed/stopped extract, transform or validate job of the run is redone
     retry: tuple[str, int] | None = None
 
 
@@ -72,8 +73,8 @@ def _error_text(error: BaseException) -> str:
 class RunTracker(Tracker):
     """Reports the lifecycle of every stage of one run to the API as exec_stages (ADR-0002).
 
-    Split-out PDFs are uploaded as documents of their own and linked to their extract/transform
-    stages; a finished transform stores its borehole before the stage counts as `success`.
+    Split-out PDFs are uploaded as documents of their own and linked to their per-borehole stages;
+    a finished validate stores its borehole before the stage counts as `success`.
     """
 
     def __init__(self, api: ApiService, run: str, document_id: str):
@@ -84,14 +85,15 @@ class RunTracker(Tracker):
         self.boreholes: dict[int, str] = {}  # position -> id of the stored borehole
         self.upload_errors: list[str] = []
         self._ids: dict[tuple[str, int | None], str] = {}  # (stage, position) -> exec_stage id
-        self._lock = threading.Lock()  # extract/transform report from parallel threads
+        self._lock = threading.Lock()  # per-borehole stages report from parallel threads
 
     def _documents(self, position: int | None) -> list[str]:
-        # extract/transform link to the source and the split PDF they read
+        # per-borehole stages link to the source and the split PDF they read
         return [self.document_id] + ([self.split_documents[position]] if position in self.split_documents else [])
 
     def _create(self, stage: str, position: int | None, status: str, **fields) -> None:
-        row = self.api.create_exec_stage(stage, self.run, self._documents(position), position, status=status, **fields)
+        documents = self._documents(position) + (fields.pop("document_ids", None) or [])
+        row = self.api.create_exec_stage(stage, self.run, documents, position, status=status, **fields)
         with self._lock:
             self._ids[(stage, position)] = row["id"]
 
@@ -117,18 +119,18 @@ class RunTracker(Tracker):
     def succeeded(self, stage, position, data, files, usage) -> None:
         if stage == "split":
             self._upload_split(data, files)
-        if stage == "transform":
+        if stage == "validate":
             try:
-                data = data | {"borehole_id": self._store_borehole(position, data["payload"])}
-            except (ApiError, Din4023Error) as e:
+                data = data | {"borehole_id": self._store_borehole(position, data)}
+            except ApiError as e:
                 self.upload_errors.append(f"borehole {position}: {e}")
                 self._update(stage, position, "failed", data=data, usage=usage, error=f"upload: {_error_text(e)}")
                 return
         extra = list(self.split_documents.values()) if stage == "split" else None
         self._update(stage, position, "success", data=data, usage=usage, document_ids=extra)
         if stage == "split":
-            for position in range(1, len(data["boreholes"]) + 1):  # what extract/transform will do
-                for later in ("extract", "transform"):
+            for position in range(1, len(data["boreholes"]) + 1):  # what the per-borehole stages will do
+                for later in BOREHOLE_STAGES:
                     try:
                         self._create(later, position, "new")
                     except ApiError as e:
@@ -147,10 +149,16 @@ class RunTracker(Tracker):
             except ApiError as e:
                 log(f"{self.document_id}: split document {i} not uploaded: {e}")
 
-    def _store_borehole(self, position: int, payload: dict) -> str:
-        # the source stays the original; the split-out PDF this borehole came from is linked as additional
-        additional = [self.split_documents[position]] if position in self.split_documents else []
-        stored = self.api.upload_borehole(payload, self.document_id, additional)
+    def _store_borehole(self, position: int, data: dict) -> str:
+        # the source stays the original; the split-out PDF this borehole came from is linked as additional,
+        # and the validator's boxes point into it
+        split_document = self.split_documents.get(position)
+        payload = data["payload"]
+        for source in [*payload["borehole"].get("sources", {}).values(), *(l.get("source") for l in payload["layers"])]:
+            if source:
+                source["document_id"] = split_document
+        additional = [split_document] if split_document else []
+        stored = self.api.upload_borehole(payload, self.document_id, additional, data.get("flags"), data.get("edits"))
         borehole_id = stored.get("data", {}).get("id")
         self.boreholes[position] = borehole_id
         return borehole_id
@@ -208,12 +216,19 @@ def _latest_rows(run: dict) -> dict[tuple[str, int | None], dict]:
     return latest
 
 
-def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
-    """Redo one extract or transform job of a finished run as a new exec_stage.
+def _newest_success(run: dict, type_: str, position: int) -> dict | None:
+    rows = run.get("exec_stages") or []
+    return next((r for r in rows if (r["type"], r.get("position"), r.get("status")) == (type_, position, "success")), None)
 
-    Extract is followed by transform for the same borehole. Inputs come from the run's earlier
-    stages: the split-out PDF (extract) or the stored extraction result (transform). Returns the
-    whole run's final status, judged from the newest row of every extract/transform job.
+
+def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
+    """Redo one extract, transform or validate job of a finished run as a new exec_stage.
+
+    Extract is followed by transform and validate for the same borehole, transform by validate.
+    Inputs come from the run's earlier stages: the split-out PDF (every stage reads it, validate
+    for the page images), the newest successful extraction (transform; validate for its warnings)
+    and transform result (validate). Returns the whole run's final status, judged from the newest
+    row of every per-borehole job.
     """
     stage, position = job.retry
     new_run()
@@ -233,7 +248,7 @@ def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
     tracker = RunTracker(api, run_id_, document_id)
     tracker.split_documents = {i: b["document_id"] for i, b in enumerate(boreholes, 1) if b.get("document_id")}
     for (type_, pos), row in latest.items():  # keep the borehole ids of jobs that already stored theirs
-        if type_ == "transform" and row.get("status") == "success" and pos is not None:
+        if type_ == "validate" and row.get("status") == "success" and pos is not None:
             tracker.boreholes[pos] = (row.get("data") or {}).get("borehole_id")
     recorder = Recorder(tracker)
     label = _safe_name(boreholes[position - 1].get("label") or f"borehole_{position}")
@@ -241,26 +256,34 @@ def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
     get_ai().debug_dir = out_dir / "debug" if persist_enabled() else None
     r3 = StepReport("3 extract", c.extract.model, c.extract.effort, stop=job.stop)
     r4 = StepReport("4 transform to db", c.transform.model, c.transform.effort, stop=job.stop)
+    r5 = StepReport("5 validate", c.validate.model, c.validate.effort, stop=job.stop)
 
     try:
         with tempfile.TemporaryDirectory(prefix="bem-") as tmp:
             if not persist_enabled():
                 out_dir = pathlib.Path(tmp)
             pdf = out_dir / "retry" / f"{label}.pdf"
+            split_document = tracker.split_documents.get(position)
+            if split_document is None:
+                return "failed", f"cannot retry {stage} #{position}: its split-out PDF is missing"
+            api.download_document(split_document, pdf)
+            extract_row = _newest_success(run, "extract", position)
+            data = extract_row.get("data") if extract_row else None
             if stage == "extract":
-                split_document = tracker.split_documents.get(position)
-                if split_document is None:
-                    return "failed", f"cannot retry extract #{position}: its split-out PDF is missing"
-                api.download_document(split_document, pdf)
                 with Timer(r3):
-                    (_, data), = extract_boreholes([pdf], out_dir, r3, 1, recorder, position)
+                    ((_, data),) = extract_boreholes([pdf], out_dir, r3, 1, recorder, position)
+            elif data is None and stage == "transform":
+                return "failed", f"cannot retry transform #{position}: its extraction result is missing"
+            if stage in ("extract", "transform"):
+                with Timer(r4):
+                    (transformed,) = transform_boreholes([(pdf, data)], out_dir, r4, 1, recorder, position)
             else:
-                extract_row = latest.get(("extract", position)) or {}
-                data = extract_row.get("data")
-                if data is None or extract_row.get("status") != "success":
-                    return "failed", f"cannot retry transform #{position}: its extraction result is missing"
-            with Timer(r4):
-                transform_boreholes([(pdf, data)], out_dir, r4, 1, recorder, position)
+                transform_row = _newest_success(run, "transform", position)
+                transformed = (transform_row or {}).get("data")
+                if not transformed or "payload" not in transformed:
+                    return "failed", f"cannot retry validate #{position}: its transform result is missing"
+            with Timer(r5):
+                validate_boreholes([(pdf, data or {}, transformed)], out_dir, r5, 1, recorder, position)
     except PipelineStopped:
         return "stopped", "stopped by user"
     except (PipelineError, ApiError) as e:
@@ -273,7 +296,7 @@ def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
     except ApiError as e:
         return "failed", f"could not reload the run: {e}"
     bad = sorted(
-        f"{t} #{p}" for (t, p), row in latest.items() if t in ("extract", "transform") and row.get("status") != "success"
+        f"{t} #{p}" for (t, p), row in latest.items() if t in BOREHOLE_STAGES and row.get("status") != "success"
     )
     # planned rows that never ran (`new`) belong to boreholes whose extract failed
     return ("failed", f"{len(bad)} job(s) not successful: {', '.join(bad)}"[:4000]) if bad else ("completed", None)
@@ -336,7 +359,7 @@ class ExecuteRequest(BaseModel):
     # on completion. Optional only so /execute can be called directly without a pipeline_runs row
     # (e.g. manual testing) — then completion status cannot be reported anywhere.
     pipeline_id: str | None = None
-    config: PipelineConfig = PipelineConfig()  # per step `filter|split|extract|transform`: model + effort
+    config: PipelineConfig = PipelineConfig()  # per step `filter|split|extract|transform|validate`: model + effort
 
 
 @app.post("/execute", status_code=202)
@@ -362,16 +385,16 @@ def execute(request: ExecuteRequest) -> dict:
 
 class RetryRequest(BaseModel):
     document_id: uuid.UUID
-    stage: Literal["extract", "transform"]
+    stage: Literal["extract", "transform", "validate"]
     position: int = Field(ge=1)  # 1-based borehole index within the run
     config: PipelineConfig = PipelineConfig()
 
 
 @app.post("/runs/{pipeline_id}/retry", status_code=202)
 def retry(pipeline_id: str, request: RetryRequest) -> dict:
-    """Queue the redo of one failed or stopped extract/transform job of an existing run (called by
-    the API's `POST /exec_stages/:id/retry`). The attempt is recorded as a new exec_stage; extract
-    is followed by transform for that borehole."""
+    """Queue the redo of one failed or stopped extract/transform/validate job of an existing run
+    (called by the API's `POST /exec_stages/:id/retry`). The attempt is recorded as a new exec_stage;
+    extract is followed by transform and validate for that borehole, transform by validate."""
     with _active_lock:
         if pipeline_id in _active:
             raise HTTPException(409, f"run {pipeline_id} is still queued or running")

@@ -14,7 +14,8 @@ defmodule ApiWeb.BoreholeParams do
     "drilled_at" => :drilled_at,
     "total_depth_m" => :total_depth_m,
     "inserted_at" => :inserted_at,
-    "score" => :score
+    "score" => :score,
+    "open_flags" => :open_flags
   }
 
   @doc """
@@ -25,6 +26,7 @@ defmodule ApiWeb.BoreholeParams do
     with {:ok, q} <- optional(params, "q", &SearchQuery.parse/1),
          {:ok, bbox} <- optional(params, "bbox", &parse_bbox/1),
          {:ok, verified} <- optional(params, "verified", &parse_boolean/1),
+         {:ok, flagged} <- optional(params, "flagged", &parse_boolean/1),
          {:ok, drilled_from} <- optional(params, "drilled_from", &parse_date/1),
          {:ok, drilled_to} <- optional(params, "drilled_to", &parse_date/1),
          {:ok, min_depth} <- optional(params, "min_depth", &parse_number/1),
@@ -37,6 +39,7 @@ defmodule ApiWeb.BoreholeParams do
           q: q,
           bbox: bbox,
           verified: verified,
+          flagged: flagged,
           drilled_from: drilled_from,
           drilled_to: drilled_to,
           min_depth: min_depth,
@@ -102,7 +105,10 @@ defmodule ApiWeb.BoreholeParams do
     end
   end
 
-  # "name" sorts ascending, "-name" descending.
+  # "name" sorts ascending, "-name" descending; "open_flags" is the exception: most flags first,
+  # "-open_flags" fewest first.
+  defp parse_sort("open_flags"), do: {:ok, {:open_flags, :desc}}
+  defp parse_sort("-open_flags"), do: {:ok, {:open_flags, :asc}}
   defp parse_sort("-" <> field), do: sort_field(field, :desc)
   defp parse_sort(field), do: sort_field(field, :asc)
 

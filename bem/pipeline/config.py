@@ -1,8 +1,10 @@
 """Per-step model/effort settings of a pipeline run (sent by the API in `POST /execute`)."""
 
+import warnings
+
 from pydantic import BaseModel, ConfigDict
 
-STEPS = ("filter", "split", "extract", "transform")
+STEPS = ("filter", "split", "extract", "transform", "validate")
 
 
 class StepConfig(BaseModel):
@@ -11,6 +13,10 @@ class StepConfig(BaseModel):
     # Hints interpreted by the AI backend (claude_cli: haiku/sonnet/opus, low/medium/high/xhigh/max).
     model: str
     effort: str
+
+
+# the step is called `validate` in the API's run config too; shadowing BaseModel's deprecated `validate` is fine
+warnings.filterwarnings("ignore", 'Field name "validate" in "PipelineConfig" shadows', UserWarning)
 
 
 class PipelineConfig(BaseModel):
@@ -22,3 +28,4 @@ class PipelineConfig(BaseModel):
     split: StepConfig = StepConfig(model="haiku", effort="medium")
     extract: StepConfig = StepConfig(model="sonnet", effort="high")
     transform: StepConfig = StepConfig(model="haiku", effort="high")
+    validate: StepConfig = StepConfig(model="opus", effort="high")
