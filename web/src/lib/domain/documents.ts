@@ -46,6 +46,6 @@ export function createDefaultPipelineConfig(): PipelineConfig {
 		split: { model: 'haiku', effort: 'medium' },
 		extract: { model: 'sonnet', effort: 'high' },
 		transform: { model: 'haiku', effort: 'high' },
-		validate: { model: 'opus', effort: 'high' }
+		validate: { model: 'sonnet', effort: 'high' }
 	};
 }

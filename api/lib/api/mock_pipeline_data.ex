@@ -31,7 +31,7 @@ defmodule Api.MockPipelineData do
     "split" => "haiku",
     "extract" => "sonnet",
     "transform" => "haiku",
-    "validate" => "opus"
+    "validate" => "sonnet"
   }
 
   @doc """

@@ -26,8 +26,8 @@ REQUIRED = {"name", "depth_from_m", "depth_to_m"}
 SEVERITY = {"uncertain": "warning", "wrong": "error"}
 
 VALIDATE_PROMPT = """You are an independent checker. Another model extracted a borehole log into the
-payload below; you have not seen its reasoning. Compare it with the borehole log PDF at {path}
-({n} pages, attached as page images) and judge every value against what the document shows.
+payload below; you have not seen its reasoning. Compare it with the borehole log, given as
+{n} page images ({path}), and judge every value against what the document shows.
 
 Page image sizes in pixels (width x height): {sizes}.
 
@@ -178,9 +178,12 @@ def validate_boreholes(
         try:
             recorder.start("validate", part, position=position)
             sizes = pdfutil.page_pixel_sizes(f, RENDER_DPI)
-            verdicts = get_ai().run(
+            ai = get_ai()
+            # a backend that reads files itself gets the pages pre-rendered, so the pixel sizes match
+            pages = [f] if ai.renders_pages else pdfutil.render_page_images(f, step_dir / f"{base(f.stem)}_pages", RENDER_DPI)
+            verdicts = ai.run(
                 VALIDATE_PROMPT.format(
-                    path=f,
+                    path=", ".join(str(p) for p in pages),
                     n=len(sizes),
                     sizes=", ".join(f"page {i}: {w} x {h}" for i, (w, h) in enumerate(sizes, 1)),
                     payload=json.dumps(transformed["payload"], ensure_ascii=False, indent=1),
@@ -194,8 +197,8 @@ def validate_boreholes(
                 effort=report.effort,
                 schema=schemas.VALIDATE,
                 report=part,
-                add_dirs=[f.parent],
-                files=[f],
+                add_dirs=list({p.parent for p in pages}),
+                files=pages,
                 max_turns=8,
             )
             payload, flags, edits = apply_verdicts(transformed["payload"], verdicts, sizes, pdftext.words(f))

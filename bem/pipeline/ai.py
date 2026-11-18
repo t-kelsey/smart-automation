@@ -124,6 +124,9 @@ class AI(ABC):
 
     # Failed raw responses are saved here for debugging (set by the entry point).
     debug_dir: pathlib.Path | None = None
+    # True if the backend renders `files` to page images itself (at openrouter.RENDER_DPI); otherwise
+    # the model reads files with its own tools and callers that need known pixel sizes pass images.
+    renders_pages: bool = False
 
     @abstractmethod
     def run(

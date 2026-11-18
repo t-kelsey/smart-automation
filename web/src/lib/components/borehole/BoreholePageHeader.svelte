@@ -13,6 +13,7 @@ views in the middle, and page-specific actions at the right.
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { Borehole } from '#lib/domain/borehole.ts';
+	import DeleteBoreholeButton from './DeleteBoreholeButton.svelte';
 
 	type View = 'details' | 'review';
 
@@ -79,5 +80,6 @@ views in the middle, and page-specific actions at the right.
 
 	<div class="flex flex-wrap items-center gap-2 md:justify-end">
 		{@render children?.()}
+		<DeleteBoreholeButton {borehole} />
 	</div>
 </header>

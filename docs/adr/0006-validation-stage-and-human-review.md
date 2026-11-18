@@ -15,7 +15,7 @@ The challenge metric asks for *reliable* extraction. Until now the pipeline stor
 
 ### Pipeline: a fifth stage `validate`
 
-`filter → split → extract → transform → validate`, one `validate` job per borehole like extract and transform, with its own `{model, effort}` in the run config (default `opus`/`high`, extract stays `sonnet`, so the checker is a different model than the extractor). It is always on.
+`filter → split → extract → transform → validate`, one `validate` job per borehole like extract and transform, with its own `{model, effort}` in the run config (default `sonnet`/`high`; independence comes from the fresh context, not from a different model: in a test on a sample log Sonnet and Opus found the same problems, but Sonnet's boxes were much tighter (Opus drew overlapping boxes around whole intervals) at about half the cost). It is always on.
 
 - **Input:** the pages of the borehole's split-out PDF as images, the transform payload, the extractor's `warnings` and the pipeline's own issues (DIN normalisation, EPSG guess). It gets a fresh context, not the extractor's reasoning.
 - **Output** (`schemas.VALIDATE`): for every borehole field and every layer, the page and a pixel box where it is written, and a verdict: `ok`, `corrected` (the validator is sure the value is wrong and knows the right one; it is applied), `uncertain` (doubtful; an optional suggestion goes into the message, nothing is applied) or `wrong` (contradicts the document, correct value unknown).
@@ -61,7 +61,7 @@ The review page becomes the editing page (the `/edit` stub goes): fields on the 
 
 ## Cons
 
-- One more model call per borehole (cost, time); `opus` is the most expensive model.
+- One more model call per borehole (cost, time), about as expensive as extract.
 - Model boxes on scans are approximate.
 - Adding a stage touches the hardcoded stage lists in `bem`, the API and the web.
 - Without auth, "human" is not a person; the history cannot say who edited.

@@ -16,7 +16,7 @@ Default pipeline steps and configurations:
 | 2   | Split boreholes | haiku  | medium | filtered PDF → one PDF per borehole                                |
 | 3   | Extract         | sonnet | high   | one borehole PDF → all data in the original wording (JSON)         |
 | 4   | Transform       | haiku  | high   | extraction JSON → English, DB-shaped payload, DIN 4023 petrography |
-| 5   | Validate        | opus   | high   | borehole PDF + payload → verdicts, corrections, flags, source boxes |
+| 5   | Validate        | sonnet | high   | borehole PDF + payload → verdicts, corrections, flags, source boxes |
 
 Models and effort are configurable per run (defaults in [config.py](pipeline/config.py)). Step 3 also checks that the file holds exactly one borehole. A soil term that cannot be mapped to DIN 4023 becomes `petrography: null` (original kept in `metadata.petrography_original`); layer order and overlaps are checked by the API, so nothing is lost to a blocked upload.
 

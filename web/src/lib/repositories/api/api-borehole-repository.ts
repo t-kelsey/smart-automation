@@ -122,6 +122,10 @@ export class ApiBoreholeRepository implements BoreholeRepository {
 		return this.write('POST', `/boreholes/${encodeURIComponent(id)}/verify`, { verified });
 	}
 
+	async delete(id: string): Promise<void> {
+		await this.client.send('DELETE', `/boreholes/${encodeURIComponent(id)}`);
+	}
+
 	private layerPath(id: string, layerId: string) {
 		return `/boreholes/${encodeURIComponent(id)}/layers/${encodeURIComponent(layerId)}`;
 	}

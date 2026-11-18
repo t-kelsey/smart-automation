@@ -66,4 +66,6 @@ export interface BoreholeRepository {
 	/** Confirms the flagged value as right. */
 	resolveFlag(flagId: string): Promise<Borehole>;
 	setVerified(id: string, verified: boolean): Promise<Borehole>;
+	/** Deletes the borehole with its layers, flags and history; its documents stay. */
+	delete(id: string): Promise<void>;
 }

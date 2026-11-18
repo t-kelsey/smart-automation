@@ -163,6 +163,11 @@ export class BoreholeService {
 		return byDepth(await this.repository.setVerified(id, verified));
 	}
 
+	/** Deletes the borehole with its layers, flags and history (not its documents). */
+	async deleteBorehole(id: string) {
+		await this.repository.delete(id);
+	}
+
 	/** Document with its linked boreholes. Throws `DocumentNotFoundError` if it does not exist. */
 	async getDocument(id: string): Promise<DocumentDetail> {
 		const document = await this.repository.getDocument(id);

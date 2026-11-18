@@ -25,6 +25,14 @@ defmodule ApiWeb.BoreholeController do
     end
   end
 
+  @doc "Deletes a borehole with its layers, flags and history (not its documents)."
+  def delete(conn, %{"id" => id}) do
+    with %{} = borehole <- Boreholes.get_borehole(id) || {:error, :not_found},
+         {:ok, _} <- Boreholes.delete_borehole(borehole) do
+      send_resp(conn, :no_content, "")
+    end
+  end
+
   @doc """
   Creates a borehole with its layers (see docs/api-reference.md). Body: `{"borehole": {...},
   "layers": [...], "document_id": "...", "additional_document_ids": ["..."]}`. `document_id` is

@@ -226,6 +226,12 @@ curl -X POST "http://localhost:4000/api/boreholes" \
 
 ---
 
+## `DELETE /api/boreholes/:id`
+
+Deletes the borehole with its layers, flags, edit history and document links. The documents themselves stay (they belong to pipeline runs and may hold other boreholes). There is no undo.
+
+- `204 No Content` on success, `404 Not Found` for an unknown or malformed id.
+
 ## Editing and review (ADR-0006)
 
 Human edits, undo, flags and release. Every write endpoint answers with the full borehole like [`GET /api/boreholes/:id`](#get-apiboreholesid) (`200`, `201` for a new layer), runs in one transaction and ends the same way: for every field that **actually changed** one `field_edits` row (`source: "human"`) is written (unchanged values are skipped), the open flags on that field are resolved (`resolved_by: "human"`), layer `position` is renumbered by `depth_from_m`, and the [plausibility checks](#plausibility-checks) run. `404` for an unknown borehole/layer/edit/flag (a layer or edit of another borehole is unknown too), `422` with changeset errors, `400` with `errors.detail` for a malformed body.

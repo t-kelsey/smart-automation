@@ -9,8 +9,9 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
-from .ai import PipelineError, StepReport, Timer, Usage, backend_names, get_ai, log
+from .ai import PipelineError, PipelineStopped, StepReport, Timer, Usage, backend_names, get_ai, log
 from .config import PipelineConfig
 from .naming import run_id, stamped
 from .output import Recorder, Tracker, dump_json, persist_enabled
@@ -77,6 +78,32 @@ def run_pipeline(
         return _run(pdf, out_dir, chunk_size, workers, config or PipelineConfig(), Recorder(tracker), stop)
 
 
+def _transform_and_validate(extracted, out_dir, r4, r5, workers, recorder) -> list[dict]:
+    """Transform and validate each borehole on its own, so one failed borehole does not stop the others.
+    Each failure is recorded on its own job; raises PipelineError at the end if any borehole failed."""
+
+    def chain(item):
+        position, (f, data) = item
+        try:
+            (t,) = transform_boreholes([(f, data)], out_dir, r4, 1, recorder, position)
+            (v,) = validate_boreholes([(f, data, t)], out_dir, r5, 1, recorder, position)
+            return v
+        except Exception as e:
+            return e
+
+    with ThreadPoolExecutor(workers) as pool:
+        outcomes = list(pool.map(chain, enumerate(extracted, 1)))
+    failed = [(i, o) for i, o in enumerate(outcomes, 1) if isinstance(o, Exception)]
+    if failed:
+        stopped = next((o for _, o in failed if isinstance(o, PipelineStopped)), None)
+        if stopped:
+            raise stopped
+        error = PipelineError(f"{len(failed)} of {len(outcomes)} borehole(s) failed: " + "; ".join(f"#{i}: {o}" for i, o in failed)[:2000])
+        error.stage_recorded = True  # recorded per borehole already
+        raise error
+    return outcomes
+
+
 def _run(
     pdf: pathlib.Path,
     out_dir: pathlib.Path,
@@ -109,12 +136,8 @@ def _run(
             with Timer(r3):
                 extracted = extract_boreholes(files, out_dir, r3, workers, recorder)
             stage = "transform"
-            with Timer(r4):
-                transformed = transform_boreholes(extracted, out_dir, r4, workers, recorder)
-            stage = "validate"
-            with Timer(r5):
-                items = [(f, data, t) for (f, data), t in zip(extracted, transformed)]
-                results = validate_boreholes(items, out_dir, r5, workers, recorder)
+            with Timer(r4), Timer(r5):
+                results = _transform_and_validate(extracted, out_dir, r4, r5, workers, recorder)
         else:
             log("no borehole log pages found, nothing to do")
     except Exception as e:  # extract/transform/validate record their own failures per borehole

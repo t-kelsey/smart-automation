@@ -205,6 +205,21 @@ defmodule ApiWeb.BoreholeControllerTest do
     end
   end
 
+  describe "DELETE /api/boreholes/:id" do
+    test "deletes the borehole with its layers but keeps its documents", %{conn: conn} do
+      borehole = insert_borehole(%{name: "BH del"})
+      layer = insert_layer(borehole, %{position: 1, depth_from_m: 0, depth_to_m: 1})
+      document = insert_document(%{original_filename: "a.pdf", storage_path: "a.pdf"})
+      attach_document(borehole, document)
+
+      assert response(delete(conn, ~p"/api/boreholes/#{borehole.id}"), 204)
+      refute Repo.get(Borehole, borehole.id)
+      refute Repo.get(BoreholeLayer, layer.id)
+      assert Repo.get(Document, document.id)
+      assert json_response(delete(conn, ~p"/api/boreholes/#{borehole.id}"), 404)
+    end
+  end
+
   describe "GET /api/boreholes/search" do
     test "searches with the query language and returns a score", %{conn: conn} do
       hit = insert_borehole(%{name: "Schönberg Hole", place: "Bern", drilled_at: ~D[1959-06-12]})

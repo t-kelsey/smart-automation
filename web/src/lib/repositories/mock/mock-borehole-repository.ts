@@ -92,6 +92,7 @@ export class MockBoreholeRepository implements BoreholeRepository {
 	revertEdit = readOnly;
 	resolveFlag = readOnly;
 	setVerified = readOnly;
+	delete = readOnly;
 
 	async getDocument(id: string): Promise<DocumentDetail | null> {
 		const linked = this.boreholes.filter((b) => b.documents.some((d) => d.id === id));

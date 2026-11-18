@@ -70,6 +70,12 @@ defmodule Api.Boreholes do
   end
 
   @doc """
+  Deletes a borehole with its layers, flags, edit history and document links. The documents
+  themselves stay: they belong to pipeline runs and may hold other boreholes.
+  """
+  def delete_borehole(%Borehole{} = borehole), do: Repo.delete(borehole)
+
+  @doc """
   Fetches a borehole by id, preloading its documents, layers (ordered by position), flags (open
   first) and edits (newest first).
 

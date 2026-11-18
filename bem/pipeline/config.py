@@ -28,4 +28,4 @@ class PipelineConfig(BaseModel):
     split: StepConfig = StepConfig(model="haiku", effort="medium")
     extract: StepConfig = StepConfig(model="sonnet", effort="high")
     transform: StepConfig = StepConfig(model="haiku", effort="high")
-    validate: StepConfig = StepConfig(model="opus", effort="high")
+    validate: StepConfig = StepConfig(model="sonnet", effort="high")

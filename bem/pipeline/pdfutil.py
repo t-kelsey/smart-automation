@@ -24,6 +24,13 @@ def page_pixel_sizes(pdf: pathlib.Path, dpi: float) -> list[tuple[int, int]]:
     return sizes
 
 
+def render_page_images(pdf: pathlib.Path, dest: pathlib.Path, dpi: int) -> list[pathlib.Path]:
+    """Render every page of `pdf` to `dest/p-N.jpg` (pdftoppm, like the OpenRouter backend)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["pdftoppm", "-jpeg", "-r", str(dpi), str(pdf), str(dest / "p")], check=True, capture_output=True)
+    return sorted(dest.glob("p-*.jpg"), key=lambda p: int(p.stem.split("-")[1]))
+
+
 def write_pages(src: pathlib.Path, pages: Iterable[int], dest: pathlib.Path) -> None:
     """Write the given 1-based pages of `src` (in the given order) to `dest`."""
     reader = PdfReader(src)

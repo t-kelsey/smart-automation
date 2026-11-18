@@ -13,6 +13,7 @@ defmodule ApiWeb.Router do
     get "/boreholes/:id", BoreholeController, :show
     get "/boreholes", BoreholeController, :index
     post "/boreholes", BoreholeController, :create
+    delete "/boreholes/:id", BoreholeController, :delete
     patch "/boreholes/:id", BoreholeController, :update
     post "/boreholes/:id/verify", BoreholeController, :verify
     post "/boreholes/:id/edits/:edit_id/revert", BoreholeController, :revert

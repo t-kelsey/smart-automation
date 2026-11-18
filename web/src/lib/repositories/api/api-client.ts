@@ -41,7 +41,7 @@ export class ApiClient {
 		} catch (cause) {
 			throw new RepositoryError(`API request failed: ${path}`, undefined, { cause });
 		}
-		if (nullOn.includes(response.status)) return null;
+		if (nullOn.includes(response.status) || response.status === 204) return null;
 		if (response.status === 422) throw new ValidationError(await changesetErrors(response));
 		if (!response.ok) {
 			const detail = await errorDetail(response);

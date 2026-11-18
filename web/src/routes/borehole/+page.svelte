@@ -46,7 +46,7 @@
 		</label>
 	</div>
 
-	<BoreholeTable items={result.items} />
+	<BoreholeTable items={result.items} deletable />
 
 	<footer class="flex flex-wrap items-center justify-between gap-4">
 		<div class="flex items-center gap-4 text-sm">
