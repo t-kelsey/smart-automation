@@ -14,6 +14,7 @@ defmodule Api.Boreholes.BoreholeLayer do
     field :raw_text, :string
     field :metadata, :map, default: %{}
     field :source, :map
+    field :sources, :map, default: %{}
 
     belongs_to :borehole, Api.Boreholes.Borehole
 
@@ -33,7 +34,7 @@ defmodule Api.Boreholes.BoreholeLayer do
   @doc false
   def changeset(borehole_layer, attrs) do
     borehole_layer
-    |> cast(attrs, [:position, :metadata, :source | @editable])
+    |> cast(attrs, [:position, :metadata, :source, :sources | @editable])
     |> validate()
   end
 

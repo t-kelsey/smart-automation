@@ -65,6 +65,9 @@ defmodule ApiWeb.BoreholeJSON do
       end_date: borehole.end_date,
       source_coordinate_system: borehole.source_coordinate_system,
       source_coordinate_raw: borehole.source_coordinate_raw,
+      source_x: borehole.source_x,
+      source_y: borehole.source_y,
+      source_epsg: borehole.source_epsg,
       total_depth_m: borehole.total_depth_m,
       borehole_length_m: borehole.borehole_length_m,
       elevation_m: borehole.elevation_m,
@@ -88,7 +91,8 @@ defmodule ApiWeb.BoreholeJSON do
       color: layer.color,
       raw_text: layer.raw_text,
       metadata: layer.metadata,
-      source: layer.source
+      source: layer.source,
+      sources: layer.sources
     }
   end
 
@@ -101,6 +105,7 @@ defmodule ApiWeb.BoreholeJSON do
       :message,
       :origin,
       :code,
+      :suggestion,
       :resolved_at,
       :resolved_by,
       :inserted_at
@@ -135,6 +140,7 @@ defmodule ApiWeb.BoreholeJSON do
       status: document.status,
       page_count: document.page_count,
       size_bytes: document.size_bytes,
+      sha256: document.sha256,
       has_file: Api.Boreholes.document_file_path(document) != nil
     }
   end

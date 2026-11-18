@@ -88,8 +88,13 @@ defmodule Api.Boreholes do
          %Borehole{} = borehole <- Repo.get(Borehole, uuid) do
       layers_query = from(l in BoreholeLayer, order_by: l.position)
 
+      # flags of a deleted layer stay in the table but are hidden until the layer is back
+      layer_ids = from(l in BoreholeLayer, where: l.borehole_id == ^borehole.id, select: l.id)
+
       flags_query =
         from(f in FieldFlag,
+          where: is_nil(f.layer_id) or f.layer_id in subquery(layer_ids),
+          where: f.borehole_id == ^borehole.id,
           order_by: [asc: not is_nil(f.resolved_at), asc: f.inserted_at, asc: f.id]
         )
 
@@ -185,7 +190,7 @@ defmodule Api.Boreholes do
   def create_borehole(borehole_attrs, layers_attrs, opts \\ []) do
     Repo.transaction(fn ->
       with {:ok, borehole} <- insert_borehole(borehole_attrs),
-           :ok <- set_location(borehole, borehole_attrs),
+           :ok <- locate(borehole, borehole_attrs),
            {:ok, layers} <- insert_layers(borehole, layers_attrs),
            :ok <- Review.insert_pipeline_extras(borehole, layers, opts[:flags], opts[:edits]),
            :ok <- maybe_attach(borehole, opts) do
@@ -197,32 +202,102 @@ defmodule Api.Boreholes do
     end)
   end
 
+  defp locate(borehole, attrs) do
+    case set_location(borehole, attrs) do
+      {:error, :unknown_epsg} -> flag_unknown_epsg(borehole, attrs)
+      :ok -> :ok
+    end
+  end
+
   defp insert_borehole(attrs) do
     %Borehole{} |> Borehole.changeset(attrs) |> Repo.insert()
   end
 
-  @doc false
+  @doc """
+  Sets `location` from `x`/`y`/`epsg` (reprojected to WGS84). `{:error, :unknown_epsg}` if `epsg`
+  is not an integer known to PostGIS (`spatial_ref_sys`); nothing is written then. `:ok` without
+  coordinates.
+  """
   def set_location(borehole, attrs) do
     attrs = stringify_keys(attrs)
 
     case {attrs["x"], attrs["y"], attrs["epsg"]} do
       {x, y, epsg} when not is_nil(x) and not is_nil(y) and not is_nil(epsg) ->
-        query =
+        with {:ok, srid} <- known_epsg(epsg),
+             {:ok, x} <- to_float(x),
+             {:ok, y} <- to_float(y) do
           from(b in Borehole, where: b.id == ^borehole.id)
           |> update(
             set: [
               location:
-                fragment("ST_Transform(ST_SetSRID(ST_MakePoint(?, ?), ?), 4326)", ^x, ^y, ^epsg)
+                fragment("ST_Transform(ST_SetSRID(ST_MakePoint(?, ?), ?), 4326)", ^x, ^y, ^srid),
+              source_x: ^x,
+              source_y: ^y,
+              source_epsg: ^srid
             ]
           )
+          |> Repo.update_all([])
 
-        Repo.update_all(query, [])
-        :ok
+          :ok
+        end
 
       _ ->
         :ok
     end
   end
+
+  defp to_float(n) when is_number(n), do: {:ok, n * 1.0}
+
+  defp to_float(s) when is_binary(s) do
+    case Float.parse(String.replace(s, ",", ".")) do
+      {f, ""} -> {:ok, f}
+      _ -> {:error, :unknown_epsg}
+    end
+  end
+
+  defp to_float(_), do: {:error, :unknown_epsg}
+
+  # integer (or integer string) present in spatial_ref_sys
+  defp known_epsg(epsg) do
+    srid =
+      case epsg do
+        n when is_integer(n) -> n
+        s when is_binary(s) -> with {n, ""} <- Integer.parse(s), do: n
+        _ -> nil
+      end
+
+    # int4 range, so the SELECT cannot overflow
+    if is_integer(srid) and srid in 1..2_147_483_647 and
+         Repo.exists?(from(r in "spatial_ref_sys", where: r.srid == ^srid)),
+       do: {:ok, srid},
+       else: {:error, :unknown_epsg}
+  end
+
+  @doc "Whether `epsg` is an integer known to PostGIS."
+  def known_epsg?(epsg), do: match?({:ok, _}, known_epsg(epsg))
+
+  # POST /api/boreholes: the borehole is kept without location, flagged for a human
+  defp flag_unknown_epsg(borehole, attrs) do
+    epsg = attrs |> stringify_keys() |> Map.get("epsg")
+
+    %FieldFlag{borehole_id: borehole.id}
+    |> FieldFlag.changeset(%{
+      "field" => "location",
+      "severity" => "error",
+      "origin" => "rule",
+      "code" => "unknown_epsg",
+      "message" =>
+        "EPSG #{inspect_epsg(epsg)} is unknown; coordinates x/y kept in source_coordinate_raw"
+    })
+    |> Repo.insert()
+    |> case do
+      {:ok, _} -> :ok
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp inspect_epsg(epsg) when is_binary(epsg), do: epsg
+  defp inspect_epsg(epsg), do: inspect(epsg)
 
   defp insert_layers(borehole, layers_attrs) do
     layers_attrs
@@ -315,6 +390,54 @@ defmodule Api.Boreholes do
 
   def document_file_path(_document), do: nil
 
+  # streamed in chunks, the file is never held in memory
+  defp file_sha256(path) do
+    hash =
+      path
+      |> File.stream!(1_048_576)
+      |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
+      |> :crypto.hash_final()
+      |> Base.encode16(case: :lower)
+
+    {:ok, hash}
+  rescue
+    e in File.Error -> {:error, e.reason}
+  end
+
+  @doc """
+  Documents with this SHA-256 (hex, any case), newest first, each with `borehole_count` (boreholes
+  that have it as their original document) and its `pipeline_runs` (newest first).
+  """
+  def list_documents_by_sha256(sha256) when is_binary(sha256) do
+    sha256 = String.downcase(sha256)
+
+    counts =
+      from(bd in BoreholeDocument,
+        where: bd.role == "original",
+        group_by: bd.document_id,
+        select: %{document_id: bd.document_id, count: count(bd.borehole_id)}
+      )
+
+    from(d in Document,
+      left_join: c in subquery(counts),
+      on: c.document_id == d.id,
+      where: d.sha256 == ^sha256,
+      order_by: [desc: d.inserted_at, desc: d.id],
+      select: {d, coalesce(c.count, 0)}
+    )
+    |> Repo.all()
+    |> Enum.map(fn {document, count} ->
+      runs =
+        from(r in PipelineRun,
+          where: r.document_id == ^document.id,
+          order_by: [desc: r.inserted_at, desc: r.id]
+        )
+        |> Repo.all()
+
+      %{document: document, borehole_count: count, pipeline_runs: runs}
+    end)
+  end
+
   @upload_extensions ~w(.pdf .png .jpg .jpeg .tif .tiff .docx)
 
   @doc """
@@ -333,13 +456,15 @@ defmodule Api.Boreholes do
       destination = Path.join(storage_dir(), storage_path)
 
       with :ok <- File.mkdir_p(storage_dir()),
+           {:ok, sha256} <- file_sha256(path),
            :ok <- File.cp(path, destination),
            {:ok, %{size: size}} <- File.stat(destination) do
         attrs = %{
           original_filename: Path.basename(filename),
           storage_path: storage_path,
           mime_type: MIME.from_path(filename),
-          size_bytes: size
+          size_bytes: size,
+          sha256: sha256
         }
 
         case Repo.insert(Document.changeset(%Document{id: id}, attrs)) do
@@ -485,7 +610,7 @@ defmodule Api.Boreholes do
           on: l.exec_stage_id == e.id,
           where: l.document_id == ^uuid,
           distinct: true,
-          order_by: [desc: e.inserted_at]
+          order_by: [desc: e.inserted_at, desc: e.id]
         )
         |> filter_exec_stages(filters)
         |> Repo.all()
@@ -789,7 +914,7 @@ defmodule Api.Boreholes do
     dynamic(
       [borehole: b],
       fragment(
-        "(SELECT count(*) FROM field_flags f WHERE f.borehole_id = ? AND f.resolved_at IS NULL)",
+        "(SELECT count(*) FROM field_flags f WHERE f.borehole_id = ? AND f.resolved_at IS NULL AND (f.layer_id IS NULL OR EXISTS (SELECT 1 FROM borehole_layers l WHERE l.id = f.layer_id)))",
         b.id
       )
     )

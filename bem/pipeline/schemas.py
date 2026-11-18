@@ -254,9 +254,9 @@ _CHECK = {
     "verdict": _VERDICT,
     "corrected_value": {
         "type": ["string", "number", "object", "null"],
-        "description": "the right value, only with verdict corrected (location: {x, y, epsg})",
+        "description": "the right value with verdict corrected, a suggestion with uncertain/wrong, else null (location: {x, y, epsg})",
     },
-    "message": {**_t("string"), "description": "why, plus a suggestion for uncertain"},
+    "message": {**_t("string"), "description": "why the verdict is not ok"},
 }
 VALIDATE = {
     "type": "object",
@@ -277,6 +277,15 @@ VALIDATE = {
                     "position": {"type": "integer"},
                     "page": _t("integer"),
                     "box": _PIXEL_BOX,
+                    "field_boxes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"field": {"type": "string"}, "page": _t("integer"), "box": _PIXEL_BOX},
+                            "required": ["field", "page", "box"],
+                        },
+                        "description": "where each layer field is written (depths, description, stratigraphy, colour)",
+                    },
                     "fields": {
                         "type": "array",
                         "items": {
@@ -287,7 +296,7 @@ VALIDATE = {
                         "description": "only the fields that are not ok",
                     },
                 },
-                "required": ["position", "page", "box", "fields"],
+                "required": ["position", "page", "box", "field_boxes", "fields"],
             },
         },
     },

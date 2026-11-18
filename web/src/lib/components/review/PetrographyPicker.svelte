@@ -81,6 +81,7 @@ minor components ("Sand, schluffig, kiesig"), stored with the German names of th
 	<Popover.Trigger
 		class="block w-full rounded-base px-2 py-1 text-left text-sm hover:preset-tonal"
 		title="Pick from DIN 4023"
+		data-review-input
 	>
 		{#if layer.petrography.composition}
 			<span class="font-medium">{shortForm(layer.petrography.composition)}</span>

@@ -1,10 +1,11 @@
 <!--
 @component
-A document viewer for one borehole's documents: shows the original document and lets the user
-switch to its additional information files.
+A document viewer for one borehole's documents: shows the preferred document (else the original)
+and lets the user switch to the others.
 
 @param documents - The documents of a borehole.
-@param [source] - Where a value is written: switches to its document and page and draws its box.
+@param [preferredId] - Shown first, e.g. the borehole's own log split out of the original.
+@param [source] - Where a value is written: switches to its document and page and zooms to its box.
 @param [class] - Extra classes for the root element.
 -->
 <script lang="ts">
@@ -15,14 +16,15 @@ switch to its additional information files.
 
 	interface Props {
 		documents: BoreholeDocument[];
+		preferredId?: string | null;
 		source?: SourceRef | null;
 		class?: string;
 	}
 
-	let { documents, source = null, class: className = '' }: Props = $props();
+	let { documents, preferredId = null, source = null, class: className = '' }: Props = $props();
 
 	let { original, additional } = $derived(splitDocuments(documents));
-	/** Shown in the viewer; `null` selects the original. */
+	/** Shown in the viewer; `null` selects the preferred document, else the original. */
 	let selectedId = $state<string | null>(null);
 
 	$effect(() => {
@@ -32,7 +34,10 @@ switch to its additional information files.
 	});
 
 	let shown = $derived(
-		documents.find((doc) => doc.id === selectedId) ?? original ?? additional[0] ?? null
+		documents.find((doc) => doc.id === (selectedId ?? preferredId)) ??
+			original ??
+			additional[0] ??
+			null
 	);
 </script>
 
@@ -47,7 +52,11 @@ switch to its additional information files.
 			>
 				{#each [...(original ? [original] : []), ...additional] as doc (doc.id)}
 					<option value={doc.id}>
-						{doc.role === 'original' ? 'Original: ' : ''}{doc.name}
+						{doc.role === 'original'
+							? 'Original: '
+							: doc.id === preferredId
+								? 'Borehole log: '
+								: ''}{doc.name}
 					</option>
 				{/each}
 			</select>

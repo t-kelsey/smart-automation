@@ -24,6 +24,8 @@ export interface FieldFlag {
 	/** ISO timestamp; `null` while the flag is open. */
 	resolvedAt: string | null;
 	resolvedBy: 'human' | 'rule' | null;
+	/** Value the validator proposes (any JSON, e.g. `{x, y, epsg}` for `location`); `null` if none. */
+	suggestion: unknown;
 }
 
 /** One change of a value; the history is append-only, a revert is a new edit. */
@@ -91,7 +93,9 @@ export interface BoreholeLayer {
 	color: { hex: string; name: string };
 	/** Values as stored, by API name; what the review page edits. */
 	stored: Record<LayerField, string | null>;
+	/** Box of the whole layer, and of single fields where the validator found them. */
 	source: SourceRef | null;
+	sources: Partial<Record<LayerField, SourceRef>>;
 }
 
 export type DocumentType = 'pdf' | 'image' | 'docx';
@@ -155,6 +159,8 @@ export interface Borehole {
 	stored: Record<BoreholeField, string | null>;
 	/** Where each field is written, by API name (`location` for the coordinates). */
 	sources: Record<string, SourceRef>;
+	/** The coordinates as written in the document (source CRS), if known. */
+	sourceCoordinates: { x: number; y: number; epsg: number } | null;
 	/** Open flags first. */
 	flags: FieldFlag[];
 	/** Newest first. */

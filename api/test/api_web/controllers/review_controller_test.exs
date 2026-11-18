@@ -1,6 +1,10 @@
 defmodule ApiWeb.ReviewControllerTest do
   use ApiWeb.ConnCase, async: true
 
+  import Ecto.Query
+
+  alias Api.Repo
+
   defp create(conn, extra \\ %{}) do
     body =
       Map.merge(
@@ -40,7 +44,13 @@ defmodule ApiWeb.ReviewControllerTest do
       data =
         create(conn, %{
           "layers" => [
-            %{"depth_from_m" => 0, "depth_to_m" => 5, "petrography" => "Kies", "source" => doc}
+            %{
+              "depth_from_m" => 0,
+              "depth_to_m" => 5,
+              "petrography" => "Kies",
+              "source" => doc,
+              "sources" => %{"depth_to_m" => doc}
+            }
           ],
           "flags" => [
             %{
@@ -71,6 +81,7 @@ defmodule ApiWeb.ReviewControllerTest do
 
       [layer] = data["layers"]
       assert layer["source"] == doc
+      assert layer["sources"] == %{"depth_to_m" => doc}
       assert data["sources"]["elevation_m"]["page"] == 1
       assert data["open_flag_count"] == 2
 
@@ -154,6 +165,23 @@ defmodule ApiWeb.ReviewControllerTest do
 
       assert %{"resolved_by" => "human"} =
                Enum.find(data["flags"], &(&1["code"] == "total_depth_mismatch"))
+    end
+
+    test "keeps the coordinates as written next to the WGS84 location", %{conn: conn} do
+      id = create(conn)["id"]
+      data = patch_location(conn, id, 416_097.79, 3_388_438.47, 32629)
+
+      assert {data["source_x"], data["source_y"], data["source_epsg"]} ==
+               {416_097.79, 3_388_438.47, 32629}
+
+      %{"coordinates" => [lon, lat]} = data["location"]
+      assert_in_delta lon, -9.8755, 0.001
+      assert_in_delta lat, 30.6256, 0.001
+
+      data = patch_location(conn, id, 416_100.0, 3_388_440.0, 32629)
+
+      assert [%{"field" => "location", "old_value" => %{"x" => 416_097.79, "epsg" => 32629}} | _] =
+               data["edits"]
     end
 
     test "reprojects x/y/epsg and keeps the history reversible", %{conn: conn} do
@@ -401,6 +429,202 @@ defmodule ApiWeb.ReviewControllerTest do
         conn |> get(~p"/api/boreholes?flagged=true&view=points") |> json_response(200)
 
       assert conn |> get(~p"/api/boreholes?q=verified:maybe") |> json_response(400)
+    end
+  end
+
+  describe "follow-ups" do
+    test "flag suggestions are stored and exposed as any JSON", %{conn: conn} do
+      data =
+        create(conn, %{
+          "flags" => [
+            %{
+              "field" => "elevation_m",
+              "severity" => "warning",
+              "message" => "m",
+              "origin" => "validator",
+              "suggestion" => 101.5
+            },
+            %{
+              "field" => "place",
+              "severity" => "warning",
+              "message" => "m",
+              "origin" => "validator",
+              "suggestion" => %{"a" => [1, "b"]}
+            },
+            %{
+              "field" => "client",
+              "severity" => "warning",
+              "message" => "m",
+              "origin" => "validator"
+            }
+          ]
+        })
+
+      by_field = Map.new(data["flags"], &{&1["field"], &1})
+      assert by_field["elevation_m"]["suggestion"] == 101.5
+      assert by_field["place"]["suggestion"] == %{"a" => [1, "b"]}
+      assert by_field["client"]["suggestion"] == nil
+    end
+
+    test "an unknown EPSG on create keeps the borehole without location and flags it", %{
+      conn: conn
+    } do
+      for epsg <- [999_999, 4326.5, "abc"] do
+        data =
+          create(conn, %{"borehole" => %{"name" => "BH", "x" => 1, "y" => 2, "epsg" => epsg}})
+
+        assert data["location"] == nil
+
+        assert %{
+                 "severity" => "error",
+                 "origin" => "rule",
+                 "field" => "location",
+                 "message" => msg
+               } =
+                 Enum.find(data["flags"], &(&1["code"] == "unknown_epsg"))
+
+        assert msg ==
+                 "EPSG #{epsg} is unknown; coordinates x/y kept in source_coordinate_raw"
+      end
+    end
+
+    test "an unknown EPSG on PATCH or revert is a 422", %{conn: conn} do
+      data = create(conn)
+      id = data["id"]
+
+      for epsg <- [999_999, 4326.5] do
+        assert %{"errors" => %{"epsg" => ["unknown EPSG code"]}} =
+                 conn
+                 |> patch(~p"/api/boreholes/#{id}", %{
+                   "borehole" => %{"x" => 1, "y" => 2, "epsg" => epsg}
+                 })
+                 |> json_response(422)
+      end
+
+      edit =
+        Repo.insert!(%Api.Boreholes.FieldEdit{
+          borehole_id: id,
+          field: "location",
+          old_value: %{"x" => 1, "y" => 2, "epsg" => 999_999},
+          new_value: nil,
+          source: "human"
+        })
+
+      assert %{"errors" => %{"epsg" => ["unknown EPSG code"]}} =
+               conn
+               |> post(~p"/api/boreholes/#{id}/edits/#{edit.id}/revert")
+               |> json_response(422)
+    end
+
+    test "reverting to a location of nulls clears the location", %{conn: conn} do
+      id = create(conn)["id"]
+
+      for old <- [%{"x" => nil, "y" => nil, "epsg" => nil}, nil] do
+        edit =
+          Repo.insert!(%Api.Boreholes.FieldEdit{
+            borehole_id: id,
+            field: "location",
+            old_value: old,
+            new_value: %{"x" => 8, "y" => 48, "epsg" => 4326},
+            source: "human"
+          })
+
+        data =
+          conn
+          |> post(~p"/api/boreholes/#{id}/edits/#{edit.id}/revert")
+          |> json_response(200)
+          |> Map.fetch!("data")
+
+        assert data["location"] == nil
+
+        assert [%{"field" => "location", "new_value" => nil, "old_value" => %{"x" => 8.0}} | _] =
+                 data["edits"]
+
+        assert "missing_location" in codes(data)
+
+        # restore for the next round
+        patch(conn, ~p"/api/boreholes/#{id}", %{
+          "borehole" => %{"x" => 8, "y" => 48, "epsg" => 4326}
+        })
+      end
+    end
+
+    test "a changed message of a still-firing rule updates the open flag", %{conn: conn} do
+      data = create(conn, %{"borehole" => %{"name" => "BH", "total_depth_m" => 9}})
+      flag = Enum.find(data["flags"], &(&1["code"] == "total_depth_mismatch"))
+      assert flag["message"] =~ "(5.0 m)"
+
+      data =
+        conn
+        |> patch(~p"/api/boreholes/#{data["id"]}/layers/#{List.last(data["layers"])["id"]}", %{
+          "layer" => %{"depth_to_m" => 6}
+        })
+        |> json_response(200)
+        |> Map.fetch!("data")
+
+      assert [updated] = Enum.filter(data["flags"], &(&1["code"] == "total_depth_mismatch"))
+      assert updated["id"] == flag["id"]
+      assert updated["resolved_at"] == nil
+      assert updated["message"] =~ "(6.0 m)"
+    end
+
+    test "flags of a deleted layer stay hidden until the layer is restored", %{conn: conn} do
+      data =
+        create(conn, %{
+          "flags" => [
+            %{
+              "field" => "petrography",
+              "layer_position" => 2,
+              "severity" => "warning",
+              "message" => "unsure",
+              "origin" => "validator"
+            }
+          ]
+        })
+
+      id = data["id"]
+      layer = Enum.at(data["layers"], 1)
+      assert data["open_flag_count"] == 1
+
+      data =
+        conn
+        |> delete(~p"/api/boreholes/#{id}/layers/#{layer["id"]}")
+        |> json_response(200)
+        |> Map.fetch!("data")
+
+      refute Enum.any?(data["flags"], &(&1["layer_id"] == layer["id"]))
+
+      assert Repo.aggregate(
+               from(f in Api.Boreholes.FieldFlag, where: f.layer_id == ^layer["id"]),
+               :count
+             ) == 1
+
+      count = fn query ->
+        conn
+        |> get(~p"/api/boreholes?#{query}")
+        |> json_response(200)
+        |> Map.fetch!("features")
+        |> Enum.find(&(&1["properties"]["id"] == id))
+        |> get_in(["properties", "open_flag_count"])
+      end
+
+      assert count.(%{}) == data["open_flag_count"]
+      refute Enum.any?(data["flags"], &(&1["origin"] == "validator"))
+
+      deletion = Enum.find(data["edits"], &(&1["field"] == "layer" and &1["new_value"] == nil))
+
+      data =
+        conn
+        |> post(~p"/api/boreholes/#{id}/edits/#{deletion["id"]}/revert")
+        |> json_response(200)
+        |> Map.fetch!("data")
+
+      assert Enum.any?(
+               data["flags"],
+               &(&1["layer_id"] == layer["id"] and &1["origin"] == "validator")
+             )
+
+      assert count.(%{}) == data["open_flag_count"]
     end
   end
 end

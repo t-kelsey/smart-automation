@@ -19,6 +19,17 @@ export interface UploadedDocument {
 	status: string;
 }
 
+/** A stored document with the same content (SHA-256) as a file about to be uploaded. */
+export interface ProcessedDocument {
+	id: string;
+	filename: string;
+	/** ISO timestamp of the upload. */
+	uploadedAt: string;
+	boreholeCount: number;
+	/** Newest pipeline run of the document, if any. */
+	latestRun: { id: string; status: string; startedAt: string } | null;
+}
+
 /** Pipeline steps whose AI model and effort can be chosen, in processing order. */
 export const PIPELINE_STEPS = [
 	{ key: 'filter', label: 'Filter pages', hint: 'Finds the borehole log pages' },

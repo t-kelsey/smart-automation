@@ -24,6 +24,10 @@ defmodule Api.Boreholes.Borehole do
     field :metadata, :map, default: %{}
     field :sources, :map, default: %{}
     field :verified_at, :utc_datetime
+    # set together with `location` from x/y/epsg, as written in the document
+    field :source_x, :float
+    field :source_y, :float
+    field :source_epsg, :integer
 
     has_many :field_flags, Api.Boreholes.FieldFlag
     has_many :field_edits, Api.Boreholes.FieldEdit

@@ -1,5 +1,5 @@
 import { PDFDocument } from 'pdf-lib';
-import type { UploadedDocument } from '#lib/domain/documents.ts';
+import type { ProcessedDocument, UploadedDocument } from '#lib/domain/documents.ts';
 import type { UploadRepository } from '#lib/repositories/upload-repository.ts';
 
 /** File types the extraction pipeline can read. */
@@ -40,6 +40,16 @@ export class UploadService {
 	async upload(file: File): Promise<UploadedDocument> {
 		if (!this.isSupported(file)) throw new UnsupportedFileError(file.name);
 		return this.repository.upload(file);
+	}
+
+	/**
+	 * Documents already stored with the same content, found by the file's SHA-256 (computed in the
+	 * browser, so nothing is uploaded for the check).
+	 */
+	async findProcessed(file: File): Promise<ProcessedDocument[]> {
+		const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+		const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+		return this.repository.findBySha256(hex);
 	}
 
 	/** Whether the file is an image that `combineImages` can turn into a PDF page. */

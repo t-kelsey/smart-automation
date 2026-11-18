@@ -1,9 +1,11 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
 		ArrowLeftIcon,
+		CopyIcon,
+		ExternalLinkIcon,
 		FileIcon,
 		LoaderCircleIcon,
 		PlayIcon,
@@ -13,6 +15,7 @@
 	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import {
 		createDefaultPipelineConfig,
+		type ProcessedDocument,
 		PIPELINE_EFFORTS,
 		PIPELINE_MODELS,
 		PIPELINE_STEPS,
@@ -29,6 +32,37 @@
 	let uploading = $state(false);
 	let config = $state<PipelineConfig>(createDefaultPipelineConfig());
 
+	/**
+	 * Documents already stored with the same content, per queued file: found by the SHA-256 computed
+	 * in the browser. Such a file is skipped unless "Process again anyway" is chosen.
+	 */
+	let processed = $state<Record<string, ProcessedDocument[] | 'checking'>>({});
+	let again = $state<Record<string, boolean>>({});
+	let checking = $derived(queued.some(({ id }) => processed[id] === 'checking'));
+
+	$effect(() => {
+		for (const { id, file, documentId } of queued) {
+			if (documentId || untrack(() => id in processed)) continue;
+			processed[id] = 'checking';
+			data.uploads.findProcessed(file).then(
+				(documents) => (processed[id] = documents),
+				() => (processed[id] = []) // the check is a convenience; never block the upload on it
+			);
+		}
+	});
+
+	const duplicateOf = (id: string) => {
+		const documents = processed[id];
+		return Array.isArray(documents) ? documents[0] : undefined;
+	};
+	const skipped = (id: string) => !!duplicateOf(id) && !again[id];
+
+	/** The run when the old document gave no borehole (to see why), else the document. */
+	const existingHref = (doc: ProcessedDocument) =>
+		doc.latestRun && !doc.boreholeCount
+			? resolve('/pipeline/[id]', { id: doc.latestRun.id })
+			: resolve('/document/[id]', { id: doc.id });
+
 	// The layout's <main> scrolls, not the window, so SvelteKit does not reset it on navigation.
 	onMount(() => document.querySelector('main')?.scrollTo({ top: 0 }));
 
@@ -38,6 +72,13 @@
 	 * already uploaded is not uploaded again on a retry.
 	 */
 	async function start() {
+		const toSkip = queued.filter(({ id }) => skipped(id));
+		toSkip.forEach(({ id }) => unqueueFile(id));
+		if (toSkip.length && queued.length === 0) {
+			notify.info('Nothing to start', 'All files were processed before.');
+			await goto(resolve('/upload'));
+			return;
+		}
 		uploading = true;
 		const runs: string[] = [];
 		for (const queuedFile of [...queued]) {
@@ -156,15 +197,15 @@
 			<button
 				type="button"
 				class="btn preset-filled-primary-500 btn-lg"
-				disabled={uploading}
+				disabled={uploading || checking}
 				onclick={start}
 			>
-				{#if uploading}
+				{#if uploading || checking}
 					<LoaderCircleIcon class="size-5 animate-spin" />
 				{:else}
 					<PlayIcon class="size-5" />
 				{/if}
-				Start extraction
+				{checking ? 'Checking for duplicates…' : 'Start extraction'}
 			</button>
 		</div>
 	</section>
@@ -172,9 +213,39 @@
 	<h2 class="mb-2 h5 opacity-80">Files ({queued.length})</h2>
 	<ul class="mb-6 space-y-2 text-sm">
 		{#each queued as { id, file } (id)}
-			<li class="flex items-center gap-3 rounded-xl preset-outlined-surface-200-800 px-3 py-2">
-				<FileIcon class="size-4 shrink-0 opacity-60" />
-				<span class="truncate">{file.name}</span>
+			{@const duplicate = duplicateOf(id)}
+			<li
+				class="rounded-xl px-3 py-2 {duplicate
+					? 'preset-outlined-warning-500'
+					: 'preset-outlined-surface-200-800'}"
+			>
+				<div class="flex items-center gap-3">
+					<FileIcon class="size-4 shrink-0 opacity-60" />
+					<span class="truncate {skipped(id) ? 'line-through opacity-60' : ''}">{file.name}</span>
+					{#if processed[id] === 'checking'}
+						<LoaderCircleIcon class="size-4 shrink-0 animate-spin opacity-60" />
+					{/if}
+				</div>
+				{#if duplicate}
+					<div class="mt-2 flex flex-wrap items-center gap-2 pl-7">
+						<CopyIcon class="size-4 shrink-0 text-warning-500" />
+						<span class="flex-1">
+							Already processed on {new Date(duplicate.uploadedAt).toLocaleDateString()}
+							({duplicate.boreholeCount}
+							{duplicate.boreholeCount === 1 ? 'borehole' : 'boreholes'}){again[id]
+								? '. It will be processed again.'
+								: '. Skipped.'}
+						</span>
+						<a href={existingHref(duplicate)} class="btn preset-tonal btn-sm">
+							<ExternalLinkIcon class="size-4" />
+							Open existing
+						</a>
+						<label class="flex items-center gap-2">
+							<input type="checkbox" class="checkbox" bind:checked={again[id]} />
+							Process again anyway
+						</label>
+					</div>
+				{/if}
 			</li>
 		{/each}
 	</ul>

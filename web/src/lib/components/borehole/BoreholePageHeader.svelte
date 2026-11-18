@@ -34,10 +34,12 @@ views in the middle, and page-specific actions at the right.
 	function onViewChange(next: View) {
 		if (next === view) return;
 		const id = borehole.id;
+		// Reloaded: the review page saves without reloading, so the layout's borehole may be stale.
 		void goto(
 			next === 'review'
 				? resolve('/borehole/[id]/review', { id })
-				: resolve('/borehole/[id]', { id })
+				: resolve('/borehole/[id]', { id }),
+			{ invalidateAll: true }
 		);
 	}
 </script>

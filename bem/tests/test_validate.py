@@ -37,12 +37,23 @@ class Boxes(unittest.TestCase):
             self.assertIsNone(pixel_box(raw, page, SIZES, {}), (raw, page))
 
     def test_tighten_to_words_inside_or_keep(self):
-        words = [[0.10, 0.10, 0.15, 0.12], [0.16, 0.10, 0.25, 0.12], [0.6, 0.6, 0.7, 0.7]]
+        boxes = [[0.10, 0.10, 0.15, 0.12], [0.16, 0.10, 0.25, 0.12], [0.6, 0.6, 0.7, 0.7]]
+        words = [(b, "w") for b in boxes]
         self.assertEqual(pdftext.tighten([0.08, 0.05, 0.3, 0.2], words), [0.10, 0.10, 0.25, 0.12])
         self.assertEqual(pdftext.tighten([0.3, 0.3, 0.4, 0.4], words), [0.3, 0.3, 0.4, 0.4])  # no word inside
         self.assertEqual(pdftext.tighten([0.3, 0.3, 0.4, 0.4], None), [0.3, 0.3, 0.4, 0.4])  # scan
         # a word whose centre is just outside the box is caught by the margin
-        self.assertEqual(pdftext.tighten([0.0, 0.0, 0.195, 0.2], words[1:2]), words[1])
+        self.assertEqual(pdftext.tighten([0.0, 0.0, 0.195, 0.2], words[1:2]), boxes[1])
+
+    def test_snap_to_the_written_value_near_the_model_box(self):
+        label, value, other = [0.10, 0.10, 0.30, 0.12], [0.35, 0.10, 0.40, 0.12], [0.35, 0.80, 0.40, 0.82]
+        words = [(label, "PETICIONARIO:"), (value, "UTE"), (other, "UTE")]
+        # the model box sits on the label; the value next to it wins, the far one is ignored
+        self.assertEqual(pdftext.snap([0.15, 0.09, 0.30, 0.13], words, ["UTE"]), value)
+        depth = [(value, "9,40")]
+        self.assertEqual(pdftext.snap([0.30, 0.09, 0.45, 0.13], depth, [9.4]), value)  # 9,40 is 9.4
+        # not found near the box: fall back to the words inside it
+        self.assertEqual(pdftext.snap([0.05, 0.09, 0.32, 0.13], words, ["Agadir"]), label)
 
 
 class TextLayer(unittest.TestCase):
@@ -73,7 +84,8 @@ class TextLayer(unittest.TestCase):
             words = pdftext.words(self.pdf(pathlib.Path(tmp)))
         self.assertEqual(list(words), [1])
         self.assertEqual(len(words[1]), 2)  # "Depth", "2.40"
-        x0, y0, x1, y1 = words[1][0]
+        (x0, y0, x1, y1), text = words[1][0]
+        self.assertEqual(text, "Depth")
         self.assertAlmostEqual(x0, 0.1, places=2)  # 20 pt of 200
         self.assertTrue(0.05 < y0 < y1 < 0.3)  # baseline at 80 of 100 pt from the bottom
 
@@ -90,6 +102,9 @@ class ApplyVerdicts(unittest.TestCase):
             ],
             "layers": [
                 {"position": 1, "page": 1, "box": [0, 1000, 1000, 1100],
+                 "field_boxes": [{"field": "depth_to_m", "page": 1, "box": [0, 1080, 100, 1100]},
+                                 {"field": "bogus", "page": 1, "box": [0, 0, 10, 10]},
+                                 {"field": "color", "page": None, "box": None}],
                  "fields": [{"field": "petrography", "verdict": "corrected", "corrected_value": "sand, schluffig", "message": "silty"}]},
                 {"position": 2, "page": 1, "box": None,
                  "fields": [{"field": "depth_to_m", "verdict": "corrected", "corrected_value": None, "message": "?"}]},
@@ -116,6 +131,8 @@ class ApplyVerdicts(unittest.TestCase):
         self.assertEqual(b["sources"]["name"], {"page": 1, "box": [0.1, 0.1, 0.3, 0.2]})
         self.assertEqual(out["layers"][0]["source"], {"page": 1, "box": [0.0, 0.5, 1.0, 0.55]})
         self.assertEqual(out["layers"][1]["source"], {"page": 1, "box": None})
+        self.assertEqual(out["layers"][0]["sources"], {"depth_to_m": {"page": 1, "box": [0.0, 0.54, 0.1, 0.55]}})
+        self.assertEqual(out["layers"][1]["sources"], {})
         self.assertEqual(payload()["borehole"]["elevation_m"], 312.4)  # input untouched
 
     def test_location_correction_and_epsg_guess_flag(self):
@@ -126,7 +143,43 @@ class ApplyVerdicts(unittest.TestCase):
         self.assertEqual((out["borehole"]["x"], out["borehole"]["epsg"]), (3500100.0, 31467))
         self.assertEqual(edits[0]["old_value"], {"x": 3500000.0, "y": 5400000.0, "epsg": 31467})
         self.assertEqual(flags, [{"field": "location", "layer_position": None, "severity": "warning", "origin": "rule",
-                                  "code": "epsg_guessed", "message": "EPSG 31467 is an AI guess: project names Munich"}])  # fmt: skip
+                                  "code": "epsg_guessed", "suggestion": None,
+                                  "message": "EPSG 31467 is an AI guess: project names Munich"}])  # fmt: skip
+
+    def test_flags_carry_a_usable_suggestion(self):
+        verdicts = {
+            "borehole_fields": [
+                check("elevation_m", "uncertain", "312.9", "last digit blurred"),
+                check("client", "wrong", None, "not the client named"),
+                check("total_depth_m", "uncertain", "about five", "?"),
+                check("name", "corrected", "", "name unreadable"),
+            ],
+            "layers": [{"position": 1, "page": 1, "box": None,
+                        "fields": [{"field": "petrography", "verdict": "uncertain", "corrected_value": "kies", "message": "or gravel"}]}],
+        }  # fmt: skip
+        out, flags, edits = apply_verdicts(payload(), verdicts, SIZES, {})
+        self.assertEqual(
+            [(f["field"], f["severity"], f["suggestion"]) for f in flags],
+            [("elevation_m", "warning", 312.9), ("client", "error", None), ("total_depth_m", "warning", None),
+             ("name", "warning", None), ("petrography", "warning", "Kies")],
+        )  # fmt: skip
+        self.assertIn("not applied", flags[3]["message"])  # a correction that cannot be applied
+        self.assertEqual((out["borehole"]["elevation_m"], out["layers"][0]["petrography"], edits), (312.4, "Sand", []))
+
+
+class RenderPages(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("pdftoppm"), "needs poppler")
+    def test_leftover_pages_of_an_earlier_render_are_removed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf, dest = pathlib.Path(tmp) / "one.pdf", pathlib.Path(tmp) / "pages"
+            w = PdfWriter()
+            w.add_blank_page(72, 72)
+            w.write(pdf)
+            dest.mkdir()
+            for n in (1, 2, 3):
+                (dest / f"p-{n}.jpg").write_bytes(b"old")
+            self.assertEqual([p.name for p in pdfutil.render_page_images(pdf, dest, 20)], ["p-1.jpg"])
+            self.assertNotEqual((dest / "p-1.jpg").read_bytes(), b"old")
 
 
 if __name__ == "__main__":

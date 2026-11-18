@@ -4,7 +4,7 @@ Base URL: `http://localhost:4000/api` (dev). All responses are JSON (`Content-Ty
 
 This covers the endpoints implemented so far — Task 4 ("Map/Search API") from [elixir-backend-borehole-pipeline.md](elixir-backend-borehole-pipeline.md), plus `POST /api/boreholes` (ADR-0001), the document upload endpoints (ADR-0002), and the `bem/` pipeline submission/tracking endpoints (ADR-0002; see the "Pipeline runs" section below). Uploading a document (`POST /api/documents`) no longer starts processing by itself (ADR-0002) — the frontend uploads a file, lets the user pick a per-stage model/effort `config`, then calls `POST /api/pipeline_runs` to actually submit the run and polls `GET /api/pipeline_runs/:id` for progress. See [ADR-0002](adr/0002-document-intake-and-pipeline-runs.md) for the consolidated, current account of this whole flow end to end (supersedes reading ADR-0002 in sequence).
 
-> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0002). Never publish or commit these files.
+> **Confidentiality**: `documents.storage_path` and `documents.raw_extraction` are never returned by any endpoint. For a document only `id`, `original_filename`, `mime_type`, `source_country`, `status`, `page_count`, `size_bytes`, `sha256` and `has_file` are exposed; the file itself is served by [`GET /api/documents/:id/file`](#get-apidocumentsidfile) for use inside the application only (ADR-0002). Never publish or commit these files.
 
 > **Prototype scale**: the dataset is capped at 10 000 boreholes. Without `limit` every match is returned in one response; `limit` may be at most 10 000.
 
@@ -109,7 +109,7 @@ Full detail for a single borehole: Stammdaten + ordered stratigraphy layers + as
     "flags": [
       {
         "id": "f1a0...", "field": "depth_to_m", "layer_id": "b3f1...", "severity": "warning",
-        "message": "...", "origin": "validator", "code": null,
+        "message": "...", "origin": "validator", "code": null, "suggestion": 12.5,
         "resolved_at": null, "resolved_by": null, "inserted_at": "2026-11-18T10:00:00.000000Z"
       }
     ],
@@ -184,17 +184,18 @@ Creates a borehole with its layers, optionally linked to an existing document (A
   ],
   "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "additional_document_ids": ["9b2c1a4e-0d53-4c5e-8d0a-6f1f3c7a2b10"],
-  "flags": [{ "field": "depth_to_m", "layer_position": 3, "severity": "warning", "message": "...", "origin": "validator", "code": null }],
+  "flags": [{ "field": "depth_to_m", "layer_position": 3, "severity": "warning", "message": "...", "origin": "validator", "code": null, "suggestion": 12.5 }],
   "edits": [{ "field": "depth_to_m", "layer_position": 3, "old_value": 3.2, "new_value": 3.4, "reason": "..." }]
 }
 ```
 
+- An `epsg` that is not an integer known to PostGIS (`spatial_ref_sys`) never fails the request: the borehole is stored **without** location, `x`/`y` stay in `source_coordinate_raw`, and an open flag `{"field": "location", "severity": "error", "origin": "rule", "code": "unknown_epsg", "message": "EPSG <n> is unknown; coordinates x/y kept in source_coordinate_raw"}` is added (the checks do not touch this code; a human location edit resolves it).
 - `"x"`/`"y"`/`"epsg"` are reprojected to WGS84 via `ST_Transform` (ADR-0001) — omit all three (or send `"location"` directly) if coordinates aren't known yet.
 - `layers[].position` defaults to the 1-based list order if not given.
 - `document_id` is optional; if given, the borehole is attached as that document's `"original"` (ADR-0001, at most one per borehole).
 - `additional_document_ids` is optional (list of document UUIDs); each is linked with role `"additional"`, e.g. the split-out per-borehole PDF the pipeline uploaded. Duplicates and the original are ignored; it also works without `document_id`.
 - `borehole.sources` and `layers[].source` say where a value stands in a document (see above).
-- `flags` (optional; `field`, `severity` `warning`/`error`, `message`, `origin` `rule`/`validator`, optional `code`) and `edits` (validator corrections: `field`, `old_value`, `new_value`, `reason`; stored with `source: "validator"`) refer to a layer by `layer_position` (the position the layer was sent with); `null`/absent is a borehole-level field. A `layer_position` that matches no layer is a `400`. Values are any JSON; `location` values are `{"x", "y", "epsg"}`.
+- `flags` (optional; `field`, `severity` `warning`/`error`, `message`, `origin` `rule`/`validator`, optional `code`, optional `suggestion`: any JSON, the proposed value; accepting it is a normal `PATCH` of that field, which resolves the open flags on it) and `edits` (validator corrections: `field`, `old_value`, `new_value`, `reason`; stored with `source: "validator"`) refer to a layer by `layer_position` (the position the layer was sent with); `null`/absent is a borehole-level field. A `layer_position` that matches no layer is a `400`. Values are any JSON; `location` values are `{"x", "y", "epsg"}`.
 - Afterwards layer `position` is renumbered by `depth_from_m` and the [plausibility checks](#plausibility-checks) run, opening `rule` flags.
 - Everything runs in one transaction — any failure leaves nothing half-created.
 
@@ -240,7 +241,7 @@ History values (`old_value`/`new_value`, any JSON): decimals are numbers, dates 
 
 ### `PATCH /api/boreholes/:id`
 
-Body `{ "borehole": { ... } }` with any of `name`, `external_id`, `purpose`, `place`, `client`, `drilling_method`, `drilled_at`, `end_date`, `source_coordinate_system`, `source_coordinate_raw`, `total_depth_m`, `borehole_length_m`, `elevation_m`, `groundwater_level_m`. The location is edited with `x`, `y` and `epsg` together (reprojected like on create; giving only some of them is a `400`).
+Body `{ "borehole": { ... } }` with any of `name`, `external_id`, `purpose`, `place`, `client`, `drilling_method`, `drilled_at`, `end_date`, `source_coordinate_system`, `source_coordinate_raw`, `total_depth_m`, `borehole_length_m`, `elevation_m`, `groundwater_level_m`. The location is edited with `x`, `y` and `epsg` together (reprojected like on create; giving only some of them is a `400`; an unknown `epsg` is a `422` `{"errors": {"epsg": ["unknown EPSG code"]}}`).
 
 ### `POST /api/boreholes/:id/layers`
 
@@ -252,11 +253,11 @@ Body `{ "layer": { ... } }` with any of `depth_from_m`, `depth_to_m`, `stratigra
 
 ### `DELETE /api/boreholes/:id/layers/:layer_id`
 
-Deletes the layer and its flags; one `field: "layer"` edit holds the snapshot, the history keeps its `layer_id`.
+Deletes the layer; its flags stay but are hidden (not in `flags`, `open_flag_count`, `sort=open_flags`, `flagged`) until the layer is restored by reverting the deletion; one `field: "layer"` edit holds the snapshot, the history keeps its `layer_id`.
 
 ### `POST /api/boreholes/:id/edits/:edit_id/revert`
 
-Undo: writes the edit's `old_value` back as a **new** human edit (history is never rewritten). Reverting a layer deletion re-inserts the layer with its old id, reverting a layer creation deletes it, reverting a `location` edit re-applies `old_value` through the `x`/`y`/`epsg` reprojection (no old location: it is cleared). `422` if the old value is no longer valid, `400` if the edit cannot be reverted.
+Undo: writes the edit's `old_value` back as a **new** human edit (history is never rewritten). Reverting a layer deletion re-inserts the layer with its old id, reverting a layer creation deletes it, reverting a `location` edit re-applies `old_value` through the `x`/`y`/`epsg` reprojection (no old location, or `{"x": null, "y": null, "epsg": null}`: it is cleared and recorded as an edit). `422` if the old value is no longer valid, `400` if the edit cannot be reverted.
 
 ### `POST /api/flags/:id/resolve`
 
@@ -268,7 +269,7 @@ Body `{ "verified": true | false }`. Sets `verified` and `verified_at` (now), or
 
 ### Plausibility checks
 
-`Api.Boreholes.Checks` keeps the open `origin: "rule"` flags of its own codes in sync after create and after every edit: it opens flags for new findings, resolves (`resolved_by: "rule"`) those that no longer apply and leaves still-firing ones alone. Flags with other codes (e.g. `epsg_guessed`) are never touched.
+`Api.Boreholes.Checks` keeps the open `origin: "rule"` flags of its own codes in sync after create and after every edit: it opens flags for new findings, resolves (`resolved_by: "rule"`) those that no longer apply and leaves still-firing ones open (their `message` and `severity` are updated in place when they changed). Rule flags of a layer that no longer exists are resolved (`resolved_by: "rule"`); validator flags of such a layer stay as they were, hidden. Flags with other codes (e.g. `epsg_guessed`) are never touched.
 
 | `code` | `field` (layer) | `severity` | Fires when |
 |---|---|---|---|
@@ -368,7 +369,27 @@ curl -G "http://localhost:4000/api/boreholes/complete" --data-urlencode 'q=1959 
 
 Uploads a raw document (ADR-0002). `multipart/form-data` with the field `file` (`.pdf .png .jpg .jpeg .tif .tiff .docx`, up to 100 MB). The file is stored and the document inserted with `status: "pending"` — uploading no longer starts processing by itself (ADR-0002); call [`POST /api/pipeline_runs`](#post-apipipeline_runs) separately once you have a `config` to submit.
 
-`202` with `{ "data": <document> }` (same fields as in a borehole's `documents`), `status` always `pending`. `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
+The SHA-256 of the file is computed while streaming it and stored (`sha256`, lowercase hex). `202` with `{ "data": <document> }` (same fields as in a borehole's `documents`, including `sha256`), `status` always `pending`. `400` (`{ "errors": { "detail": "..." } }`) if `file` is missing or has an unsupported type.
+
+## `GET /api/documents?sha256=<hex>`
+
+Duplicate upload detection: documents whose file has this SHA-256 (case-insensitive), newest first. `400` if `sha256` is missing.
+
+```json
+{
+  "data": [
+    {
+      "id": "c7a2...",
+      "original_filename": "B1-59_Schichtenverzeichnis.pdf",
+      "inserted_at": "2026-11-18T10:00:00Z",
+      "borehole_count": 2,
+      "pipeline_runs": [{ "id": "a1b2...", "status": "completed", "inserted_at": "2026-11-18T10:01:00Z" }]
+    }
+  ]
+}
+```
+
+`borehole_count` counts the boreholes that have the document as their original; `pipeline_runs` are newest first. Documents uploaded before this feature have no `sha256`.
 
 ## `GET /api/documents/:id`
 
@@ -384,6 +405,7 @@ Metadata of a single document, for the document viewer page. Same fields as the 
     "status": "pending",
     "page_count": 3,
     "size_bytes": 1269760,
+    "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
     "has_file": true,
     "boreholes": [{ "id": "5f1e...", "name": "B1/59" }]
   }
@@ -640,7 +662,7 @@ Reports progress on a stage (ADR-0002). Body `{ "status": "running" | "success" 
 
 ### `GET /api/exec_stages/:id`
 
-One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "status", "data", "error", "model", "effort", "usage", "started_at", "finished_at", "duration_ms", "document_ids", "inserted_at", "updated_at" } }`. `404` if it does not exist or the id is not a UUID.
+One stage execution (the job detail page of `web/`), same shape as the `POST` response: `{ "data": { "id", "type", "run_id", "position", "status", "data", "error", "model", "effort", "usage", "started_at", "finished_at", "duration_ms", "document_ids", "inserted_at", "updated_at" } }`. `inserted_at`/`updated_at` have microsecond precision (ISO 8601, e.g. `2026-11-18T10:00:00.123456Z`), so the newest row per `(type, position)` is unambiguous. `404` if it does not exist or the id is not a UUID.
 
 ### `POST /api/exec_stages/:id/retry`
 

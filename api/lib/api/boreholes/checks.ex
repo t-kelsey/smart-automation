@@ -52,6 +52,14 @@ defmodule Api.Boreholes.Checks do
     stale = for f <- open, not Map.has_key?(findings, key(f)), do: f.id
     now = DateTime.utc_now()
 
+    # still firing but worded or rated differently now: update in place
+    for f <- open,
+        %{message: message, severity: severity} <- [findings[key(f)]],
+        {message, severity} != {f.message, f.severity} do
+      from(x in FieldFlag, where: x.id == ^f.id)
+      |> Repo.update_all(set: [message: message, severity: severity, updated_at: now])
+    end
+
     if stale != [] do
       from(f in FieldFlag, where: f.id in ^stale)
       |> Repo.update_all(set: [resolved_at: now, resolved_by: "rule", updated_at: now])

@@ -159,6 +159,52 @@ class ProcessRetry(unittest.TestCase):
         self.assertEqual(status, "failed")
         self.assertIn("split result is missing", error)
 
+    def test_validate_retry_reuses_a_borehole_an_earlier_attempt_stored(self):
+        # the earlier attempt stored the borehole but its row was left running, then stopped
+        api = FakeApi([
+            row("validate", 1, "stopped"), row("validate", 1, "failed", {"borehole_id": "bh-old"}),
+            row("transform", 1, "success", TRANSFORMED), row("extract", 1, "success", {}), SPLIT,
+        ])  # fmt: skip
+        api.upload_borehole = mock.Mock()
+        seen = {}
+        with mock.patch.object(server, "validate_boreholes", fake_step("validate", seen, {"payload": {}})):
+            status, error = server.process_retry(self.job("validate"), api)
+
+        self.assertEqual((status, error), ("completed", None))
+        api.upload_borehole.assert_not_called()
+        self.assertEqual(api.stages[0]["data"]["borehole_id"], "bh-old")
+
+
+class SuccessReport(unittest.TestCase):
+    def tracker(self, failures):
+        api = FakeApi([])
+        update = api.update_exec_stage
+
+        def flaky(stage_id, status, **fields):
+            if status == "success" and failures:
+                failures.pop()
+                raise server.ApiError("503")
+            return update(stage_id, status, **fields)
+
+        api.update_exec_stage = flaky
+        api.upload_borehole = mock.Mock(return_value={"data": {"id": "bh1"}})
+        t = server.RunTracker(api, "run-1", DOC)
+        t.started("validate", 1, "sonnet", "high")
+        return t, api
+
+    def test_success_update_is_retried_after_storing_the_borehole(self):
+        t, api = self.tracker([1, 1])
+        with mock.patch.object(server, "SUCCESS_BACKOFF_S", 0):
+            t.succeeded("validate", 1, {"payload": {"borehole": {}, "layers": []}}, [], None)
+        self.assertEqual((api.stages[0]["status"], api.stages[0]["data"]["borehole_id"]), ("success", "bh1"))
+        api.upload_borehole.assert_called_once()
+
+    def test_gives_up_after_the_last_attempt(self):
+        t, api = self.tracker([1] * server.SUCCESS_ATTEMPTS)
+        with mock.patch.object(server, "SUCCESS_BACKOFF_S", 0), self.assertRaises(server.ApiError):
+            t.succeeded("validate", 1, {"payload": {"borehole": {}, "layers": []}}, [], None)
+        self.assertEqual(api.stages[0]["status"], "running")
+
 
 class RetryEndpoint(unittest.TestCase):
     def setUp(self):

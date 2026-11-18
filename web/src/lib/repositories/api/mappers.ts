@@ -59,6 +59,13 @@ const text = (value: string | number | null | undefined): string | null =>
 export const toSource = (source: ApiSource | null | undefined): SourceRef | null =>
 	source ? { documentId: source.document_id, page: source.page, box: source.box ?? null } : null;
 
+const toSources = (sources: Record<string, ApiSource | null> | null | undefined) =>
+	Object.fromEntries(
+		Object.entries(sources ?? {}).flatMap(([field, source]) =>
+			source ? [[field, toSource(source)!]] : []
+		)
+	);
+
 const toFlag = (f: ApiFlag): FieldFlag => ({
 	id: f.id,
 	field: f.field,
@@ -68,7 +75,8 @@ const toFlag = (f: ApiFlag): FieldFlag => ({
 	origin: f.origin,
 	code: f.code,
 	resolvedAt: f.resolved_at,
-	resolvedBy: f.resolved_by
+	resolvedBy: f.resolved_by,
+	suggestion: f.suggestion ?? null
 });
 
 const toEdit = (e: ApiEdit): FieldEdit => ({
@@ -103,7 +111,8 @@ export function toLayer(layer: ApiBoreholeLayer): BoreholeLayer {
 			petrography: layer.petrography,
 			color: layer.color
 		},
-		source: toSource(layer.source)
+		source: toSource(layer.source),
+		sources: toSources(layer.sources)
 	};
 }
 
@@ -185,11 +194,11 @@ export function toBorehole(b: ApiBoreholeDetail, baseUrl: string): Borehole {
 		stored: Object.fromEntries(
 			BOREHOLE_FIELDS.map(({ field }) => [field, text(b[field])])
 		) as Record<BoreholeField, string | null>,
-		sources: Object.fromEntries(
-			Object.entries(b.sources ?? {}).flatMap(([field, source]) =>
-				source ? [[field, toSource(source)!]] : []
-			)
-		),
+		sources: toSources(b.sources),
+		sourceCoordinates:
+			b.source_x != null && b.source_y != null && b.source_epsg != null
+				? { x: b.source_x, y: b.source_y, epsg: b.source_epsg }
+				: null,
 		flags: (b.flags ?? []).map(toFlag),
 		edits: (b.edits ?? []).map(toEdit)
 	};

@@ -29,6 +29,8 @@ export interface ApiFlag {
 	code: string | null;
 	resolved_at: string | null;
 	resolved_by: 'human' | 'rule' | null;
+	/** Proposed value, any JSON; absent or `null` if none. */
+	suggestion?: unknown;
 	inserted_at: string;
 }
 
@@ -54,6 +56,7 @@ export interface ApiBoreholeLayer {
 	raw_text: string | null;
 	metadata: Record<string, unknown>;
 	source?: ApiSource | null;
+	sources?: Record<string, ApiSource | null> | null;
 }
 
 /**
@@ -89,6 +92,9 @@ export interface ApiBorehole {
 	end_date: string | null;
 	source_coordinate_system: string | null;
 	source_coordinate_raw: string | null;
+	source_x?: number | null;
+	source_y?: number | null;
+	source_epsg?: number | null;
 	total_depth_m: Decimal | null;
 	borehole_length_m: Decimal | null;
 	elevation_m: Decimal | null;

@@ -41,14 +41,16 @@
 	const half = colW / 2;
 	const width = colX + colW + 90;
 
+	/** Drawn depth: layers below the stated total depth are drawn too, not cut off. */
+	let depth = $derived(Math.max(totalDepth, ...layers.map((l) => l.endDepth)));
 	/** Units per metre; one unit is one pixel, so text keeps its size whatever the depth. */
 	let scale = $derived(
-		availableHeight && totalDepth > 0
-			? Math.max(minScale, (availableHeight - top - bottomMargin) / totalDepth)
+		availableHeight && depth > 0
+			? Math.max(minScale, (availableHeight - top - bottomMargin) / depth)
 			: defaultScale
 	);
-	const y = (depth: number) => top + depth * scale;
-	let bottom = $derived(y(totalDepth));
+	const y = (metres: number) => top + metres * scale;
+	let bottom = $derived(y(depth));
 	let height = $derived(bottom + bottomMargin);
 
 	/** Pushes sorted positions apart so that labels do not overlap. */

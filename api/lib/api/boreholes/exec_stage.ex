@@ -35,7 +35,7 @@ defmodule Api.Boreholes.ExecStage do
 
     many_to_many :documents, Api.Boreholes.Document, join_through: Api.Boreholes.StageDocumentLink
 
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
 
   @doc "Every valid `status`."

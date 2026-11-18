@@ -90,4 +90,62 @@ defmodule ApiWeb.DocumentControllerTest do
       assert json_response(get(conn, ~p"/api/documents/#{document.id}/file"), 404)
     end
   end
+
+  describe "duplicate upload detection" do
+    defp upload(conn, content, name \\ "a.pdf") do
+      path = Path.join(System.tmp_dir!(), "up_#{System.unique_integer([:positive])}")
+      File.write!(path, content)
+      file = %Plug.Upload{path: path, filename: name, content_type: "application/pdf"}
+
+      conn
+      |> post(~p"/api/documents", %{"file" => file})
+      |> json_response(202)
+      |> Map.fetch!("data")
+    end
+
+    test "uploads store the SHA-256 and GET /api/documents?sha256= finds them newest first", %{
+      conn: conn
+    } do
+      first = upload(conn, "same bytes")
+      second = upload(conn, "same bytes", "b.pdf")
+      _other = upload(conn, "different")
+      sha = :crypto.hash(:sha256, "same bytes") |> Base.encode16(case: :lower)
+      assert first["sha256"] == sha
+
+      borehole = Repo.insert!(%Api.Boreholes.Borehole{name: "BK"})
+
+      Repo.insert!(%Api.Boreholes.BoreholeDocument{
+        borehole_id: borehole.id,
+        document_id: first["id"],
+        role: "original"
+      })
+
+      {:ok, run} = Api.Boreholes.create_pipeline_run(%{"document_id" => first["id"]})
+
+      %{"data" => [newest, oldest]} =
+        conn |> get(~p"/api/documents?sha256=#{String.upcase(sha)}") |> json_response(200)
+
+      # same second: ties are broken by id, so just match by id
+      by_id = Map.new([newest, oldest], &{&1["id"], &1})
+      assert by_id[second["id"]]["borehole_count"] == 0
+      assert by_id[second["id"]]["pipeline_runs"] == []
+      assert by_id[first["id"]]["borehole_count"] == 1
+      assert by_id[first["id"]]["original_filename"] == "a.pdf"
+
+      assert [%{"id" => run_id, "status" => "new", "inserted_at" => _}] =
+               by_id[first["id"]]["pipeline_runs"]
+
+      assert run_id == run.id
+
+      assert %{"data" => []} =
+               conn
+               |> get(~p"/api/documents?sha256=#{String.duplicate("0", 64)}")
+               |> json_response(200)
+
+      assert conn |> get(~p"/api/documents") |> json_response(400)
+
+      %{"data" => shown} = conn |> get(~p"/api/documents/#{first["id"]}") |> json_response(200)
+      assert shown["sha256"] == sha
+    end
+  end
 end

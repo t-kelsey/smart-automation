@@ -40,11 +40,24 @@
 >
 	{#if link.icon}
 		{@const Icon = link.icon}
-		<Icon class="size-4 shrink-0" />
+		<span class="relative">
+			<Icon class="size-4 shrink-0" />
+			{#if collapsed && link.badge}
+				<span class="absolute -top-1 -right-1 size-2 rounded-full bg-warning-500"></span>
+			{/if}
+		</span>
 	{:else}
 		<span class="size-1.5 shrink-0 rounded-full bg-current opacity-50"></span>
 	{/if}
 	{#if !collapsed}
 		<Navigation.TriggerText class="min-w-0 flex-1 truncate">{link.label}</Navigation.TriggerText>
+		{#if link.badge}
+			<span
+				class="badge preset-filled-warning-500 px-1.5 py-0 text-xs tabular-nums"
+				title="{link.badge} not verified"
+			>
+				{link.badge}
+			</span>
+		{/if}
 	{/if}
 </Navigation.TriggerAnchor>

@@ -12,10 +12,17 @@ import din4023 from '../../../../../standards/din-4023/din-4023.json';
 
 // Own instance so seeding here does not affect other users of faker.
 // The mock data has no review data (sources, flags, edits); `withReview` adds empty defaults.
-type BoreholeLayer = Omit<FullLayer, 'stored' | 'source'>;
+type BoreholeLayer = Omit<FullLayer, 'stored' | 'source' | 'sources'>;
 type MockBorehole = Omit<
 	Borehole,
-	'layers' | 'stored' | 'sources' | 'flags' | 'edits' | 'verifiedAt' | 'openFlagCount'
+	| 'layers'
+	| 'stored'
+	| 'sources'
+	| 'flags'
+	| 'edits'
+	| 'verifiedAt'
+	| 'openFlagCount'
+	| 'sourceCoordinates'
 > & { layers: BoreholeLayer[] };
 
 const withReview = (b: MockBorehole): Borehole => ({
@@ -36,11 +43,13 @@ const withReview = (b: MockBorehole): Borehole => ({
 		groundwater_level_m: b.groundwaterLevel?.toString() ?? null
 	},
 	sources: {},
+	sourceCoordinates: null,
 	flags: [],
 	edits: [],
 	layers: b.layers.map((layer) => ({
 		...layer,
 		source: null,
+		sources: {},
 		stored: {
 			depth_from_m: String(layer.startDepth),
 			depth_to_m: String(layer.endDepth),

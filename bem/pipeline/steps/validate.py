@@ -1,7 +1,8 @@
 """Step 5: an independent model checks the transform payload against the page images (ADR-0006).
 
 It returns a verdict and a pixel box per borehole field and layer. `corrected` values are applied
-(and logged as edits), `uncertain`/`wrong` become warning/error flags, and the boxes become the
+(and logged as edits), `uncertain`/`wrong` become warning/error flags (with the coerced
+`corrected_value`, if usable, as `suggestion`), and the boxes become the
 `sources` of the borehole and its layers. The step's result is what the server posts to the API.
 """
 
@@ -42,7 +43,11 @@ Return:
   document clearly shows although the payload has null. Fields: {borehole_fields}. "location"
   stands for the coordinates (x, y, epsg).
 - layers: one entry per payload layer, matched by its position. box = the whole row/interval of the
-  layer in the log. In "fields" list only the layer fields ({layer_fields}) that are not ok.
+  layer in the log. field_boxes: page and box of each layer field ({layer_fields}) where it is
+  written: depth_from_m/depth_to_m around the depth number on the depth scale or in the depth
+  column, petrography around the soil/rock description, stratigraphy and color around their words
+  (often inside the description). Leave out fields not written anywhere. In "fields" list only the
+  layer fields that are not ok.
 
 For each: page = 1-based page in this PDF where the value is written, box = [x0, y0, x1, y1] in
 PIXELS of that page image (origin top left) tightly around the written value; page/box null if it is
@@ -51,7 +56,8 @@ not visible anywhere. verdict:
 - corrected: you are sure the value is wrong AND you know the right one; give it in corrected_value
   in the payload's format (numbers in metres, ISO dates, location as {{"x", "y", "epsg"}},
   petrography as a German DIN 4023 term: {din4023}).
-- uncertain: doubtful (hard to read, ambiguous); put a suggestion, if any, in message.
+- uncertain: doubtful (hard to read, ambiguous); put your best guess, if any, in corrected_value
+  (same format as for corrected; it is shown to the reviewer, not applied) and explain in message.
 - wrong: contradicts the document, the right value is unknown.
 Give a short message for every verdict that is not ok. Do not invent values."""
 
@@ -82,9 +88,9 @@ def _coerce(field: str, value):
     return str(value)
 
 
-def pixel_box(raw, page: int | None, sizes: list[tuple[int, int]], words: dict[int, list]) -> list[float] | None:
-    """A model pixel box as [x0, y0, x1, y1] in 0-1 of the page (clamped, tightened to the text layer),
-    or None if it is unusable."""
+def pixel_box(raw, page: int | None, sizes: list[tuple[int, int]], words: dict[int, list], values=()) -> list[float] | None:
+    """A model pixel box as [x0, y0, x1, y1] in 0-1 of the page (clamped, then snapped to `values` in
+    the text layer, else tightened to its words), or None if it is unusable."""
     if page is None or not 1 <= page <= len(sizes) or not isinstance(raw, list) or len(raw) != 4:
         return None
     w, h = sizes[page - 1]
@@ -94,14 +100,22 @@ def pixel_box(raw, page: int | None, sizes: list[tuple[int, int]], words: dict[i
         return None
     if x1 <= x0 or y1 <= y0:
         return None
-    return [round(v, 4) for v in pdftext.tighten([x0, y0, x1, y1], words.get(page))]
+    box, page_words = [x0, y0, x1, y1], words.get(page)
+    box = pdftext.snap(box, page_words, list(values)) if values else pdftext.tighten(box, page_words)
+    return [round(v, 4) for v in box]
 
 
-def _source(entry: dict, sizes, words) -> dict | None:
+def _source(entry: dict, sizes, words, values=()) -> dict | None:
     page = entry.get("page")
     if not isinstance(page, int) or not 1 <= page <= len(sizes):
         return None
-    return {"page": page, "box": pixel_box(entry.get("box"), page, sizes, words)}
+    return {"page": page, "box": pixel_box(entry.get("box"), page, sizes, words, values)}
+
+
+def _written(target: dict, field: str) -> list:
+    """The value(s) of `field` to look for in the text layer (location: x and y as written)."""
+    values = [target.get("x"), target.get("y")] if field == "location" else [target.get(field)]
+    return [v for v in values if v not in (None, "")]
 
 
 def apply_verdicts(payload: dict, verdicts: dict, sizes, words) -> tuple[dict, list[dict], list[dict]]:
@@ -114,6 +128,12 @@ def apply_verdicts(payload: dict, verdicts: dict, sizes, words) -> tuple[dict, l
 
     def judge(target: dict, check: dict, position: int | None) -> None:
         field, verdict, message = check.get("field"), check.get("verdict"), check.get("message") or ""
+        suggestion = None
+        if verdict in SEVERITY and check.get("corrected_value") not in (None, ""):
+            try:  # a usable suggestion is shown to the reviewer, not applied
+                suggestion = _coerce(field, check["corrected_value"])
+            except (ValueError, TypeError, AttributeError):
+                pass
         if verdict == "corrected":
             old = {k: target.get(k) for k in ("x", "y", "epsg")} if field == "location" else target.get(field)
             try:
@@ -133,7 +153,7 @@ def apply_verdicts(payload: dict, verdicts: dict, sizes, words) -> tuple[dict, l
         if verdict in SEVERITY:
             flags.append(
                 {"field": field, "layer_position": position, "severity": SEVERITY[verdict], "message": message,
-                 "origin": "validator", "code": None}
+                 "suggestion": suggestion, "origin": "validator", "code": None}
             )  # fmt: skip
 
     sources = {}
@@ -141,21 +161,26 @@ def apply_verdicts(payload: dict, verdicts: dict, sizes, words) -> tuple[dict, l
         if check.get("field") not in BOREHOLE_FIELDS:
             continue
         judge(b, check, None)
-        if source := _source(check, sizes, words):
+        if source := _source(check, sizes, words, _written(b, check["field"])):
             sources[check["field"]] = source
     b["sources"] = sources
     for entry in verdicts.get("layers") or []:
         layer = layers.get(entry.get("position"))
         if layer is None:
             continue
-        layer["source"] = _source(entry, sizes, words)
         for check in entry.get("fields") or []:
             if check.get("field") in LAYER_FIELDS:
                 judge(layer, check, layer["position"])
+        layer["source"] = _source(entry, sizes, words)
+        layer["sources"] = {
+            fb["field"]: s
+            for fb in entry.get("field_boxes") or []
+            if fb.get("field") in LAYER_FIELDS and (s := _source(fb, sizes, words, _written(layer, fb["field"])))
+        }
     if guess := (b.get("metadata") or {}).get("epsg_guessed_by_ai"):
         flags.append(
             {"field": "location", "layer_position": None, "severity": "warning", "origin": "rule",
-             "code": "epsg_guessed", "message": f"EPSG {b.get('epsg')} is an AI guess: {guess}"}
+             "code": "epsg_guessed", "suggestion": None, "message": f"EPSG {b.get('epsg')} is an AI guess: {guess}"}
         )  # fmt: skip
     return out, flags, edits
 

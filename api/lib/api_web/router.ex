@@ -23,6 +23,7 @@ defmodule ApiWeb.Router do
     post "/flags/:id/resolve", FlagController, :resolve
 
     post "/documents", DocumentController, :create
+    get "/documents", DocumentController, :index
     get "/documents/:id", DocumentController, :show
     get "/documents/:id/file", DocumentController, :file
     put "/documents/:id/status", DocumentController, :update_status

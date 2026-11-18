@@ -22,6 +22,7 @@ erDiagram
         string status "pending/processing/extracted/failed/reviewed"
         integer page_count
         integer size_bytes
+        string sha256 "hex SHA-256 of the upload, indexed, null for old rows"
         jsonb raw_extraction "never exposed publicly"
     }
 
@@ -72,12 +73,13 @@ erDiagram
     FIELD_FLAGS {
         binary_id id PK
         binary_id borehole_id FK "on delete: cascade"
-        binary_id layer_id FK "nullable, on delete: cascade"
+        binary_id layer_id "nullable, NO foreign key: flags of a deleted layer are hidden until it is restored"
         string field "column name, location, layer"
         string severity "warning | error"
         text message
         string origin "rule | validator"
         string code "rule id, null for validator flags"
+        jsonb suggestion "nullable, any JSON: proposed value"
         utc_datetime_usec resolved_at "null = open"
         string resolved_by "human | rule"
     }
@@ -95,7 +97,7 @@ erDiagram
     }
 ```
 
-`field_flags` and `field_edits` (ADR-0006): flags are open until `resolved_at` is set; edits are the append-only history of validator corrections and human edits. `old_value`/`new_value` are stored as `jsonb` through `Api.Boreholes.JsonValue` (a number, string, object or `NULL`). `location` values are `{"x", "y", "epsg"}`, `layer` values a snapshot of the layer. Layer `position` is always the rank by `depth_from_m`. The rules are in the [API reference](api-reference.md#plausibility-checks).
+`field_flags` and `field_edits` (ADR-0006): flags are open until `resolved_at` is set (`field_flags.layer_id` has no foreign key like `field_edits.layer_id`: flags of a deleted layer stay in the table but are left out of `flags`, `open_flag_count`, sorting and filtering until the layer is restored with its old id); `exec_stages` timestamps have microsecond precision, so the newest row per `(type, position)` is unambiguous; edits are the append-only history of validator corrections and human edits. `old_value`/`new_value` are stored as `jsonb` through `Api.Boreholes.JsonValue` (a number, string, object or `NULL`). `location` values are `{"x", "y", "epsg"}`, `layer` values a snapshot of the layer. Layer `position` is always the rank by `depth_from_m`. The rules are in the [API reference](api-reference.md#plausibility-checks).
 
 ## Pipeline runs & stage tracking (implemented, ADR-0002)
 

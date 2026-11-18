@@ -20,6 +20,7 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 import traceback
 import uuid
 from contextlib import asynccontextmanager
@@ -45,6 +46,8 @@ WORKDIR = pathlib.Path(os.environ.get("BEM_WORKDIR", pathlib.Path(__file__).reso
 CHUNK_SIZE = int(os.environ.get("BEM_CHUNK_SIZE", "10"))
 WORKERS = int(os.environ.get("BEM_WORKERS", "4"))
 BOREHOLE_STAGES = ("extract", "transform", "validate")  # one job per borehole, retryable on their own
+SUCCESS_ATTEMPTS = 4  # reporting a finished stage is retried with backoff (0.5 s, 1 s, 2 s)
+SUCCESS_BACKOFF_S = 0.5
 
 
 @dataclass
@@ -127,7 +130,7 @@ class RunTracker(Tracker):
                 self._update(stage, position, "failed", data=data, usage=usage, error=f"upload: {_error_text(e)}")
                 return
         extra = list(self.split_documents.values()) if stage == "split" else None
-        self._update(stage, position, "success", data=data, usage=usage, document_ids=extra)
+        self._report_success(stage, position, data=data, usage=usage, document_ids=extra)
         if stage == "split":
             for position in range(1, len(data["boreholes"]) + 1):  # what the per-borehole stages will do
                 for later in BOREHOLE_STAGES:
@@ -135,6 +138,17 @@ class RunTracker(Tracker):
                         self._create(later, position, "new")
                     except ApiError as e:
                         log(f"{self.document_id}: {later} #{position} stage not created: {e}")
+
+    def _report_success(self, stage: str, position: int | None, **fields) -> None:
+        # a validate row left `running` after its borehole was stored would later be retried and store it twice
+        for attempt in range(SUCCESS_ATTEMPTS):
+            try:
+                return self._update(stage, position, "success", **fields)
+            except ApiError as e:
+                if attempt == SUCCESS_ATTEMPTS - 1:
+                    log(f"{self.document_id}: ERROR: {stage} #{position} succeeded but could not be marked success: {e}")
+                    raise
+                time.sleep(SUCCESS_BACKOFF_S * 2**attempt)
 
     def failed(self, stage, position, error, usage) -> None:
         status = "stopped" if isinstance(error, PipelineStopped) else "failed"
@@ -150,11 +164,15 @@ class RunTracker(Tracker):
                 log(f"{self.document_id}: split document {i} not uploaded: {e}")
 
     def _store_borehole(self, position: int, data: dict) -> str:
+        if existing := self.boreholes.get(position):  # stored by an earlier attempt: never post it twice
+            log(f"{self.document_id}: borehole #{position} already stored as {existing}, not posted again")
+            return existing
         # the source stays the original; the split-out PDF this borehole came from is linked as additional,
         # and the validator's boxes point into it
         split_document = self.split_documents.get(position)
         payload = data["payload"]
-        for source in [*payload["borehole"].get("sources", {}).values(), *(l.get("source") for l in payload["layers"])]:
+        layer_sources = [s for l in payload["layers"] for s in (l.get("source"), *(l.get("sources") or {}).values())]
+        for source in [*payload["borehole"].get("sources", {}).values(), *layer_sources]:
             if source:
                 source["document_id"] = split_document
         additional = [split_document] if split_document else []
@@ -221,6 +239,13 @@ def _newest_success(run: dict, type_: str, position: int) -> dict | None:
     return next((r for r in rows if (r["type"], r.get("position"), r.get("status")) == (type_, position, "success")), None)
 
 
+def _stored_borehole(run: dict, position: int) -> str | None:
+    """The borehole id any validate row of this borehole recorded, newest first."""
+    rows = run.get("exec_stages") or []
+    ids = ((r.get("data") or {}).get("borehole_id") for r in rows if (r["type"], r.get("position")) == ("validate", position))
+    return next((i for i in ids if i), None)
+
+
 def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
     """Redo one extract, transform or validate job of a finished run as a new exec_stage.
 
@@ -250,6 +275,8 @@ def process_retry(job: Job, api: ApiService) -> tuple[str, str | None]:
     for (type_, pos), row in latest.items():  # keep the borehole ids of jobs that already stored theirs
         if type_ == "validate" and row.get("status") == "success" and pos is not None:
             tracker.boreholes[pos] = (row.get("data") or {}).get("borehole_id")
+    if stored := _stored_borehole(run, position):  # an earlier validate stored it but was not marked success
+        tracker.boreholes[position] = stored
     recorder = Recorder(tracker)
     label = _safe_name(boreholes[position - 1].get("label") or f"borehole_{position}")
     out_dir = WORKDIR / document_id / "out"

@@ -2,6 +2,7 @@ import type {
 	Borehole,
 	BoreholeFilter,
 	BoreholeSort,
+	BoreholeChanges,
 	BoreholeSummary,
 	DocumentDetail,
 	LayerChanges,
@@ -103,6 +104,19 @@ export class BoreholeService {
 		};
 	}
 
+	/**
+	 * The next borehole to review: unverified, most open flags first, with the number of unverified
+	 * boreholes; `next` is `null` when everything is verified.
+	 */
+	async nextToReview(): Promise<{ next: BoreholeSummary | null; total: number }> {
+		const { items, total } = await this.repository.list({
+			verified: false,
+			sort: { field: 'openFlags', direction: 'desc' },
+			limit: 1
+		});
+		return { next: items[0] ?? null, total };
+	}
+
 	/** Positions of all boreholes for the map; one light request instead of paging through the list. */
 	listMapPoints(): Promise<MapPoint[]> {
 		return this.repository.listMapPoints();
@@ -128,6 +142,16 @@ export class BoreholeService {
 	/** Saves the typed text of one borehole field, or of one field of the layer `layerId`. */
 	async setField(id: string, field: string, text: string, layerId?: string | null) {
 		const changes = { [field]: parseValue(field, text) };
+		return byDepth(
+			await (layerId
+				? this.repository.updateLayer(id, layerId, changes)
+				: this.repository.update(id, changes))
+		);
+	}
+
+	/** Saves a value as it is (e.g. a validator's suggestion), without parsing it. */
+	async setValue(id: string, field: string, value: unknown, layerId?: string | null) {
+		const changes = { [field]: value } as BoreholeChanges & LayerChanges;
 		return byDepth(
 			await (layerId
 				? this.repository.updateLayer(id, layerId, changes)

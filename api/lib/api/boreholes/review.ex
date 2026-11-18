@@ -21,7 +21,7 @@ defmodule Api.Boreholes.Review do
 
   @type result :: {:ok, Borehole.t()} | {:error, :not_found | String.t() | Ecto.Changeset.t()}
 
-  @layer_snapshot [:metadata, :source | BoreholeLayer.editable()]
+  @layer_snapshot [:metadata, :source, :sources | BoreholeLayer.editable()]
 
   # -- Human edits ---------------------------------------------------------------------------
 
@@ -37,16 +37,17 @@ defmodule Api.Boreholes.Review do
       changeset = Borehole.edit_changeset(borehole, attrs)
 
       with :ok <- check_coordinates(attrs),
+           :ok <- check_epsg(borehole, attrs),
            {:ok, _} <- Repo.update(changeset) do
         edits =
           for {field, new} <- changeset.changes,
               do: {Atom.to_string(field), json(Map.get(borehole, field)), json(new)}
 
-        Boreholes.set_location(borehole, attrs)
+        :ok = Boreholes.set_location(borehole, attrs)
         new_value = Map.new(~w(x y epsg), &{&1, attrs[&1]})
         location = current_location(borehole.id)
 
-        record(borehole.id, nil, edits ++ location_edit(borehole.location, location, new_value))
+        record(borehole.id, nil, edits ++ location_edit(borehole, location, new_value))
       else
         {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
         {:error, message} -> {:error, message}
@@ -79,7 +80,7 @@ defmodule Api.Boreholes.Review do
     end)
   end
 
-  @doc "Deletes a layer; its open flags go with it."
+  @doc "Deletes a layer; its flags stay but are hidden until the layer is restored."
   @spec delete_layer(String.t(), String.t()) :: result()
   def delete_layer(id, layer_id) do
     write(id, fn borehole ->
@@ -118,12 +119,31 @@ defmodule Api.Boreholes.Review do
   end
 
   defp revert(borehole, %FieldEdit{field: "location", old_value: old}) do
-    case old do
-      %{"x" => _, "y" => _, "epsg" => _} -> Boreholes.set_location(borehole, old)
-      _ -> Repo.update_all(from(b in Borehole, where: b.id == ^borehole.id), set: [location: nil])
-    end
+    # a location without coordinates (null, or x/y/epsg all null) clears it
+    old =
+      case old do
+        %{"x" => x, "y" => y, "epsg" => epsg}
+        when not is_nil(x) and not is_nil(y) and not is_nil(epsg) ->
+          old
 
-    record(borehole.id, nil, location_edit(borehole.location, current_location(borehole.id), old))
+        _ ->
+          nil
+      end
+
+    with :ok <- check_epsg(borehole, old || %{}) do
+      if old,
+        do: :ok = Boreholes.set_location(borehole, old),
+        else:
+          Repo.update_all(from(b in Borehole, where: b.id == ^borehole.id),
+            set: [location: nil, source_x: nil, source_y: nil, source_epsg: nil]
+          )
+
+      record(
+        borehole.id,
+        nil,
+        location_edit(borehole, current_location(borehole.id), old)
+      )
+    end
   end
 
   defp revert(borehole, %FieldEdit{layer_id: nil, field: field, old_value: old}),
@@ -323,13 +343,32 @@ defmodule Api.Boreholes.Review do
   defp current_location(id),
     do: Repo.one(from b in Borehole, where: b.id == ^id, select: b.location)
 
-  # `new_value` is what was written (x/y/epsg in the source CRS); the old location is only known
-  # in WGS84 (`epsg` 4326), which `Boreholes.set_location/2` can reproject just the same.
-  defp location_edit(old, new, new_value) do
+  # Values are x/y/epsg as written in the source CRS; a location stored before the source
+  # coordinates were kept is given in WGS84 (`epsg` 4326), which `set_location/2` reprojects too.
+  defp location_edit(%Borehole{location: old} = borehole, new, new_value) do
     if json(old) == json(new),
       do: [],
-      else: [{"location", json(old), new_value || json(new)}]
+      else: [{"location", source_location(borehole) || json(old), new_value || json(new)}]
   end
+
+  defp source_location(%Borehole{source_x: x, source_y: y, source_epsg: epsg})
+       when is_number(x) and is_number(y) and is_integer(epsg),
+       do: %{"x" => x, "y" => y, "epsg" => epsg}
+
+  defp source_location(_borehole), do: nil
+
+  # unknown EPSG is a validation error (422) on the epsg field
+  defp check_epsg(borehole, %{"epsg" => epsg}) when not is_nil(epsg) do
+    if Boreholes.known_epsg?(epsg),
+      do: :ok,
+      else:
+        {:error,
+         borehole
+         |> Ecto.Changeset.change()
+         |> Ecto.Changeset.add_error(:epsg, "unknown EPSG code")}
+  end
+
+  defp check_epsg(_borehole, _attrs), do: :ok
 
   defp check_coordinates(attrs) do
     given = Enum.count(~w(x y epsg), &(attrs[&1] != nil))
