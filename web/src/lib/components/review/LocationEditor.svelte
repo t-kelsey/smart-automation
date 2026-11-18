@@ -11,6 +11,7 @@ restores the values.
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { CheckIcon } from '@lucide/svelte';
+	import MapSnippet from '#lib/components/borehole/MapSnippet.svelte';
 	import { focusNext, type Review } from './review.ts';
 
 	let { review }: { review: Review } = $props();
@@ -52,6 +53,26 @@ restores the values.
 	});
 
 	let error = $state<string | null>(null);
+	/** Why an EPSG code was filled in automatically. */
+	let note = $state<string | null>(null);
+	/** No system could be found: a map asks for the rough area instead. */
+	let picking = $state(false);
+
+	/** The rough area was clicked: its UTM zone decides the system of x/y. */
+	async function pickArea(lon: number, lat: number) {
+		const [nx, ny] = [x, y].map((v) => Number(v.trim().replace(',', '.')));
+		const [best] = await review.service
+			.guessEpsg(review.borehole.id, nx, ny, { lon, lat })
+			.catch(() => []);
+		if (!best) {
+			error = 'These x/y do not fit that area. Try another spot or type an EPSG code.';
+			return;
+		}
+		picking = false;
+		epsg = String(best.epsg);
+		await commit();
+		if (!error) note = `EPSG ${best.epsg} from the area you picked (UTM zone ${best.epsg % 100})`;
+	}
 	let saving = $state(false);
 	let saved = $state(false);
 	let group = $state<HTMLDivElement>();
@@ -64,8 +85,24 @@ restores the values.
 	async function commit() {
 		// x/y given in degrees without a system: that is GPS (WGS84)
 		const [nx, ny] = [x, y].map((v) => Number(v.trim().replace(',', '.')));
+		note = null;
 		if (!epsg.trim() && x.trim() && y.trim() && Math.abs(nx) <= 180 && Math.abs(ny) <= 90)
 			epsg = WGS84;
+		// metres without a system: take the one of the nearest boreholes written that way
+		else if (!epsg.trim() && !Number.isNaN(nx) && !Number.isNaN(ny) && x.trim() && y.trim()) {
+			const [best] = await review.service.guessEpsg(review.borehole.id, nx, ny).catch(() => []);
+			if (best) {
+				epsg = String(best.epsg);
+				note =
+					best.near === 'its earlier position'
+						? `EPSG ${best.epsg} assumed: the UTM zone of its earlier position`
+						: `EPSG ${best.epsg} assumed: like ${best.near}, ${(best.distanceM / 1000).toFixed(1)} km away`;
+			} else {
+				// nothing to go by: let the user point at the rough area on a map
+				picking = true;
+				return;
+			}
+		}
 		const values = [x, y, epsg].map((v) => v.trim().replace(',', '.'));
 		const [vx, vy, ve] = values;
 		if (values.join() === storedValues().join()) {
@@ -169,8 +206,22 @@ restores the values.
 			<option value={code}>{name}</option>
 		{/each}
 	</datalist>
+	{#if picking}
+		<div class="mt-1 space-y-1 px-2 text-xs">
+			<p>
+				No coordinate system found for these x/y. Click roughly where the borehole is (the country
+				is enough), or type an EPSG code.
+			</p>
+			<MapSnippet onpick={pickArea} />
+			<button type="button" class="btn btn-sm hover:preset-tonal" onclick={() => (picking = false)}>
+				Cancel
+			</button>
+		</div>
+	{/if}
 	{#if error}
 		<p class="px-2 text-xs text-error-600-400" role="alert">{error}</p>
+	{:else if note}
+		<p class="px-2 text-xs text-primary-700-300">{note}</p>
 	{/if}
 	<!-- Second row: the position the map uses, always computed by the API from the row above. -->
 	<p

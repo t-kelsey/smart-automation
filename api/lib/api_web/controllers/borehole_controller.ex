@@ -20,6 +20,39 @@ defmodule ApiWeb.BoreholeController do
     end
   end
 
+  @doc """
+  Probable EPSG codes for `x`/`y` written without one, judged by an optional rough area
+  (`lon`/`lat`), the other boreholes nearby or the borehole's own position (see
+  `Api.Boreholes.guess_epsg/4`). `{"data": [{"epsg", "distance_m", "near"}]}`, best first.
+  """
+  def epsg_guess(conn, %{"id" => id} = params) do
+    with {:ok, _} <- Ecto.UUID.cast(id) |> ok_or(:not_found),
+         {x, ""} <- Float.parse(to_string(params["x"] || "")),
+         {y, ""} <- Float.parse(to_string(params["y"] || "")),
+         {:ok, area} <- area(params) do
+      json(conn, %{data: Boreholes.guess_epsg(id, x, y, area)})
+    else
+      {:error, :not_found} -> {:error, :not_found}
+      _ -> {:error, "x and y must be numbers"}
+    end
+  end
+
+  # optional `lon`/`lat`: the rough area the borehole is in
+  defp area(%{"lon" => lon, "lat" => lat}) do
+    with {lon, ""} <- Float.parse(to_string(lon)),
+         {lat, ""} <- Float.parse(to_string(lat)),
+         true <- abs(lon) <= 180 and abs(lat) <= 90 do
+      {:ok, {lon, lat}}
+    else
+      _ -> {:error, "lon and lat must be degrees"}
+    end
+  end
+
+  defp area(_params), do: {:ok, nil}
+
+  defp ok_or({:ok, v}, _), do: {:ok, v}
+  defp ok_or(:error, reason), do: {:error, reason}
+
   def show(conn, %{"id" => id}) do
     case Boreholes.get_borehole(id) do
       nil -> {:error, :not_found}

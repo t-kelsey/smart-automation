@@ -106,6 +106,7 @@ export class MockBoreholeRepository implements BoreholeRepository {
 	revertEdit = readOnly;
 	resolveFlag = readOnly;
 	setVerified = readOnly;
+	guessEpsg = async () => [];
 	delete = readOnly;
 
 	async getDocument(id: string): Promise<DocumentDetail | null> {

@@ -305,6 +305,80 @@ defmodule Api.Boreholes do
        else: {:error, :unknown_epsg}
   end
 
+  @guess_radius_m 100_000
+
+  @area_radius_m 400_000
+
+  @doc """
+  Which coordinate system x/y (as written, without an EPSG code) are probably in. Coordinates
+  alone cannot tell UTM zones apart, so a reference point decides, in this order:
+
+    1. `area` (`{lon, lat}`, e.g. a rough click on a map): the UTM zone there
+    2. other boreholes: every system they were written in is tried; those that put the point
+       within 100 km of a borehole written in the same system win (`near` is its name)
+    3. the borehole's own current location (e.g. the pipeline's guess): the UTM zone there
+
+  Returns `%{epsg, distance_m, near}` maps, best first; `[]` if nothing fits.
+  """
+  def guess_epsg(id, x, y, area \\ nil) when is_number(x) and is_number(y) do
+    cond do
+      area -> utm_guess(x, y, area, "the area you picked")
+      (found = neighbour_guess(id, x, y)) != [] -> found
+      own = own_lon_lat(id) -> utm_guess(x, y, own, "its earlier position")
+      true -> []
+    end
+  end
+
+  defp own_lon_lat(id) do
+    case Repo.one(from b in Borehole, where: b.id == ^id, select: b.location) do
+      %Geo.Point{coordinates: {lon, lat}} -> {lon, lat}
+      _ -> nil
+    end
+  end
+
+  # The WGS84 UTM zone at {lon, lat}, if x/y in it land within @area_radius_m of that point.
+  defp utm_guess(x, y, {lon, lat}, near) do
+    zone = lon |> Kernel.+(180) |> Kernel./(6) |> floor() |> Kernel.+(1) |> min(60) |> max(1)
+    epsg = if(lat >= 0, do: 32600, else: 32700) + zone
+
+    case Repo.query(
+           "SELECT ST_DistanceSphere(ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), $3), 4326), ST_SetSRID(ST_MakePoint($4, $5), 4326))",
+           [x * 1.0, y * 1.0, epsg, lon * 1.0, lat * 1.0]
+         ) do
+      {:ok, %{rows: [[d]]}} when is_float(d) and d <= @area_radius_m ->
+        [%{epsg: epsg, distance_m: round(d), near: near}]
+
+      _ ->
+        []
+    end
+  rescue
+    Postgrex.Error -> []
+  end
+
+  defp neighbour_guess(id, x, y) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT DISTINCT ON (c.srid) c.srid, ST_DistanceSphere(c.p, b.location) AS d, b.name
+        FROM (
+          SELECT srid, ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), srid), 4326) AS p
+          FROM (SELECT DISTINCT source_epsg AS srid FROM boreholes WHERE source_epsg IS NOT NULL) s
+        ) c
+        JOIN boreholes b ON b.source_epsg = c.srid AND b.location IS NOT NULL AND b.id <> $3::uuid
+        WHERE abs(ST_X(c.p)) <= 180 AND abs(ST_Y(c.p)) <= 90
+        ORDER BY c.srid, d
+        """,
+        [x * 1.0, y * 1.0, Ecto.UUID.dump!(id)]
+      )
+
+    rows
+    |> Enum.filter(fn [_, d, _] -> d <= @guess_radius_m end)
+    |> Enum.sort_by(fn [_, d, _] -> d end)
+    |> Enum.map(fn [srid, d, name] -> %{epsg: srid, distance_m: round(d), near: name} end)
+  rescue
+    Postgrex.Error -> []
+  end
+
   @doc "Whether `epsg` is an integer known to PostGIS."
   def known_epsg?(epsg), do: match?({:ok, _}, known_epsg(epsg))
 

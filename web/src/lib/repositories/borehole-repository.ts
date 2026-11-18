@@ -12,6 +12,13 @@ import type {
 } from '#lib/domain/borehole.ts';
 
 /** Thrown by repositories on transport or server errors (not for "not found"). */
+/** An EPSG code that puts x/y `distanceM` metres from the borehole `near`, written in that code. */
+export interface EpsgGuess {
+	epsg: number;
+	distanceM: number;
+	near: string;
+}
+
 export class RepositoryError extends Error {
 	/** The API's `errors.detail`, if the response had one (e.g. why a parameter is invalid). */
 	readonly detail?: string;
@@ -58,6 +65,13 @@ export interface BoreholeRepository {
 	getById(id: string): Promise<Borehole | null>;
 	/** Returns one document with its linked boreholes, or `null` if it does not exist. */
 	getDocument(id: string): Promise<DocumentDetail | null>;
+	/** Probable EPSG codes for x/y written without one, judged by nearby boreholes; best first. */
+	guessEpsg(
+		id: string,
+		x: number,
+		y: number,
+		area?: { lon: number; lat: number }
+	): Promise<EpsgGuess[]>;
 
 	// Writes of the review (ADR-0006). Each returns the borehole as stored afterwards and throws a
 	// `ValidationError` when the API rejects the values.

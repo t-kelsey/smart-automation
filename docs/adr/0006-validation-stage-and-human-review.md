@@ -42,7 +42,7 @@ The challenge metric asks for *reliable* extraction. Until now the pipeline stor
 
 ### Edit and review API
 
-- `PATCH /api/boreholes/:id` `{"borehole": {...}}`, `POST /api/boreholes/:id/layers` `{"layer": {...}}`, `PATCH|DELETE /api/boreholes/:id/layers/:layer_id`: one `field_edits` row (`source: human`) per changed field, open flags on an edited field are resolved (`resolved_by: human`), then the checks run. Coordinates are edited as `x`/`y`/`epsg` like on create; an unknown EPSG code is a `422`. Accepting a validator suggestion is a normal edit of that field.
+- `PATCH /api/boreholes/:id` `{"borehole": {...}}`, `POST /api/boreholes/:id/layers` `{"layer": {...}}`, `PATCH|DELETE /api/boreholes/:id/layers/:layer_id`: one `field_edits` row (`source: human`) per changed field, open flags on an edited field are resolved (`resolved_by: human`), then the checks run. Coordinates are edited as `x`/`y`/`epsg` like on create; an unknown EPSG code is a `422`, and x/y that land off the globe in their EPSG too. Typed without an EPSG code, degrees are taken as 4326; for metres `GET /api/boreholes/:id/epsg_guess` finds the system from nearby boreholes or the borehole's own rough position, and if there is neither the review asks for a click on the rough area of a map, whose UTM zone then decides. Accepting a validator suggestion is a normal edit of that field.
 - `POST /api/boreholes/:id/edits/:edit_id/revert`: writes the edit's `old_value` back as a new human edit (undo; restoring a deleted layer re-inserts it with its old id). History is never rewritten.
 - `POST /api/flags/:id/resolve`: a human confirms a value ("looks right").
 - `POST /api/boreholes/:id/verify` `{"verified": true|false}`: release; allowed with open flags (the UI asks first).

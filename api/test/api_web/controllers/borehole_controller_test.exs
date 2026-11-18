@@ -255,6 +255,64 @@ defmodule ApiWeb.BoreholeControllerTest do
     end
   end
 
+  describe "GET /api/boreholes/:id/epsg_guess" do
+    test "suggests the system of nearby boreholes for x/y written without one", %{conn: conn} do
+      {:ok, _} =
+        Api.Boreholes.create_borehole(
+          %{"name" => "S-1", "x" => 416_097.79, "y" => 3_388_438.47, "epsg" => 32629},
+          []
+        )
+
+      {:ok, far} =
+        Api.Boreholes.create_borehole(
+          %{"name" => "Stuttgart", "x" => 513_000, "y" => 5_403_000, "epsg" => 25832},
+          []
+        )
+
+      {:ok, target} = Api.Boreholes.create_borehole(%{"name" => "S-6"}, [])
+
+      assert %{"data" => [%{"epsg" => 32629, "near" => "S-1", "distance_m" => d}]} =
+               conn
+               |> get(~p"/api/boreholes/#{target.id}/epsg_guess?x=415933.44&y=3388551.61")
+               |> json_response(200)
+
+      assert d < 1000
+      refute far.id == target.id
+
+      assert conn
+             |> get(~p"/api/boreholes/#{target.id}/epsg_guess?x=abc&y=1")
+             |> json_response(400)
+    end
+  end
+
+  describe "GET /api/boreholes/:id/epsg_guess for an isolated borehole" do
+    test "uses a rough area, else the borehole's own position, else gives up", %{conn: conn} do
+      {:ok, alone} = Api.Boreholes.create_borehole(%{"name" => "Alone"}, [])
+      url = ~p"/api/boreholes/#{alone.id}/epsg_guess?x=415933.44&y=3388551.61"
+
+      assert %{"data" => []} = conn |> get(url) |> json_response(200)
+
+      # a click somewhere in Morocco: UTM zone 29N
+      assert %{"data" => [%{"epsg" => 32629, "near" => "the area you picked"}]} =
+               conn |> get(url <> "&lon=-8.5&lat=31.5") |> json_response(200)
+
+      # a click on the other hemisphere does not fit these x/y
+      assert %{"data" => []} = conn |> get(url <> "&lon=100&lat=-30") |> json_response(200)
+
+      # the pipeline's rough position of the borehole itself
+      {:ok, guessed} =
+        Api.Boreholes.create_borehole(
+          %{"name" => "Guessed", "x" => -9.6, "y" => 30.4, "epsg" => 4326},
+          []
+        )
+
+      assert %{"data" => [%{"epsg" => 32629, "near" => "its earlier position"}]} =
+               conn
+               |> get(~p"/api/boreholes/#{guessed.id}/epsg_guess?x=415933.44&y=3388551.61")
+               |> json_response(200)
+    end
+  end
+
   describe "DELETE /api/boreholes/:id" do
     test "deletes the borehole with its layers but keeps its documents", %{conn: conn} do
       borehole = insert_borehole(%{name: "BH del"})

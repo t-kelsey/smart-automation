@@ -140,6 +140,11 @@ export class BoreholeService {
 		return { id, name, date, elevation, totalDepth, location, verified, openFlagCount };
 	}
 
+	/** Probable EPSG codes for x/y typed without one (see the API's `epsg_guess`); best first. */
+	guessEpsg(id: string, x: number, y: number, area?: { lon: number; lat: number }) {
+		return this.repository.guessEpsg(id, x, y, area);
+	}
+
 	/** Borehole with layers ordered by depth. Throws `BoreholeNotFoundError` if it does not exist. */
 	async getById(id: string): Promise<Borehole> {
 		const borehole = await this.repository.getById(id);
