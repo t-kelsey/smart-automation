@@ -8,8 +8,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-api_prod}
     # Kept for local development (mix phx.server on the host); not needed by the other services.
+    # Bound to 127.0.0.1: Docker publishes ports past host firewalls such as ufw.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -35,7 +36,7 @@ services:
       # Where uploaded documents are sent for extraction. Empty: uploads are stored but not processed.
       PIPELINE_URL: ${PIPELINE_URL-http://pipeline:8000/execute}
     ports:
-      - "${API_PORT:-4001}:4000"
+      - "127.0.0.1:${API_PORT:-4001}:4000"
     volumes:
       # Source documents of the boreholes (confidential, never baked into the image)
       - document_storage:/data/storage
@@ -56,8 +57,9 @@ services:
       # adapter-node's default is 512KB; match the API's own multipart limit (endpoint.ex) so the
       # proxy in hooks.server.ts doesn't reject uploads before they ever reach it.
       BODY_SIZE_LIMIT: 100M
+    # The only port users need; WEB_BIND=0.0.0.0 makes it reachable from other machines.
     ports:
-      - "${WEB_PORT:-3001}:3000"
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3001}:3000"
 
   pipeline:
     # BEM extraction pipeline (FastAPI, POST /execute); the API sends uploaded documents here.
@@ -78,7 +80,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       BEM_OPENROUTER_MODEL: ${BEM_OPENROUTER_MODEL:-}
     ports:
-      - "${BEM_PORT:-8000}:8000"
+      - "127.0.0.1:${BEM_PORT:-8000}:8000"
 
 volumes:
   db_data:
