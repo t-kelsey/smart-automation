@@ -32,7 +32,7 @@ docker compose up --build
 
 - **AI backend:** OpenRouter is the default (`BEM_AI=openrouter`, uses `OPENROUTER_API_KEY`, optionally `BEM_OPENROUTER_MODEL` to force one model). The `claude` CLI backend (`BEM_AI=claude_cli`, with `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`) is meant for development only.
 - **Without LLM credentials** the stack still starts; uploads are stored, but extraction runs fail. To see the map and search with data, set `SEED_MOCK_DATA=true` (loads 10 example boreholes plus `MOCK_BOREHOLES` generated ones).
-- **Ports** (`.env`): web `WEB_PORT` (3001), API `API_PORT` (4001), pipeline `BEM_PORT` (8000), Postgres 5432. Only the web port needs to be reachable by users; remove the other `ports:` entries from `docker-compose.yml` if you do not need them.
+- **Ports** (`.env`): web `WEB_PORT` (3001), API `API_PORT` (4001), pipeline `BEM_PORT` (8000), Postgres 5432. All are published on `127.0.0.1` only, because Docker bypasses host firewalls such as ufw. Only the web port needs to be reachable by users: set `WEB_BIND=0.0.0.0` in `.env` to open it to other machines.
 - **Data** lives in the Docker volumes `db_data` (database) and `document_storage` (source documents). `docker compose down -v` deletes both.
 - The pipeline queue is in memory: restarting the `pipeline` container loses queued runs.
 
